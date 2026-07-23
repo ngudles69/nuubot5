@@ -60,6 +60,9 @@ Before coding:
 - The root MUST NOT serialize independent work without a stated reason.
 - `HANDOFF.md` MUST record the active task immediately.
 - `HANDOFF.md` MUST update proof when work completes. It is not only a closeout report.
+- Verification MUST be proportional to change risk.
+- Deterministic mechanical fixes MUST close with direct proof, without another reviewer.
+- Re-audit MUST occur only when behavior, ownership, contracts, or unresolved judgment changed.
 
 ## Prose Contract
 

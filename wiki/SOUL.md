@@ -162,6 +162,12 @@ The root MUST verify agent claims against files, commands, tests, logs, or other
 
 The root MUST NOT report inferred, stale, or partial work as complete.
 
+Verification MUST be proportional to change risk.
+
+Deterministic mechanical fixes MUST close with direct proof, without another reviewer.
+
+Re-audit MUST occur only when behavior, ownership, contracts, or unresolved judgment changed.
+
 Before closeout, the root MUST verify:
 
 - requested outcomes;
