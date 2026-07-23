@@ -1,0 +1,95 @@
+package datastore
+
+import (
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"path/filepath"
+	"time"
+
+	_ "modernc.org/sqlite"
+)
+
+type storedBot struct {
+	General struct {
+		Symbol string `json:"symbol"`
+		Start  string `json:"start"`
+		End    string `json:"end"`
+	} `json:"general"`
+	Data struct {
+		Ticks string `json:"ticks"`
+	} `json:"data"`
+	DateRange struct {
+		Start string `json:"start"`
+		End   string `json:"end"`
+	} `json:"date_range"`
+}
+
+func LoadBot(path string, sweepID, botID uint64) (BotSpec, error) {
+	var bot BotSpec
+	dsn := "file:" + filepath.ToSlash(path) + "?mode=ro&immutable=1"
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return bot, fmt.Errorf("open sweep database %s: %w", path, err)
+	}
+	defer db.Close()
+
+	var text string
+	err = db.QueryRow(
+		"SELECT config_json FROM bot WHERE sweep_id = ? AND bot_id = ?",
+		sweepID,
+		botID,
+	).Scan(&text)
+	if err != nil {
+		return bot, fmt.Errorf("load Bot sweep_id=%d bot_id=%d: %w", sweepID, botID, err)
+	}
+
+	var stored storedBot
+	if err := json.Unmarshal([]byte(text), &stored); err != nil {
+		return bot, fmt.Errorf("parse Bot config: %w", err)
+	}
+	replayStart, err := time.Parse(time.DateOnly, stored.DateRange.Start)
+	if err != nil {
+		return bot, fmt.Errorf("invalid Bot replay start date: %w", err)
+	}
+	replayEnd, err := time.Parse(time.DateOnly, stored.DateRange.End)
+	if err != nil {
+		return bot, fmt.Errorf("invalid Bot replay end date: %w", err)
+	}
+	startAt, err := parseOptionalTime(stored.General.Start)
+	if err != nil {
+		return bot, fmt.Errorf("invalid Bot start: %w", err)
+	}
+	endAt, err := parseOptionalTime(stored.General.End)
+	if err != nil {
+		return bot, fmt.Errorf("invalid Bot end: %w", err)
+	}
+	if stored.General.Symbol == "" || stored.Data.Ticks == "" || !replayStart.Before(replayEnd) {
+		return bot, fmt.Errorf("invalid Bot symbol, tick path, or date range")
+	}
+	if startAt != nil && endAt != nil && !startAt.Before(*endAt) {
+		return bot, fmt.Errorf("Bot start must precede end")
+	}
+	return BotSpec{
+		Symbol:      stored.General.Symbol,
+		TicksPath:   filepath.Clean(stored.Data.Ticks),
+		ReplayStart: replayStart,
+		ReplayEnd:   replayEnd,
+		StartAt:     startAt,
+		EndAt:       endAt,
+	}, nil
+}
+
+func parseOptionalTime(value string) (*time.Time, error) {
+	if value == "" {
+		return nil, nil
+	}
+	for _, layout := range []string{time.RFC3339, time.DateOnly} {
+		parsed, err := time.Parse(layout, value)
+		if err == nil {
+			parsed = parsed.UTC()
+			return &parsed, nil
+		}
+	}
+	return nil, fmt.Errorf("expected RFC3339 timestamp or YYYY-MM-DD")
+}
