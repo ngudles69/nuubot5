@@ -10,9 +10,13 @@ At the start of every root session:
 4. Read `wiki/SOUL.md`. This contract is prescriptive, not a suggestion.
 5. Read `wiki/ARCHITECTURE.md`.
 6. Read `wiki/DESIGN.md`.
+7. If `TMUX` is set, read `TMUX.md` and follow its startup contract.
 
 Read-only startup commands do not require confirmation. Do not invent work when
 the user has not requested any.
+
+The `TMUX.md` workspace bootstrap is approved startup work. It does not require
+separate pre-action confirmation.
 
 Report current state and next action in a `READY.` response.
 
@@ -91,6 +95,9 @@ These decisions apply project-wide. Local convenience MUST NOT override them.
 - Use the Go standard library before external or custom code.
 - Use an approved pure-Go library before writing custom mechanical code.
 - Standard Go build tags, including canonical `noasm`, remain allowed.
+- Keep the explicitly approved `nuubot-server`, `nuubot-cli`, and
+  `nuubot-runner` command shells as naming placeholders that print
+  `Under Construction.` until their real implementation is authorized.
 
 ### DO NOT USE
 

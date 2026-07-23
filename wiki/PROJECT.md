@@ -52,6 +52,8 @@ Do not modify a reference repository without explicit user authority.
 
 ## Approved Unimplemented Scope
 
+- `nuubot-server`, `nuubot-cli`, and `nuubot-runner` command shells reserve
+  canonical executable names and print `Under Construction.`.
 - Live Runner, WallClock, DataEngine, and live events.
 - Server, API, web server, BotManager, and SweepManager.
 - Account, Ledger, Trade, Order, Fill, Venue, and Simulator.
@@ -60,6 +62,8 @@ Do not modify a reference repository without explicit user authority.
 - PostgreSQL live, simulator, and paper persistence.
 
 Approved design does not authorize implementation, dependencies, transport, or schema choices.
+
+The three command shells do not prove their named systems are implemented.
 
 ## Success Contract
 
