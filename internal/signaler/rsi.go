@@ -1,12 +1,12 @@
 package signaler
 
 import (
-	"nuubot/internal/bars"
 	"nuubot/internal/config"
+	"nuubot/internal/ohlcv"
 )
 
 type rsi struct {
-	timeframe    bars.Timeframe
+	interval     ohlcv.Interval
 	rsiPeriod    int
 	volumePeriod int
 }
@@ -14,20 +14,20 @@ type rsi struct {
 // Section 1 - Program Flow
 
 func newRSI(cfg config.Signaler) (*rsi, error) {
-	timeframe, err := bars.ParseTimeframe(cfg.SignalTimeframe)
+	interval, err := ohlcv.ParseInterval(cfg.SignalTimeframe)
 	if err != nil {
 		return nil, err
 	}
-	return &rsi{timeframe: timeframe, rsiPeriod: cfg.RSIPeriod, volumePeriod: cfg.VolumePeriod}, nil
+	return &rsi{interval: interval, rsiPeriod: cfg.RSIPeriod, volumePeriod: cfg.VolumePeriod}, nil
 }
 
-func (r *rsi) BarsNeeded() []bars.Requirement {
+func (r *rsi) Requirements() []Requirement {
 	prior := max(r.rsiPeriod, r.volumePeriod) + 10
-	return []bars.Requirement{{Timeframe: r.timeframe, PriorBars: prior}}
+	return []Requirement{{Interval: r.interval, PriorRows: prior}}
 }
 
-func (r *rsi) Calculate(loaded []bars.Data) ([]Signal, error) {
-	data, err := findBars(loaded, r.timeframe)
+func (r *rsi) Calculate(loaded []Series) ([]Signal, error) {
+	data, err := findRows(loaded, r.interval)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +36,7 @@ func (r *rsi) Calculate(loaded []bars.Data) ([]Signal, error) {
 	ready := max(r.rsiPeriod, r.volumePeriod)
 	signals := make([]Signal, 0, 64)
 	var previous Side
-	for row := data.PriorBars; row < len(data.Close); row++ {
+	for row := data.PriorRows; row+1 < len(data.Close); row++ {
 		var side Side
 		if row+1 >= ready && data.Volume[row] > volumeAverage[row] {
 			if rsiValues[row] <= 30 {
@@ -47,7 +47,7 @@ func (r *rsi) Calculate(loaded []bars.Data) ([]Signal, error) {
 		}
 		if side != "" && side != previous {
 			signals = append(signals, Signal{
-				SignalMS: data.StartMS[row], AvailableMS: data.EndMS[row],
+				SignalMS: data.StartMS[row], AvailableMS: data.StartMS[row+1],
 				Side: side, Price: data.Close[row],
 			})
 		}

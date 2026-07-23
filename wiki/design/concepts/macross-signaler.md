@@ -21,8 +21,8 @@ Macross owns no lifecycle child.
 
 ## Responsibilities
 
-- Request signal Bars with slow-EMA warmup.
-- Request regime Bars with regime-EMA warmup.
+- Request signal OHLCV with slow-EMA warmup.
+- Request regime OHLCV with regime-EMA warmup.
 - Calculate fast, slow, and regime EMAs.
 - Backward-align only closed regime values.
 - Detect confirmed crossover direction.
@@ -43,7 +43,7 @@ Construct once, report requirements, calculate once, then remain immutable.
 
 ## Inputs and Outputs
 
-Inputs are validated signal and regime Bars plus configured EMA periods.
+Inputs are validated signal and regime OHLCV plus configured EMA periods.
 
 Output is ordered `[]Signal`.
 
@@ -67,12 +67,12 @@ None.
 
 ## Errors
 
-Unknown timeframes, equal timeframes, or missing required Bars fail.
+Unknown intervals, equal intervals, or missing required OHLCV fail.
 
 ## Program Flow
 
 ```text
-BarsNeeded
+Requirements
   request signal timeframe warmup
   request regime timeframe warmup
 
@@ -80,7 +80,7 @@ Calculate
   find required Bars
   calculate three EMA series
   align latest closed regime EMA
-  scan signal Bars after warmup
+  scan signal OHLCV after warmup
   detect crossover
   apply regime filter
   append Signal

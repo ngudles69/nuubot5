@@ -2,7 +2,7 @@
 
 ## Covers
 
-- `internal/bars/bars.go`
+- `internal/ohlcv/ohlcv.go`
 - `internal/signaler/signaler.go`
 - `internal/signaler/macross.go`
 - `internal/signaler/rsi.go`
@@ -32,20 +32,22 @@ implementations of the same boundary.
 signaler.New(config)
   select Macross or RSI calculator
 
-Signaler.BarsNeeded()
+Signaler.Requirements()
   return exact timeframe and warmup requirements
 
-Signaler.Prepare(bars)
-  calculate all Signals once
+Signaler.Prepare(rows)
+  calculate indicators wholesale
+  generate all Backtest Signal candidates
   validate timestamp order
-  retain Bars and Signals
+  retain OHLCV and Signals
 
 Signaler.Start()
   require prepared state
   admit release requests
 
 Signaler.Next(now)
-  release next Signal only when availableMS < now
+  release next Signal only after now crosses the next-row start
+  set availableMS to now
 
 Signaler.Stop()
   close admission
@@ -54,18 +56,23 @@ Signaler.Stop()
 
 ## Data Contract
 
-Every Bars value MUST contain aligned:
+Every OHLCV value MUST contain aligned:
 
 ```text
-startMS, endMS, open, high, low, close, volume
+startMS, open, high, low, close, volume
 ```
 
 The loader MUST reject missing files, nulls, invalid OHLCV, gaps, duplicates,
 wrong types, and incorrect range length.
 
 `SignalMS` MUST identify the closed bar that produced the Signal.
-`AvailableMS` MUST be strictly later than `SignalMS`. Signals MUST be released
-in strictly increasing `AvailableMS` order.
+The next row start MUST prove closure.
+
+`AvailableMS` MUST record the release observation time, not a theoretical bar
+end. Signals MUST release in strictly increasing `AvailableMS` order.
+
+Live calculators MUST generate only the concrete Signaler's required frame
+tail. Tail length is strategy-owned.
 
 ## Implementations
 
@@ -90,6 +97,6 @@ receive only Signals.
 
 ## Evidence
 
-Signaler MUST report timeframes, bars loaded, Signals calculated, Signals
+Signaler MUST report intervals, rows loaded, Signals calculated, Signals
 released, and Signals pending. Runtime MUST separately report received and
 active-cycle-skipped Signals.

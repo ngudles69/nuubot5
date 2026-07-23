@@ -5,10 +5,10 @@ import (
 	"log/slog"
 	"time"
 
-	"nuubot/internal/bars"
 	"nuubot/internal/botcycle"
 	"nuubot/internal/config"
 	"nuubot/internal/market"
+	"nuubot/internal/ohlcv"
 	"nuubot/internal/risk"
 	"nuubot/internal/setup"
 	"nuubot/internal/signaler"
@@ -50,15 +50,19 @@ func Init(logger *slog.Logger, ctx setup.Context, end time.Time) (*Runtime, erro
 	if err != nil {
 		return nil, fmt.Errorf("create signaler: %w", err)
 	}
-	var loaded, barsErr = bars.Load(
-		logger,
-		ctx.Bot.TicksPath,
-		ctx.Bot.ReplayStart,
-		end,
-		signals.BarsNeeded(),
-	)
-	if barsErr != nil {
-		return nil, fmt.Errorf("load signaler bars: %w", barsErr)
+	var requirements = signals.Requirements()
+	var loaded = make([]signaler.Series, 0, len(requirements))
+	for _, requirement := range requirements {
+		var duration, durationErr = requirement.Interval.Duration()
+		if durationErr != nil {
+			return nil, fmt.Errorf("resolve signaler interval: %w", durationErr)
+		}
+		var start = ctx.Bot.ReplayStart.Add(-duration * time.Duration(requirement.PriorRows))
+		var rows, loadErr = ohlcv.Load(ctx.Bot.TicksPath, requirement.Interval, start, end)
+		if loadErr != nil {
+			return nil, fmt.Errorf("load signaler OHLCV: %w", loadErr)
+		}
+		loaded = append(loaded, signaler.Series{Data: rows, PriorRows: requirement.PriorRows})
 	}
 	err = signals.Prepare(loaded)
 	if err != nil {

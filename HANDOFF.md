@@ -4,15 +4,26 @@ Last updated: 2026-07-23
 
 ## Focus
 
-Review compact core designs and cascading Go lifecycle.
+Review completed six-column OHLCV Stream with row-group-sized Arrow batches.
 
 ## Current status
 
+- `ohlcv.Load` retains complete-range materialization.
+- `ohlcv.Open` streams six validated columns.
+- `ohlcv.Load` consumes `ohlcv.Open`; both use one decoder.
+- Replay streams through `ohlcv.Open`.
+- `rtest.sh` aggregates heap, total allocation, GC runs, and GC pause.
+- `close_time_us` and stored `EndMS` are removed.
+- The next `StartMS` proves the previous bar closed.
+- Six-column Stream passed full tests, 2x, and 500x.
+- Arrow batch size matches the standard 122,880-row Parquet group.
+- `internal/ohlcv` is the only Parquet decoder.
+- `wiki/PERFORMANCE.md` records commit-linked benchmark history.
 - Nuubot4 core ownership is ported into compact Go designs and one cascading implementation.
 - Signaler, Executor, and Risk are permanent factories for many concrete implementations.
 - Approved baseline remains Macross, Observer stop-loss, and BalancedRisk.
 - Setup owns configuration and Bot admission.
-- Runtime initialization owns Signaler Bars loading and preparation.
+- Runtime initialization owns Signaler OHLCV loading and preparation.
 - Runtime returns stop intent; BtRunner owns final cascading teardown.
 - `internal` contains 22 Go packages.
 - `internal/toolkit` groups `clock`, `errors`, and `logging`.
@@ -66,6 +77,47 @@ Review compact core designs and cascading Go lifecycle.
 
 ## Proof
 
+- Row-group-sized batch passed 2/2 and 500/500 fresh processes.
+- Batch 500x suite duration was 728,463 ms.
+- Process average was 1,219 ms; range was 1,177-1,530 ms.
+- Replay average was 1,134 ms; range was 1,098-1,445 ms.
+- Heap averaged 31.792 MB; total allocation averaged 975.697 MB.
+- GC averaged 49.880 runs and 5.011 ms pause.
+- Every batch run produced exact Reader, Runtime, and BtRunner proof.
+- The batch log contains zero failures, ERROR levels, or error fields.
+- Batch stability log: `workspace/logs/nuubot5-rtest-s6-b9-500-20260723T145016Z.log`.
+- Larger batches cut allocation 26.1 percent and GC runs 21.7 percent.
+- Replay slowed 0.9 percent; process time slowed 1.2 percent.
+- Final `go test -tags noasm ./...` passed.
+- `bash -n rtest.sh` passed.
+- All 36 Go files retain all three section comments.
+- All 22 internal packages match 22 package design pages.
+- No stale `EndMS` or `close_time_us` references remain.
+- `git diff --check` passed.
+- Six-column Stream passed 2/2 and 500/500 fresh processes.
+- Six-column 500x suite duration was 706,950 ms.
+- Process average was 1,204 ms; range was 1,165-1,475 ms.
+- Replay average was 1,124 ms; range was 1,090-1,338 ms.
+- Heap averaged 28.604 MB; total allocation averaged 1,321.159 MB.
+- GC averaged 63.722 runs and 5.090 ms pause.
+- Every run produced exact Reader, Runtime, and BtRunner proof.
+- The six-column log contains zero failures, ERROR levels, or error fields.
+- Stability log: `workspace/logs/nuubot5-rtest-s6-b9-500-20260723T143429Z.log`.
+- Six columns improved replay 11.1 percent and allocation 14.7 percent.
+- Six columns remain 2.94 times slower than the two-column baseline.
+- Seven-column Load passed 2/2 and 500/500 fresh processes.
+- Seven-column Stream passed full `go test -tags noasm ./...`.
+- Seven-column Stream passed 2/2 and 500/500 fresh processes.
+- Stream 500x suite duration was 766,287 ms.
+- Stream process average was 1,345 ms; range was 1,329-1,383 ms.
+- Stream replay average was 1,265 ms; range was 1,245-1,300 ms.
+- Stream heap averaged 30.733 MB; total allocation averaged 1,549.676 MB.
+- Stream GC averaged 66.202 runs and 5.072 ms pause.
+- Stream improved replay 19.2 percent and allocation 63.5 percent against Load.
+- Every Stream run produced exact ticks, passes, signals, cycles, and exits.
+- The Stream log contains zero failures, ERROR levels, or error fields.
+- Stream stability log: `workspace/logs/nuubot5-rtest-s6-b9-500-20260723T124647Z.log`.
+- Stream remains 3.31 times slower than the two-column baseline.
 - `go list -tags noasm ./...` passed.
 - `go test -tags noasm ./...` passed.
 - Focused BtRunner command tests passed.
@@ -118,16 +170,16 @@ Review compact core designs and cascading Go lifecycle.
 - `:=` remains allowed only when `var` or `=` is impossible or materially less clear.
 - Setup, BtRunner, and Runtime form one cascading lifecycle.
 - Signaler, Executor, and Risk remain configuration-selected factories.
-- Runtime owns Signaler preparation; BtRunner does not know Bars or Signaler.
+- Runtime owns Signaler preparation; BtRunner does not know OHLCV or Signaler.
 - Observer retains canonical one-percent adverse-move exit behavior.
 
 ## Not run
 
-- No commit or push was performed.
+- The OHLCV hardcut is not committed or pushed.
 
 ## Next action
 
-User reviews the compact designs and cascading Go implementation.
+Commit and push only with explicit user authority.
 
 Go toolchain:
 

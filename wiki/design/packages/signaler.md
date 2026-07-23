@@ -13,7 +13,7 @@ Purpose: Create and run one configured Signal strategy behind a stable factory.
 SignalerFactory selects one concrete Signaler. Runtime knows only the common
 Signaler contract.
 
-- Concrete Signalers own configuration, Bars requirements, and Signal calculation.
+- Concrete Signalers own configuration, OHLCV requirements, and Signal calculation.
 - New strategies add one concrete file and one factory case.
 
 ## Program Flow
@@ -23,16 +23,20 @@ SignalerFactory(kind, log, ctx) -> Signaler
 
 init
   concrete = select kind
-  concrete.init(log, ctx)
+  rows       = load complete Backtest range
+  indicators = concrete.calculate(rows)
+  candidates = concrete.generate(rows, all)
 
 start
-  concrete.start()
+  no-op
 
 run(now)
-  return every Signal available before now
+  when now crosses candidate next-row start
+    set candidate availability to now
+    return candidate
 
 stop
-  concrete.stop()
+  no-op
 
 ---
 
@@ -43,4 +47,8 @@ domain
 ## Notes
 
 - Current configured Signaler is Macross.
-- Signals release only after their source Bar closes.
+- Backtest calculates wholesale but releases only after the next row starts.
+- Live Signaler is approved but unimplemented.
+- Live initialization loads warmup plus buffer and generates only its required tail.
+- Live ingestion appends closed rows, prunes equally, recalculates the frame, and generates only its required tail.
+- Each concrete Signaler owns its generation tail length.

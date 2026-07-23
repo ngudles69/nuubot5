@@ -3,54 +3,54 @@ package signaler
 import (
 	"fmt"
 
-	"nuubot/internal/bars"
 	"nuubot/internal/config"
+	"nuubot/internal/ohlcv"
 )
 
 type macross struct {
-	signalTimeframe bars.Timeframe
-	regimeTimeframe bars.Timeframe
-	fastPeriod      int
-	slowPeriod      int
-	regimePeriod    int
+	signalInterval ohlcv.Interval
+	regimeInterval ohlcv.Interval
+	fastPeriod     int
+	slowPeriod     int
+	regimePeriod   int
 }
 
 // Section 1 - Program Flow
 
 func newMacross(cfg config.Signaler) (*macross, error) {
-	signalTimeframe, err := bars.ParseTimeframe(cfg.SignalTimeframe)
+	signalInterval, err := ohlcv.ParseInterval(cfg.SignalTimeframe)
 	if err != nil {
 		return nil, err
 	}
-	regimeTimeframe, err := bars.ParseTimeframe(cfg.RegimeTimeframe)
+	regimeInterval, err := ohlcv.ParseInterval(cfg.RegimeTimeframe)
 	if err != nil {
 		return nil, err
 	}
-	if signalTimeframe == regimeTimeframe {
+	if signalInterval == regimeInterval {
 		return nil, fmt.Errorf("macross signal and regime timeframes must differ")
 	}
 	return &macross{
-		signalTimeframe: signalTimeframe,
-		regimeTimeframe: regimeTimeframe,
-		fastPeriod:      cfg.FastMA,
-		slowPeriod:      cfg.SlowMA,
-		regimePeriod:    cfg.RegimeEMA,
+		signalInterval: signalInterval,
+		regimeInterval: regimeInterval,
+		fastPeriod:     cfg.FastMA,
+		slowPeriod:     cfg.SlowMA,
+		regimePeriod:   cfg.RegimeEMA,
 	}, nil
 }
 
-func (m *macross) BarsNeeded() []bars.Requirement {
-	return []bars.Requirement{
-		{Timeframe: m.signalTimeframe, PriorBars: m.slowPeriod + 10},
-		{Timeframe: m.regimeTimeframe, PriorBars: m.regimePeriod + 10},
+func (m *macross) Requirements() []Requirement {
+	return []Requirement{
+		{Interval: m.signalInterval, PriorRows: m.slowPeriod + 10},
+		{Interval: m.regimeInterval, PriorRows: m.regimePeriod + 10},
 	}
 }
 
-func (m *macross) Calculate(loaded []bars.Data) ([]Signal, error) {
-	signalBars, err := findBars(loaded, m.signalTimeframe)
+func (m *macross) Calculate(loaded []Series) ([]Signal, error) {
+	signalBars, err := findRows(loaded, m.signalInterval)
 	if err != nil {
 		return nil, err
 	}
-	regimeBars, err := findBars(loaded, m.regimeTimeframe)
+	regimeBars, err := findRows(loaded, m.regimeInterval)
 	if err != nil {
 		return nil, err
 	}
@@ -63,8 +63,10 @@ func (m *macross) Calculate(loaded []bars.Data) ([]Signal, error) {
 	regimeRow := 0
 	var latest float64
 	hasLatest := false
-	for row, signalEnd := range signalBars.EndMS {
-		for regimeRow < len(regimeBars.EndMS) && regimeBars.EndMS[regimeRow] <= signalEnd {
+	for row := 0; row+1 < len(signalBars.StartMS); row++ {
+		var signalBoundary = signalBars.StartMS[row+1]
+		for regimeRow+1 < len(regimeBars.StartMS) &&
+			regimeBars.StartMS[regimeRow+1] <= signalBoundary {
 			if regimeRow+1 >= m.regimePeriod {
 				latest = regime[regimeRow]
 				hasLatest = true
@@ -76,7 +78,7 @@ func (m *macross) Calculate(loaded []bars.Data) ([]Signal, error) {
 	}
 
 	signals := make([]Signal, 0, 64)
-	for row := signalBars.PriorBars; row < len(signalBars.Close); row++ {
+	for row := signalBars.PriorRows; row+1 < len(signalBars.Close); row++ {
 		if !ready[row] || row == 0 || row+1 < m.slowPeriod {
 			continue
 		}
@@ -91,7 +93,7 @@ func (m *macross) Calculate(loaded []bars.Data) ([]Signal, error) {
 			continue
 		}
 		signals = append(signals, Signal{
-			SignalMS: signalBars.StartMS[row], AvailableMS: signalBars.EndMS[row],
+			SignalMS: signalBars.StartMS[row], AvailableMS: signalBars.StartMS[row+1],
 			Side: side, Price: signalBars.Close[row],
 		})
 	}
@@ -113,13 +115,13 @@ func ema(values []float64, period int) []float64 {
 	return result
 }
 
-func findBars(loaded []bars.Data, timeframe bars.Timeframe) (*bars.Data, error) {
+func findRows(loaded []Series, interval ohlcv.Interval) (*Series, error) {
 	for index := range loaded {
-		if loaded[index].Timeframe == timeframe {
+		if loaded[index].Interval == interval {
 			return &loaded[index], nil
 		}
 	}
-	return nil, fmt.Errorf("signaler missing %s bars", timeframe)
+	return nil, fmt.Errorf("signaler missing %s OHLCV", interval)
 }
 
 // Section 3 - Generic Helpers

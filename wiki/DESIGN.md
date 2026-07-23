@@ -17,7 +17,6 @@ Nuubot5 source proves implementation. Reservation files prove names only.
 | Package | Status | Purpose |
 |---|---|---|
 | [account](design/packages/account.md) | Reserved | Coordinate venue requests and ledger evidence. |
-| [bars](design/packages/bars.md) | Implemented | Load and carry validated OHLCV history. |
 | [botcycle](design/packages/botcycle.md) | Implemented | Coordinate Executors for one accepted Signal. |
 | [btrunner](design/packages/btrunner.md) | Implemented | Execute one complete historical replay. |
 | [config](design/packages/config.md) | Implemented | Decode and validate immutable settings. |
@@ -28,6 +27,7 @@ Nuubot5 source proves implementation. Reservation files prove names only.
 | [market](design/packages/market.md) | Implemented | Carry validated market events. |
 | [meta](design/packages/meta.md) | Reserved | Own market instrument metadata. |
 | [order](design/packages/order.md) | Reserved | Own submitted order state and fills. |
+| [ohlcv](design/packages/ohlcv.md) | Implemented | Load validated OHLCV ranges. |
 | [replay](design/packages/replay.md) | Implemented | Stream validated historical market data. |
 | [risk](design/packages/risk.md) | Implemented | Assess configured risk policy. |
 | [runtime](design/packages/runtime.md) | Implemented | Own signals, risks, cycles, and stop decisions. |

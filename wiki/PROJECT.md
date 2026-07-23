@@ -98,6 +98,8 @@ Proof log:
 workspace/logs/nuubot5-rtest-s6-b9-1000-20260723T041701Z.log
 ```
 
+Historical commit benchmarks live in [PERFORMANCE.md](PERFORMANCE.md).
+
 The optimized decoder returned one corrupt timestamp at run 183.
 
 Validation rejected it. The source Parquet row was valid.

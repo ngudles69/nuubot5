@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"log/slog"
 
-	"nuubot/internal/bars"
 	"nuubot/internal/config"
+	"nuubot/internal/ohlcv"
 	nuuerrors "nuubot/internal/toolkit/errors"
 )
 
@@ -28,15 +28,25 @@ type Signal struct {
 }
 
 type calculator interface {
-	BarsNeeded() []bars.Requirement
-	Calculate([]bars.Data) ([]Signal, error)
+	Requirements() []Requirement
+	Calculate([]Series) ([]Signal, error)
+}
+
+type Requirement struct {
+	Interval  ohlcv.Interval
+	PriorRows int
+}
+
+type Series struct {
+	ohlcv.Data
+	PriorRows int
 }
 
 // Signaler calculates and releases ordered signals.
 type Signaler struct {
 	log        *slog.Logger
 	calculator calculator
-	bars       []bars.Data
+	rows       []Series
 	signals    []Signal
 	next       int
 	started    bool
@@ -72,7 +82,7 @@ func Create(logger *slog.Logger, cfg config.Signaler) (*Signaler, error) {
 }
 
 // Prepare calculates and validates all signals.
-func (s *Signaler) Prepare(loaded []bars.Data) error {
+func (s *Signaler) Prepare(loaded []Series) error {
 	if s.prepared || s.started || s.stopped {
 		return nuuerrors.StateError("signaler", "prepare")
 	}
@@ -86,11 +96,11 @@ func (s *Signaler) Prepare(loaded []bars.Data) error {
 			return fmt.Errorf("signaler produced invalid timestamp order")
 		}
 	}
-	barCount := 0
+	rowCount := 0
 	for _, data := range loaded {
-		barCount += len(data.Close)
+		rowCount += len(data.Close)
 	}
-	s.bars = loaded
+	s.rows = loaded
 	s.signals = signals
 	s.prepared = true
 	s.log.Info(
@@ -98,7 +108,7 @@ func (s *Signaler) Prepare(loaded []bars.Data) error {
 		"event", "prepare",
 		"status", "success",
 		"timeframes", len(loaded),
-		"bars_loaded", barCount,
+		"rows_loaded", rowCount,
 		"signals_calculated", len(signals),
 	)
 	return nil
@@ -125,7 +135,7 @@ func (s *Signaler) Stop() {
 		"signaler stopped",
 		"event", "stop",
 		"status", "success",
-		"timeframes", len(s.bars),
+		"timeframes", len(s.rows),
 		"signals_calculated", len(s.signals),
 		"signals_released", s.next,
 		"signals_pending", len(s.signals)-s.next,
@@ -134,9 +144,9 @@ func (s *Signaler) Stop() {
 
 // Section 2 - Domain Helpers
 
-// BarsNeeded returns the calculator bar requirements.
-func (s *Signaler) BarsNeeded() []bars.Requirement {
-	return s.calculator.BarsNeeded()
+// Requirements returns the calculator OHLCV requirements.
+func (s *Signaler) Requirements() []Requirement {
+	return s.calculator.Requirements()
 }
 
 // Next releases the next available signal.
@@ -148,6 +158,7 @@ func (s *Signaler) Next(nowMS uint64) (Signal, bool, error) {
 		return Signal{}, false, nil
 	}
 	signal := s.signals[s.next]
+	signal.AvailableMS = nowMS
 	s.next++
 	return signal, true, nil
 }

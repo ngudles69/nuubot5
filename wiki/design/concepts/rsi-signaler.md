@@ -42,7 +42,7 @@ Construct once, report requirements, calculate once, then remain immutable.
 
 ## Inputs and Outputs
 
-Inputs are validated Bars and configured RSI and volume periods.
+Inputs are validated OHLCV and configured RSI and volume periods.
 
 Output is ordered `[]Signal`.
 
@@ -64,19 +64,19 @@ None.
 
 ## Errors
 
-Unknown timeframes or missing required Bars fail.
+Unknown intervals or missing required OHLCV fail.
 
 ## Program Flow
 
 ```text
-BarsNeeded
+Requirements
   request maximum indicator warmup
 
 Calculate
   find required Bars
   calculate RSI
   calculate volume average
-  scan Bars after warmup
+  scan OHLCV after warmup
   apply volume confirmation
   select threshold side
   suppress repeated side

@@ -13,7 +13,8 @@ Purpose: Drive one exact historical market sequence through the canonical Runtim
 ## Participants
 
 - BtRunner owns orchestration and proof.
-- Replay Reader owns decoded BBO admission.
+- OHLCV owns Parquet decoding and row admission.
+- Replay Reader owns BBO conversion and iteration.
 - TickClock owns pass timing.
 - Runtime owns Bot decisions and stop.
 
@@ -21,8 +22,8 @@ Purpose: Drive one exact historical market sequence through the canonical Runtim
 
 - Configuration and Bot specification are valid.
 - Market paths remain inside shared data.
-- Required tick and Bar files exist.
-- Runtime Bars and Signals are prepared.
+- Required OHLCV files exist.
+- Runtime OHLCV and Signals are prepared.
 - BtRunner and Runtime are started.
 - Replay starts at `BotSpec.ReplayStart`.
 
@@ -31,7 +32,8 @@ Purpose: Drive one exact historical market sequence through the canonical Runtim
 ## Ordered Flow
 
 ```text
-start Reader and Bars at ReplayStart
+start Reader and OHLCV at ReplayStart
+open one streaming 1s OHLCV reader
 read one BBO
 send BBO to Runtime
 record tick evidence

@@ -61,7 +61,7 @@ BtRunner setup
   load BotSpec
   resolve replay end
   create reader, clock, and Runtime
-  load required bars
+  load required OHLCV
   prepare Signaler
   calculate expected proof
 
@@ -192,7 +192,7 @@ Boundary packages validate shape, identity, timestamps, prices, quantities, and 
 
 Runtime MUST NOT decode Parquet, query Sweep storage, or parse venue messages.
 
-Signaler receives validated bars. Indicator code MUST NOT read files.
+Signaler receives validated OHLCV. Indicator code MUST NOT read files.
 
 Venue normalizes external outcomes. Account reconciles them into Ledger evidence.
 

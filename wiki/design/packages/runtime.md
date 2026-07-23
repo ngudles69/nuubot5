@@ -24,6 +24,9 @@ Runtime(log, ctx)
 
 init
   signaler = SignalerFactory(ctx.config.signaler).init(log, ctx)
+  for requirement in signaler.requirements
+    rows = OHLCV.Load(ctx.bot.source, requirement.interval, warmup, end)
+  signaler.prepare(rows)
   risks    = RiskFactory(ctx.config.risks).init(log, ctx)
 
 start

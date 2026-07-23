@@ -3,8 +3,8 @@ package signaler
 import (
 	"testing"
 
-	"nuubot/internal/bars"
 	"nuubot/internal/config"
+	"nuubot/internal/ohlcv"
 )
 
 // Section 1 - Program Flow
@@ -17,9 +17,9 @@ func TestMacrossUsesOnlyClosedRegimeBars(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	loaded := []bars.Data{
-		testBars(bars.Hour1, []float64{10, 9, 8, 9, 10}, []uint64{11, 12, 13, 14, 15}),
-		testBars(bars.Hour4, []float64{5, 5}, []uint64{1, 2}),
+	loaded := []Series{
+		testRows(ohlcv.Hour1, []float64{10, 9, 8, 9, 10, 10}, []uint64{10, 11, 12, 13, 14, 15}),
+		testRows(ohlcv.Hour4, []float64{5, 5, 5}, []uint64{0, 1, 2}),
 	}
 	signals, err := strategy.Calculate(loaded)
 	if err != nil {
@@ -29,7 +29,7 @@ func TestMacrossUsesOnlyClosedRegimeBars(t *testing.T) {
 		t.Fatalf("unexpected signals: %+v", signals)
 	}
 
-	loaded[1].EndMS[1] = 16
+	loaded[1].StartMS[2] = 16
 	signals, err = strategy.Calculate(loaded)
 	if err != nil {
 		t.Fatal(err)
@@ -44,9 +44,9 @@ func TestRSIRequiresVolumeConfirmation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data := testBars(bars.Hour1, []float64{100, 90, 80}, []uint64{2, 3, 4})
-	data.Volume = []float64{1, 1, 2}
-	signals, err := strategy.Calculate([]bars.Data{data})
+	data := testRows(ohlcv.Hour1, []float64{100, 90, 80, 80}, []uint64{1, 2, 3, 4})
+	data.Volume = []float64{1, 1, 2, 0}
+	signals, err := strategy.Calculate([]Series{data})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,15 +57,13 @@ func TestRSIRequiresVolumeConfirmation(t *testing.T) {
 
 // Section 2 - Domain Helpers
 
-func testBars(timeframe bars.Timeframe, closes []float64, ends []uint64) bars.Data {
-	starts := make([]uint64, len(ends))
-	for index, end := range ends {
-		starts[index] = end - 1
-	}
-	return bars.Data{
-		Timeframe: timeframe, StartMS: starts, EndMS: ends,
-		Open: closes, High: closes, Low: closes, Close: closes,
-		Volume: make([]float64, len(closes)),
+func testRows(interval ohlcv.Interval, closes []float64, starts []uint64) Series {
+	return Series{
+		Data: ohlcv.Data{
+			Interval: interval, StartMS: starts,
+			Open: closes, High: closes, Low: closes, Close: closes,
+			Volume: make([]float64, len(closes)),
+		},
 	}
 }
 
