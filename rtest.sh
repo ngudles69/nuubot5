@@ -72,7 +72,7 @@ for ((run = 1; run <= runs; run++)); do
     total_alloc_mb=""
     gc_runs=""
     gc_pause_ms=""
-    btrunner_line="$(printf '%s\n' "$output" | grep 'msg="btrunner stopped".*component=btrunner.*event=stop' | tail -n 1)"
+    btrunner_line="$(printf '%s\n' "$output" | grep '] btrunner stopped ' | tail -n 1)"
     for field in $btrunner_line; do
         case "$field" in
             heap_mb=*) heap_mb="${field#heap_mb=}" ;;
@@ -81,9 +81,9 @@ for ((run = 1; run <= runs; run++)); do
             gc_pause_ms=*) gc_pause_ms="${field#gc_pause_ms=}" ;;
         esac
     done
-    runtime_line="$(printf '%s\n' "$output" | grep 'msg="runtime stopped".*component=runtime.*event=stop' | tail -n 1)"
+    runtime_line="$(printf '%s\n' "$output" | grep '] runtime stopped ' | tail -n 1)"
     runtime_ok=0
-    if [[ "$runtime_line" =~ status=success.*ticks_accepted=([0-9]+).*passes=([0-9]+).*signals_received=([0-9]+).*cycles_started=([0-9]+).*cycles_closed=([0-9]+).*stop_loss_exits=([0-9]+).*end_date_exits=([0-9]+).*stop_reason=end_date ]]; then
+    if [[ "$runtime_line" =~ ticks_accepted=([0-9]+).*passes=([0-9]+).*signals_received=([0-9]+).*cycles_started=([0-9]+).*cycles_closed=([0-9]+).*stop_loss_exits=([0-9]+).*end_date_exits=([0-9]+).*stop_reason=end_date ]]; then
         ticks="${BASH_REMATCH[1]}"
         passes="${BASH_REMATCH[2]}"
         signals="${BASH_REMATCH[3]}"
@@ -112,7 +112,7 @@ for ((run = 1; run <= runs; run++)); do
         exit "$status"
     fi
 
-    printf '%s\n' "$output" | grep -E 'msg="(signaler prepared|runtime stopped|tick reader stopped|btrunner stopped)"'
+    printf '%s\n' "$output" | grep -E '] (signaler prepared|runtime stopped|tick reader stopped|btrunner stopped)'
 
     replay_total_ms=$((replay_total_ms + replay_ms))
     if [[ $replay_minimum_ms -eq 0 || $replay_ms -lt $replay_minimum_ms ]]; then

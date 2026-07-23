@@ -142,9 +142,9 @@ Lifecycle rules:
 - `NewX` constructs one valid value without background work.
 - `Init` performs explicit fallible preparation.
 - `Start` begins admission or owned background work.
-- `Run` executes one complete bounded job.
-- Finite-data iteration belongs inside `Run`.
-- `Loop` continuously supervises until stop or cancellation.
+- `Run` executes one operation.
+- `Loop` repeats work until its stop condition.
+- Repeated iteration belongs inside `Loop`.
 - `Pass` executes one timer-driven control pass.
 - `Stop` stops admission and releases owned resources.
 - Empty lifecycle phases MUST be omitted.
@@ -215,6 +215,8 @@ Names MUST state intent, not mechanics.
 
 Use the shortest unmistakable name.
 
+`*logging.Logger` parameters MUST be named `log`.
+
 Paired operations MUST be symmetrical.
 
 Boolean names MUST read as facts.
@@ -239,8 +241,8 @@ Lifecycle names have fixed meanings:
 | `NewX` | Construct one valid value without background work. |
 | `Init` | Perform explicit fallible preparation. |
 | `Start` | Begin admission or owned background work. |
-| `Run` | Execute one complete bounded job. |
-| `Loop` | Supervise continuously until stop or cancellation. |
+| `Run` | Execute one operation. |
+| `Loop` | Repeat work until its stop condition. |
 | `Pass` | Execute one timer-driven control pass. |
 | `Stop` | Stop admission and release owned resources. |
 | `OnX` | Accept one named event. |
@@ -265,7 +267,7 @@ Guard clauses MUST reject invalid state early:
 ```go
 func (r *Runner) Start() error {
 	if r.started || r.stopped {
-		return nuuerrors.StateError("runner", "start")
+		return fmt.Errorf("runner cannot start from current state")
 	}
 	var err = r.runtime.Start()
 	if err != nil {
@@ -277,8 +279,6 @@ func (r *Runner) Start() error {
 ```
 
 Nested success paths are prohibited when a guard keeps flow flat.
-
-Values MUST be declared immediately before their first use.
 
 ## 7. Comments
 
@@ -311,10 +311,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"time"
 
-	nuuerrors "nuubot/internal/toolkit/errors"
+	"nuubot/internal/toolkit/logging"
 )
 
 // Mode selects one Runner path.
@@ -339,7 +338,7 @@ type Config struct {
 
 // Runner owns one job and its direct inputs.
 type Runner struct {
-	log     *slog.Logger
+	log     *logging.Logger
 	config  Config
 	runtime *Runtime
 	bars    []Bar
@@ -351,20 +350,20 @@ type Runner struct {
 // Section 1 - Program Flow
 
 // NewRunner constructs one stopped Runner.
-func NewRunner(logger *slog.Logger, config Config) (*Runner, error) {
+func NewRunner(log *logging.Logger, config Config) (*Runner, error) {
 	var err = validateConfig(config)
 	if err != nil {
 		return nil, fmt.Errorf("create runner: %w", err)
 	}
 
 	var runtime *Runtime
-	runtime, err = NewRuntime(logger, config.End)
+	runtime, err = NewRuntime(log, config.End)
 	if err != nil {
 		return nil, fmt.Errorf("create runtime: %w", err)
 	}
 
 	return &Runner{
-		log:     logger.With("component", "runner"),
+		log:     log,
 		config:  config,
 		runtime: runtime,
 	}, nil
@@ -385,7 +384,7 @@ func (r *Runner) Init(ctx context.Context) error {
 // Start starts Runtime and its input.
 func (r *Runner) Start(ctx context.Context) error {
 	if r.started || r.stopped {
-		return nuuerrors.StateError("runner", "start")
+		return fmt.Errorf("runner cannot start from current state")
 	}
 
 	var err = r.runtime.Start()
@@ -411,21 +410,21 @@ func (r *Runner) Start(ctx context.Context) error {
 	}
 
 	r.started = true
-	r.log.Info("runner started", "event", "start", "status", "success")
+	r.log.Info("runner started")
 	return nil
 }
 
-// Run executes one complete configured job.
-func (r *Runner) Run(ctx context.Context) error {
+// Loop executes the configured job until its stop condition.
+func (r *Runner) Loop(ctx context.Context) error {
 	if !r.started || r.stopped {
-		return nuuerrors.StateError("runner", "run")
+		return fmt.Errorf("runner cannot loop from current state")
 	}
 
 	switch r.config.Mode {
 	case ModeLive:
 		return r.loopLive(ctx)
 	case ModeBacktest:
-		return r.runBacktest(ctx)
+		return r.loopBacktest(ctx)
 	default:
 		return fmt.Errorf("run runner: unknown mode %q", r.config.Mode)
 	}
@@ -453,18 +452,8 @@ func (r *Runner) Stop() error {
 		runtimeErr = fmt.Errorf("stop runtime: %w", runtimeErr)
 	}
 
-	var err = errors.Join(feedErr, runtimeErr)
-	var status = "success"
-	if err != nil {
-		status = "failed"
-	}
-
-	r.log.Info(
-		"runner stopped",
-		"event", "stop",
-		"status", status,
-	)
-	return err
+	r.log.Info("runner stopped")
+	return errors.Join(feedErr, runtimeErr)
 }
 
 func (r *Runner) initLive(ctx context.Context) error {
@@ -512,7 +501,7 @@ func (r *Runner) loopLive(ctx context.Context) error {
 	}
 }
 
-func (r *Runner) runBacktest(ctx context.Context) error {
+func (r *Runner) loopBacktest(ctx context.Context) error {
 	var bar Bar
 	for _, bar = range r.bars {
 		var err = ctx.Err()
@@ -625,19 +614,38 @@ func benchmark(started time.Time) time.Duration {
 
 ## 9. Fixed Errors and Logging
 
-Shared invalid lifecycle state MUST use:
-
-`internal/toolkit/errors.StateError` owns this construction.
+Every component MUST create ordinary errors directly:
 
 ```go
-func StateError(owner, action string) error {
-	return fmt.Errorf("%s cannot %s from current state", owner, action)
+if !r.started || r.stopped {
+	return fmt.Errorf("runner cannot loop from current state")
 }
 ```
 
-All other errors MUST use `error`, `errors`, and `fmt`.
+Every boundary MUST wrap useful internal context with `%w`:
+
+```go
+var err = r.runtime.Start()
+if err != nil {
+	return fmt.Errorf("start runtime: %w", err)
+}
+```
+
+The executable MUST convert the final error with `%v` and log it once:
+
+```go
+err = runner.Start()
+if err != nil {
+	log.Error(fmt.Sprintf("runner.Start() failed: %v", err))
+	os.Exit(1)
+}
+```
+
+All errors MUST use standard `error`, `errors`, and `fmt`.
 
 Custom error frameworks are prohibited.
+
+Custom error-construction helpers and packages are prohibited.
 
 Internal Nuubot errors MUST use `%w` at boundaries defined in `RULES.md`.
 
@@ -652,20 +660,28 @@ package logging
 import (
 	"fmt"
 	"io"
-	"log/slog"
+	stdlog "log"
 	"os"
 	"path/filepath"
+	"time"
 )
 
-const ServerLog = "server.log"
+const (
+	ServerLog       = "server.log"
+	timestampFormat = "2006-Jan-02 15:04:05"
+)
+
+type Logger struct {
+	output *stdlog.Logger
+}
 
 // New returns the process logger.
-func New(output io.Writer) *slog.Logger {
-	return slog.New(slog.NewTextHandler(output, nil))
+func New(output io.Writer) *Logger {
+	return &Logger{output: stdlog.New(output, "", 0)}
 }
 
 // Open returns an append-only file logger.
-func Open(name string) (*slog.Logger, error) {
+func Open(name string) (*Logger, error) {
 	var err = os.MkdirAll("workspace/logs", 0o755)
 	if err != nil {
 		return nil, err
@@ -682,15 +698,25 @@ func Open(name string) (*slog.Logger, error) {
 	return New(output), nil
 }
 
-// BotLog returns one Bot log filename.
-func BotLog(sweepID, botID uint64) string {
-	return fmt.Sprintf("bot_%d_%d.log", sweepID, botID)
+func (l *Logger) Info(message string) {
+	l.write("INFO", message)
+}
+
+func (l *Logger) Error(message string) {
+	l.write("ERROR", message)
+}
+
+func (l *Logger) write(level, message string) {
+	l.output.Printf(
+		"%s [%5s] %s",
+		time.Now().Format(timestampFormat),
+		level,
+		message,
+	)
 }
 ```
 
-Logging MUST return `*slog.Logger`.
-
-Custom Logger wrappers are prohibited.
+Logging MUST return `*logging.Logger`.
 
 Identity-bearing executables MUST start with `server.log`, then replace the logger after identity:
 
@@ -698,6 +724,7 @@ Identity-bearing executables MUST start with `server.log`, then replace the logg
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -719,23 +746,40 @@ func main() {
 	var sweepID, botID uint64
 	sweepID, botID, err = parseInput(os.Args[1:])
 	if err != nil {
-		log.Error("parseInput() failed", "error", err)
+		log.Error(fmt.Sprintf("parseInput() failed: %v", err))
 		os.Exit(1)
 	}
 
 	var botLog, botLogErr = logging.OpenBot(sweepID, botID)
 	if botLogErr != nil {
-		log.Error("logging.OpenBot() failed", "error", botLogErr)
+		log.Error(fmt.Sprintf("logging.OpenBot() failed: %v", botLogErr))
 		os.Exit(1)
 	}
 	log = botLog
 
-	err = btrunner.Run(log, sweepID, botID)
+	var runner btrunner.BtRunner
+	err = runner.Init(log, sweepID, botID)
 	if err != nil {
-		log.Error("btrunner.Run() failed", "duration", time.Since(started), "error", err)
+		log.Error(fmt.Sprintf("btrunner.Init() failed: %v", err))
 		os.Exit(1)
 	}
-	log.Info("btrunner.Run() completed successfully", "duration", time.Since(started))
+	err = runner.Start()
+	if err != nil {
+		err = errors.Join(err, runner.Stop())
+		log.Error(fmt.Sprintf("btrunner.Start() failed: %v", err))
+		os.Exit(1)
+	}
+	var loopErr = runner.Loop()
+	var stopErr = runner.Stop()
+	if loopErr != nil {
+		log.Error(fmt.Sprintf("btrunner.Loop() failed: %v", errors.Join(loopErr, stopErr)))
+		os.Exit(1)
+	}
+	if stopErr != nil {
+		log.Error(fmt.Sprintf("btrunner.Stop() failed: %v", stopErr))
+		os.Exit(1)
+	}
+	log.Info(fmt.Sprintf("btrunner completed successfully in %s", time.Since(started)))
 }
 ```
 
@@ -743,18 +787,21 @@ Executables MUST NOT write operational output to stdout or stderr after a logger
 
 If `server.log` cannot open, the executable reports that failure to stderr and exits nonzero.
 
-Components MUST receive explicit `*slog.Logger` values.
+Components MUST receive explicit `*logging.Logger` values.
 
-Components MUST bind `component` with `logger.With`.
+Logger values MUST be named `log`.
+
+Component messages MUST identify their owned operation.
+
+Programs MUST construct one complete string before calling `log`.
+
+Lifecycle success messages MUST follow all fallible lifecycle work.
 
 Components MUST NOT log returned error values.
 
-Components are allowed to log terminal statistics and failure status before
-returning.
+Components are allowed to log useful terminal statistics before returning.
 
 Only executable, request, or background-task boundaries log returned errors.
-
-Global `slog` configuration and `slog.SetDefault` are prohibited.
 
 ## 10. Tests
 

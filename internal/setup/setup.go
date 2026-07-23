@@ -2,13 +2,13 @@ package setup
 
 import (
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"nuubot/internal/config"
 	"nuubot/internal/datastore"
+	"nuubot/internal/toolkit/logging"
 )
 
 // Context contains validated setup values.
@@ -20,7 +20,7 @@ type Context struct {
 // Section 1 - Program Flow
 
 // Init loads and validates one Bot setup.
-func Init(logger *slog.Logger, sweepID, botID uint64) (Context, error) {
+func Init(log *logging.Logger, sweepID, botID uint64) (Context, error) {
 	var root, err = os.Getwd()
 	if err != nil {
 		return Context{}, fmt.Errorf("get working directory: %w", err)
@@ -41,14 +41,7 @@ func Init(logger *slog.Logger, sweepID, botID uint64) (Context, error) {
 	if err != nil {
 		return Context{}, fmt.Errorf("validate ticks path: %w", err)
 	}
-	logger.With("component", "setup").Info(
-		"setup initialized",
-		"event", "init",
-		"status", "success",
-		"sweep_id", sweepID,
-		"bot_id", botID,
-		"symbol", bot.Symbol,
-	)
+	log.Info(fmt.Sprintf("setup initialized symbol=%s", bot.Symbol))
 	return Context{Config: cfg, Bot: bot}, nil
 }
 

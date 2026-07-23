@@ -15,7 +15,8 @@ Purpose: Drive one exact historical market sequence through the canonical Runtim
 - BtRunner owns orchestration and proof.
 - OHLCV owns Parquet decoding and row admission.
 - Replay Reader owns BBO conversion and iteration.
-- TickClock owns pass timing.
+- TickClock owns registered timer mechanics.
+- BtRunner owns the Runtime timer callback.
 - Runtime owns Bot decisions and stop.
 
 ## Preconditions
@@ -38,8 +39,7 @@ read one BBO
 send BBO to Runtime
 record tick evidence
 advance TickClock
-when due
-  run one Runtime Pass
+TickClock invokes the registered Runtime callback when scheduled
 when Runtime requests stop
   end replay
 when Reader completes
@@ -51,7 +51,9 @@ verify count, passes, and range
 
 Reader decides whether decoded data is admissible.
 
-TickClock decides when a Runtime pass is due.
+TickClock decides when its registered timer runs.
+
+BtRunner decides that the timer callback runs Runtime.
 
 Runtime decides Signal acceptance, cycle lifecycle, and graceful stop.
 

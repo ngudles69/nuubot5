@@ -111,11 +111,11 @@ Loop or Run
 Stop
 ```
 
-`Loop` MUST supervise continuously until stop or cancellation.
+`Loop` MUST repeat work until its stop condition.
 
-`Run` MUST execute one complete bounded job.
+`Run` MUST execute one operation.
 
-Finite-data iteration belongs inside `Run`.
+Repeated iteration MUST belong inside `Loop`.
 
 `Pass` MUST execute one timer-driven control pass.
 
@@ -125,13 +125,17 @@ Empty lifecycle phases MUST be omitted.
 
 Valid repeated shutdown paths MUST make `Stop` idempotent.
 
-Admission MUST stop before children unwind in reverse ownership order.
+Event and input producers MUST stop before their consumers.
+
+Remaining children MUST unwind in reverse ownership order.
 
 Primary work errors MUST NOT be hidden by shutdown errors.
 
 ## 5. Errors
 
 Nuubot5 MUST use standard `error`, `errors`, and `fmt`.
+
+Custom error-construction helpers and packages are prohibited.
 
 Operational failures MUST return `error`.
 
@@ -174,7 +178,7 @@ boundary.
 
 Lower components MUST NOT log returned error values.
 
-Lower components are allowed to log terminal statistics and failure status.
+Lower components are allowed to log useful terminal statistics.
 
 `panic` MUST NOT handle operational failures.
 
@@ -188,67 +192,74 @@ An identity-bearing executable MUST:
 
 ```go
 func main() {
-	started := time.Now()
-	log, err := logging.Open(logging.ServerLog)
+	var started = time.Now()
+	var log, err = logging.Open(logging.ServerLog)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "unable to open log file:", err)
 		os.Exit(1)
 	}
 
-	sweepID, botID, err := parseInput(os.Args[1:])
+	var sweepID, botID uint64
+	sweepID, botID, err = parseInput(os.Args[1:])
 	if err != nil {
-		log.Error("parseInput() failed", "error", err)
+		log.Error(fmt.Sprintf("parseInput() failed: %v", err))
 		os.Exit(1)
 	}
 
-	botLog, err := logging.OpenBot(sweepID, botID)
-	if err != nil {
-		log.Error("logging.OpenBot() failed", "error", err)
+	var botLog, botLogErr = logging.OpenBot(sweepID, botID)
+	if botLogErr != nil {
+		log.Error(fmt.Sprintf("logging.OpenBot() failed: %v", botLogErr))
 		os.Exit(1)
 	}
 	log = botLog
 
-	if err := btrunner.Run(log, sweepID, botID); err != nil {
-		log.Error("btrunner.Run() failed", "duration", time.Since(started), "error", err)
+	var runner *btrunner.BtRunner
+	runner, err = btrunner.Init(log, sweepID, botID)
+	if err != nil {
+		log.Error(fmt.Sprintf("btrunner.Init() failed: %v", err))
 		os.Exit(1)
 	}
-	log.Info("btrunner.Run() completed successfully", "duration", time.Since(started))
+	err = runner.Start()
+	if err != nil {
+		err = errors.Join(err, runner.Stop())
+		log.Error(fmt.Sprintf("btrunner.Start() failed: %v", err))
+		os.Exit(1)
+	}
+	var loopErr = runner.Loop()
+	var stopErr = runner.Stop()
+	if loopErr != nil {
+		log.Error(fmt.Sprintf("btrunner.Loop() failed: %v", errors.Join(loopErr, stopErr)))
+		os.Exit(1)
+	}
+	if stopErr != nil {
+		log.Error(fmt.Sprintf("btrunner.Stop() failed: %v", stopErr))
+		os.Exit(1)
+	}
+	log.Info(fmt.Sprintf("btrunner completed successfully in %s", time.Since(started)))
 }
 ```
 
 ## 6. Logging
 
-Nuubot5 MUST use standard `log/slog`.
+Nuubot5 MUST use `internal/toolkit/logging.Logger`.
 
-`internal/toolkit/logging.Open` MUST own directories, filenames, append-only opening, and handler configuration.
+`internal/toolkit/logging.Open` MUST own directories, filenames, append-only opening, and record formatting.
 
 No executable or component may write operational output to stdout or stderr after a logger exists.
 
 If `server.log` cannot open, the executable MUST report that failure to stderr and exit nonzero.
 
-Custom Logger types and duplicate logging methods are prohibited.
-
 Logging MUST be configured once at each executable or server boundary.
 
-Components MUST receive explicit `*slog.Logger` values.
-
-Components MUST bind their component using `logger.With`.
-
-Global `slog` configuration and `slog.SetDefault` are prohibited.
+Components MUST receive explicit `*logging.Logger` values named `log`.
 
 Components MUST NOT open log files or configure handlers.
 
-Logs MUST use structured fields.
+Every log call MUST receive exactly one complete message string.
 
-Formatted log messages are prohibited.
+Every line MUST use `YYYY-MMM-DD HH:MM:SS [LEVEL] message`.
 
-Field names MUST remain stable snake_case machine data.
-
-Log fields MUST exist only when removing them would hide useful operational information.
-
-BtRunner Run results MUST include `duration`.
-
-Boundary failures MUST include `error`.
+Levels MUST be uppercase and right-aligned to a minimum width of five.
 
 Terminal logs MUST prove completion, locate failures, measure work, or report
 domain results.
@@ -260,20 +271,18 @@ Parents MUST NOT collect child statistics only to re-log them.
 Required:
 
 ```go
-logger.Info(
-	"runtime stopped",
-	"component", "runtime",
-	"event", "stop",
-	"status", "success",
-	"ticks_accepted", stats.ticks,
-	"passes", stats.passes,
+var message = fmt.Sprintf(
+	"runtime stopped ticks_accepted=%d passes=%d",
+	stats.ticks,
+	stats.passes,
 )
+log.Info(message)
 ```
 
 Prohibited:
 
 ```go
-logger.Info(fmt.Sprintf("runtime stop status=%s ticks=%d", status, ticks))
+log.Info("runtime stopped", "ticks_accepted", stats.ticks)
 ```
 
 ## 7. Concurrency

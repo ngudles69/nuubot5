@@ -2,56 +2,79 @@ package clock
 
 import (
 	"fmt"
-	"log/slog"
+
+	"nuubot/internal/toolkit/logging"
 )
 
-// TickClock converts replay timestamps into timed passes.
+// TickClock runs one registered timer from replay timestamps.
 type TickClock struct {
-	log      *slog.Logger
+	log      *logging.Logger
 	interval uint64
+	callback func(uint64) error
 	nextMS   uint64
 	started  bool
 	ticks    uint64
-	passes   uint64
+	timers   uint64
 	stopped  bool
 }
 
 // Section 1 - Program Flow
 
 // New constructs one TickClock.
-func New(logger *slog.Logger, intervalMS uint64) *TickClock {
-	log := logger.With("component", "tickclock")
-	log.Info(
-		"tick clock initialized",
-		"event", "init",
-		"status", "success",
-		"interval_ms", intervalMS,
-	)
-	return &TickClock{log: log, interval: intervalMS}
+func New(log *logging.Logger) *TickClock {
+	log.Info("tick clock initialized")
+	return &TickClock{log: log}
 }
 
-// Advance accepts one timestamp and reports whether a pass is due.
-func (c *TickClock) Advance(nowMS uint64) (bool, error) {
+// RegisterTimer registers the one replay timer.
+func (c *TickClock) RegisterTimer(intervalMS uint64, callback func(uint64) error) error {
+	if intervalMS == 0 {
+		return fmt.Errorf("tick clock timer interval must be positive")
+	}
+	if callback == nil {
+		return fmt.Errorf("tick clock timer callback is required")
+	}
+	if c.callback != nil {
+		return fmt.Errorf("tick clock timer already registered")
+	}
+	c.interval = intervalMS
+	c.callback = callback
+	c.log.Info(fmt.Sprintf("tick clock timer registered interval_ms=%d", intervalMS))
+	return nil
+}
+
+// Advance accepts one timestamp and runs the registered timer when scheduled.
+func (c *TickClock) Advance(nowMS uint64) error {
 	c.ticks++
+	if c.callback == nil {
+		return fmt.Errorf("tick clock timer is not registered")
+	}
 	if !c.started {
 		if nowMS > ^uint64(0)-c.interval {
-			return false, fmt.Errorf("tick clock overflow")
+			return fmt.Errorf("tick clock overflow")
 		}
 		c.started = true
 		c.nextMS = nowMS + c.interval
-		c.passes++
-		return true, nil
+		return c.runTimer(nowMS)
 	}
 	if nowMS < c.nextMS {
-		return false, nil
+		return nil
 	}
-	intervals := (nowMS-c.nextMS)/c.interval + 1
+	var intervals = (nowMS-c.nextMS)/c.interval + 1
 	if intervals > (^uint64(0)-c.nextMS)/c.interval {
-		return false, fmt.Errorf("tick clock overflow")
+		return fmt.Errorf("tick clock overflow")
 	}
 	c.nextMS += intervals * c.interval
-	c.passes++
-	return true, nil
+	return c.runTimer(nowMS)
+}
+
+func (c *TickClock) runTimer(nowMS uint64) error {
+	c.timers++
+	var err = c.callback(nowMS)
+	if err != nil {
+		return fmt.Errorf("run tick clock timer: %w", err)
+	}
+	return nil
 }
 
 // Stop reports final clock statistics once.
@@ -60,13 +83,11 @@ func (c *TickClock) Stop() {
 		return
 	}
 	c.stopped = true
-	c.log.Info(
-		"tick clock stopped",
-		"event", "stop",
-		"status", "success",
-		"ticks_seen", c.ticks,
-		"passes_due", c.passes,
-	)
+	c.log.Info(fmt.Sprintf(
+		"tick clock stopped ticks_seen=%d timers_triggered=%d",
+		c.ticks,
+		c.timers,
+	))
 }
 
 // Section 2 - Domain Helpers

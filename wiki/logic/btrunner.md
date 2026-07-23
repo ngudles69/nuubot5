@@ -50,14 +50,15 @@ run(args)
   configure one process logger
   runner = btrunner.New(...)
   runner.Start()
-  runErr = runner.Run()
+  loopErr = runner.Loop()
   stopErr = runner.Stop()
-  return both errors without hiding runErr
+  return both errors without hiding loopErr
 
 btrunner.New(...)
   setup.Init(...)
   select effective end date
   create TickClock
+  register Runtime timer callback
   create replay.Reader
   create Runtime
   load required Bars
@@ -68,22 +69,21 @@ BtRunner.Start()
   start Runtime
   mark started
 
-BtRunner.Run()
+BtRunner.Loop()
   for each validated BBO
     Runtime.Ingest(BBO)
     record served tick
     TickClock.Advance(timestamp)
-    if due
-      Runtime.MainLoop(timestamp)
-      stop when Runtime requests stop
+      registered timer callback runs Runtime
+    stop when Runtime requests stop
 
   Runtime.Stop("end_date")
   verify exact replay
 
 BtRunner.Stop()
-  stop Runtime
-  stop Reader
   stop Clock
+  stop Reader
+  stop Runtime
   log BtRunner-owned proof
 ```
 

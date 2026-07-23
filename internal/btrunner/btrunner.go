@@ -1,9 +1,7 @@
 package btrunner
 
 import (
-	"errors"
 	"fmt"
-	"log/slog"
 	stdruntime "runtime"
 	"time"
 
@@ -11,7 +9,7 @@ import (
 	"nuubot/internal/runtime"
 	"nuubot/internal/setup"
 	"nuubot/internal/toolkit/clock"
-	nuuerrors "nuubot/internal/toolkit/errors"
+	"nuubot/internal/toolkit/logging"
 )
 
 type stats struct {
@@ -29,113 +27,104 @@ type stats struct {
 
 // BtRunner owns one bounded historical replay.
 type BtRunner struct {
-	log     *slog.Logger
-	reader  *replay.Reader
-	clock   *clock.TickClock
-	runtime *runtime.Runtime
-	stats   stats
-	started bool
-	stopped bool
+	log           *logging.Logger
+	reader        *replay.Reader
+	clock         *clock.TickClock
+	runtime       *runtime.Runtime
+	stats         stats
+	stopRequested bool
+	started       bool
+	stopped       bool
 }
 
 // Section 1 - Program Flow
 
-// Run executes one complete BtRunner command.
-func Run(logger *slog.Logger, sweepID, botID uint64) error {
-	var runner, err = Init(logger, sweepID, botID)
-	if err != nil {
-		return fmt.Errorf("create btrunner: %w", err)
-	}
-	err = runner.Start()
-	if err != nil {
-		return fmt.Errorf("start btrunner: %w", err)
-	}
-	var runErr = runner.Run()
-	if runErr != nil {
-		runErr = fmt.Errorf("run btrunner: %w", runErr)
-	}
-	var stopErr = runner.Stop()
-	if stopErr != nil {
-		stopErr = fmt.Errorf("stop btrunner: %w", stopErr)
-	}
-	return errors.Join(runErr, stopErr)
-}
+// Init prepares one bounded historical replay.
+func (r *BtRunner) Init(log *logging.Logger, sweepID, botID uint64) error {
+	r.log = log
 
-// Init constructs one bounded historical replay.
-func Init(logger *slog.Logger, sweepID, botID uint64) (*BtRunner, error) {
-	var ctx, err = setup.Init(logger, sweepID, botID)
+	// setup
+	var ctx, err = setup.Init(log, sweepID, botID)
 	if err != nil {
-		return nil, fmt.Errorf("initialize setup: %w", err)
+		return fmt.Errorf("initialize setup: %w", err)
 	}
+
+	// validate and set StartMS and endMS
+	var start = ctx.Bot.ReplayStart
 	var end = ctx.Bot.ReplayEnd
 	if ctx.Bot.EndAt != nil && ctx.Bot.EndAt.Before(end) {
 		end = *ctx.Bot.EndAt
 	}
-	if !ctx.Bot.ReplayStart.Before(end) {
-		return nil, fmt.Errorf("bot end must follow replay start")
+	if !start.Before(end) {
+		return fmt.Errorf("bot end must follow replay start")
 	}
-
-	var log = logger.With("component", "btrunner")
-	log.Info(
-		"btrunner initialized",
-		"event", "init",
-		"status", "success",
-		"symbol", ctx.Bot.Symbol,
-	)
-	var tickClock = clock.New(logger, ctx.Config.BtRunner.TimerIntervalMS)
-	var tickReader, readerErr = replay.NewReader(
-		logger,
-		ctx.Bot.TicksPath,
-		ctx.Bot.ReplayStart,
-		end,
-	)
-	if readerErr != nil {
-		return nil, fmt.Errorf("create replay reader: %w", readerErr)
-	}
-	var runTime, runtimeErr = runtime.Init(logger, ctx, end)
-	if runtimeErr != nil {
-		return nil, fmt.Errorf("initialize runtime: %w", runtimeErr)
-	}
-
-	var startMS = uint64(ctx.Bot.ReplayStart.UnixMilli())
+	var startMS = uint64(start.UnixMilli())
 	var endMS = uint64(end.UnixMilli())
 	var durationMS = endMS - startMS
-	return &BtRunner{
-		log: log, reader: tickReader, clock: tickClock, runtime: runTime,
-		stats: stats{
-			ticksExpected: durationMS / 1000,
-			passesExpected: (durationMS + ctx.Config.BtRunner.TimerIntervalMS - 1) /
-				ctx.Config.BtRunner.TimerIntervalMS,
-			expectedFirstMS: startMS + 1000,
-			expectedLastMS:  endMS,
-		},
-	}, nil
+
+	// create clock
+	r.clock = clock.New(log)
+	err = r.clock.RegisterTimer(ctx.Config.BtRunner.TimerIntervalMS, r.runtimeRun)
+	if err != nil {
+		return fmt.Errorf("register runtime timer: %w", err)
+	}
+
+	// create tickReader
+	r.reader, err = replay.NewReader(
+		log,
+		ctx.Bot.TicksPath,
+		start,
+		end,
+	)
+	if err != nil {
+		return fmt.Errorf("create replay reader: %w", err)
+	}
+
+	// create runtime
+	r.runtime, err = runtime.Init(log, ctx, end)
+	if err != nil {
+		return fmt.Errorf("initialize runtime: %w", err)
+	}
+
+	// create stats
+	r.stats = stats{
+		ticksExpected: durationMS / 1000,
+		passesExpected: (durationMS + ctx.Config.BtRunner.TimerIntervalMS - 1) /
+			ctx.Config.BtRunner.TimerIntervalMS,
+		expectedFirstMS: startMS + 1000,
+		expectedLastMS:  endMS,
+	}
+
+	log.Info(fmt.Sprintf("btrunner initialized: symbol=%s", ctx.Bot.Symbol))
+	return nil
 }
 
 // Start starts the owned Runtime.
 func (r *BtRunner) Start() error {
 	if r.started || r.stopped {
-		return nuuerrors.StateError("btrunner", "start")
+		return fmt.Errorf("btrunner cannot start from current state")
 	}
 	var err = r.runtime.Start()
 	if err != nil {
 		return fmt.Errorf("start runtime: %w", err)
 	}
 	r.started = true
-	r.log.Info("btrunner started", "event", "start", "status", "success")
+	r.log.Info("btrunner started")
 	return nil
 }
 
-// Run executes the complete bounded replay.
-func (r *BtRunner) Run() error {
+// Loop executes the complete bounded replay loop.
+func (r *BtRunner) Loop() error {
 	if !r.started || r.stopped {
-		return nuuerrors.StateError("btrunner", "run")
+		return fmt.Errorf("btrunner cannot loop from current state")
 	}
-	r.log.Info("btrunner running", "event", "run", "status", "started")
+	r.log.Info("btrunner loop started")
 	var started = time.Now()
 	defer func() { r.stats.elapsed = time.Since(started) }()
 
 	for {
+
+		// get next bbo
 		var bbo, ok, err = r.reader.Next()
 		if err != nil {
 			return fmt.Errorf("read replay: %w", err)
@@ -143,31 +132,27 @@ func (r *BtRunner) Run() error {
 		if !ok {
 			break
 		}
+
+		// runtime ingest bbo
 		err = r.runtime.Ingest(bbo)
 		if err != nil {
 			return fmt.Errorf("ingest runtime bbo: %w", err)
 		}
+
+		// update stats
 		if r.stats.firstMS == 0 {
 			r.stats.firstMS = bbo.TimestampMS
 		}
 		r.stats.lastMS = bbo.TimestampMS
 		r.stats.ticksServed++
 
-		var due bool
-		due, err = r.clock.Advance(bbo.TimestampMS)
+		// clock advance
+		err = r.clock.Advance(bbo.TimestampMS)
 		if err != nil {
 			return fmt.Errorf("advance tick clock: %w", err)
 		}
-		if due {
-			r.stats.passesTriggered++
-			var stop bool
-			stop, err = r.runtime.Pass(bbo.TimestampMS)
-			if err != nil {
-				return fmt.Errorf("pass runtime: %w", err)
-			}
-			if stop {
-				break
-			}
+		if r.stopRequested {
+			break
 		}
 	}
 	var err = r.verify()
@@ -184,40 +169,45 @@ func (r *BtRunner) Stop() error {
 	}
 	r.started = false
 	r.stopped = true
-	var runtimeErr = r.runtime.Stop("parent_stop")
-	if runtimeErr != nil {
-		runtimeErr = fmt.Errorf("stop runtime: %w", runtimeErr)
-	}
+
+	// clock stop
+	r.clock.Stop()
+
+	// reader stop
 	var readerErr = r.reader.Stop()
 	if readerErr != nil {
 		readerErr = fmt.Errorf("stop replay reader: %w", readerErr)
 	}
-	r.clock.Stop()
 
-	var status = "failed"
-	if r.stats.replayCompleted && runtimeErr == nil && readerErr == nil {
-		status = "success"
+	// trigger runtime stop
+	var runtimeErr = r.runtime.Stop("parent_stop")
+	if runtimeErr != nil {
+		runtimeErr = fmt.Errorf("stop runtime: %w", runtimeErr)
 	}
+
+	// get run stats
 	var memory stdruntime.MemStats
 	stdruntime.ReadMemStats(&memory)
-	r.log.Info(
-		"btrunner stopped",
-		"event", "stop",
-		"status", status,
-		"loader", "parquet",
-		"ticks_served", r.stats.ticksServed,
-		"ticks_expected", r.stats.ticksExpected,
-		"passes_triggered", r.stats.passesTriggered,
-		"passes_expected", r.stats.passesExpected,
-		"first_ts_ms", r.stats.firstMS,
-		"last_ts_ms", r.stats.lastMS,
-		"replay_completed", r.stats.replayCompleted,
-		"replay_ms", r.stats.elapsed.Milliseconds(),
-		"heap_mb", float64(memory.HeapAlloc)/(1<<20),
-		"total_alloc_mb", float64(memory.TotalAlloc)/(1<<20),
-		"gc_runs", memory.NumGC,
-		"gc_pause_ms", float64(memory.PauseTotalNs)/1e6,
-	)
+	r.log.Info(fmt.Sprintf(
+		"btrunner stopped loader=parquet ticks_served=%d ticks_expected=%d "+
+			"passes_triggered=%d passes_expected=%d first_ts_ms=%d last_ts_ms=%d "+
+			"replay_completed=%t replay_ms=%d heap_mb=%f total_alloc_mb=%f "+
+			"gc_runs=%d gc_pause_ms=%f result=complete",
+		r.stats.ticksServed,
+		r.stats.ticksExpected,
+		r.stats.passesTriggered,
+		r.stats.passesExpected,
+		r.stats.firstMS,
+		r.stats.lastMS,
+		r.stats.replayCompleted,
+		r.stats.elapsed.Milliseconds(),
+		float64(memory.HeapAlloc)/(1<<20),
+		float64(memory.TotalAlloc)/(1<<20),
+		memory.NumGC,
+		float64(memory.PauseTotalNs)/1e6,
+	))
+
+	// check for errors
 	if runtimeErr != nil {
 		return runtimeErr
 	}
@@ -227,10 +217,24 @@ func (r *BtRunner) Stop() error {
 	if !r.stats.replayCompleted {
 		return fmt.Errorf("btrunner replay did not complete")
 	}
+
+	// ok
 	return nil
 }
 
 // Section 2 - Domain Helpers
+
+func (r *BtRunner) runtimeRun(nowMS uint64) error {
+	r.stats.passesTriggered++
+	var stop, err = r.runtime.Run(nowMS)
+	if err != nil {
+		return fmt.Errorf("run runtime: %w", err)
+	}
+	if stop {
+		r.stopRequested = true
+	}
+	return nil
+}
 
 func (r *BtRunner) verify() error {
 	if r.stats.ticksServed != r.stats.ticksExpected ||

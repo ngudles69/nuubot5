@@ -2,19 +2,18 @@ package botcycle
 
 import (
 	"fmt"
-	"log/slog"
 
 	"nuubot/internal/config"
 	"nuubot/internal/executor"
 	"nuubot/internal/market"
 	"nuubot/internal/signaler"
 	"nuubot/internal/toolkit/clock"
-	nuuerrors "nuubot/internal/toolkit/errors"
+	"nuubot/internal/toolkit/logging"
 )
 
 // Control owns one active BotCycle and its Executors.
 type Control struct {
-	log       *slog.Logger
+	log       *logging.Logger
 	number    int
 	signal    signaler.Signal
 	executors []executor.Executor
@@ -30,31 +29,29 @@ type Control struct {
 // Section 1 - Program Flow
 
 // New constructs one BotCycle.
-func New(logger *slog.Logger, number int, signal signaler.Signal, configs []config.Executor) (*Control, error) {
+func New(log *logging.Logger, number int, signal signaler.Signal, configs []config.Executor) (*Control, error) {
 	var executors = make([]executor.Executor, 0, len(configs))
 	for index, cfg := range configs {
-		var created, err = executor.Create(logger, number, index+1, signal, cfg)
+		var created, err = executor.Create(log, number, index+1, signal, cfg)
 		if err != nil {
 			return nil, fmt.Errorf("create executor %d: %w", index+1, err)
 		}
 		executors = append(executors, created)
 	}
-	var log = logger.With("component", "botcycle", "cycle", number)
-	log.Info(
-		"bot cycle initialized",
-		"event", "init",
-		"status", "success",
-		"side", signal.Side,
-		"signal_ts_ms", signal.SignalMS,
-		"available_ts_ms", signal.AvailableMS,
-	)
+	log.Info(fmt.Sprintf(
+		"bot cycle initialized cycle=%d side=%s signal_ts_ms=%d available_ts_ms=%d",
+		number,
+		signal.Side,
+		signal.SignalMS,
+		signal.AvailableMS,
+	))
 	return &Control{log: log, number: number, signal: signal, executors: executors}, nil
 }
 
 // Start starts every configured Executor.
 func (c *Control) Start() error {
 	if c.running || c.stopped {
-		return nuuerrors.StateError("bot cycle", "start")
+		return fmt.Errorf("bot cycle cannot start from current state")
 	}
 	for _, executor := range c.executors {
 		var err = executor.Start()
@@ -64,14 +61,14 @@ func (c *Control) Start() error {
 		}
 	}
 	c.running = true
-	c.log.Info("bot cycle started", "event", "start", "status", "success")
+	c.log.Info(fmt.Sprintf("bot cycle started cycle=%d", c.number))
 	return nil
 }
 
 // Pass runs one timer-driven Executor pass.
 func (c *Control) Pass(nowMS uint64) (bool, error) {
 	if !c.running {
-		return false, nuuerrors.StateError("bot cycle", "pass")
+		return false, fmt.Errorf("bot cycle cannot pass from current state")
 	}
 	c.passes++
 	for _, executor := range c.executors {
@@ -103,23 +100,19 @@ func (c *Control) Stop(reason string) (string, error) {
 	}
 	c.stopped = true
 	var exitReason = c.exitReason(reason)
-	var status = "success"
-	if firstErr != nil {
-		status = "failed"
-	}
-	c.log.Info(
-		"bot cycle stopped",
-		"event", "stop",
-		"status", status,
-		"side", c.signal.Side,
-		"start_ts_ms", c.startMS,
-		"end_ts_ms", c.endMS,
-		"duration_ms", clock.Duration(c.startMS, c.endMS),
-		"executors", len(c.executors),
-		"ticks_received", c.ticks,
-		"passes", c.passes,
-		"stop_reason", exitReason,
-	)
+	c.log.Info(fmt.Sprintf(
+		"bot cycle stopped cycle=%d side=%s start_ts_ms=%d end_ts_ms=%d "+
+			"duration_ms=%d executors=%d ticks_received=%d passes=%d stop_reason=%s",
+		c.number,
+		c.signal.Side,
+		c.startMS,
+		c.endMS,
+		clock.Duration(c.startMS, c.endMS),
+		len(c.executors),
+		c.ticks,
+		c.passes,
+		exitReason,
+	))
 	return exitReason, firstErr
 }
 

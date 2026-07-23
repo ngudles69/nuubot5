@@ -2,7 +2,7 @@
 
 Status: Implemented.
 Covers: `internal/toolkit/clock/clock.go`
-Purpose: Convert replay timestamps into deterministic Runtime pass decisions.
+Purpose: Run one registered timer from deterministic replay timestamps.
 
 ## Canonical Source
 
@@ -10,23 +10,25 @@ Purpose: Convert replay timestamps into deterministic Runtime pass decisions.
 
 ## Scope & Responsibilities
 
-TickClock owns one replay interval and its next due timestamp.
+TickClock owns one registered replay timer, its interval, and its next timestamp.
 
 ## Program Flow
 
 ```text
-TickClock(log, interval)
+TickClock(log)
 
 init
-  next = unset
+  timer = unset
 
-start
-  accept replay time
+register(interval, callback)
+  timer = interval and callback
+  next  = unset
 
 run(now)
-  first tick   -> due
-  now >= next -> advance next and return due
-  otherwise   -> return not due
+  first tick   -> invoke callback
+  now >= next -> advance next and invoke callback
+  otherwise   -> return
+  propagate callback error
 
 stop
   stop once
@@ -35,3 +37,4 @@ stop
 ## Notes
 
 - TickClock uses admitted replay time, never wall time.
+- TickClock owns timer mechanics, not Runtime policy.

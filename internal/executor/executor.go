@@ -2,11 +2,11 @@ package executor
 
 import (
 	"fmt"
-	"log/slog"
 
 	"nuubot/internal/config"
 	"nuubot/internal/market"
 	"nuubot/internal/signaler"
+	"nuubot/internal/toolkit/logging"
 )
 
 // Executor defines one BotCycle-owned execution policy.
@@ -23,7 +23,7 @@ type Executor interface {
 
 // Create constructs the configured Executor.
 func Create(
-	logger *slog.Logger,
+	log *logging.Logger,
 	cycleNumber int,
 	executorNumber int,
 	signal signaler.Signal,
@@ -31,7 +31,7 @@ func Create(
 ) (Executor, error) {
 	switch cfg.Kind {
 	case "observer":
-		return newObserver(logger, cycleNumber, executorNumber, signal, cfg)
+		return newObserver(log, cycleNumber, executorNumber, signal, cfg)
 	default:
 		return nil, fmt.Errorf("unknown executor: %s", cfg.Kind)
 	}

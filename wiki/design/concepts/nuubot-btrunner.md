@@ -2,7 +2,7 @@
 
 Status: Implemented.
 Covers: `cmd/nuubot-btrunner/main.go`
-Purpose: Parse identity, run BtRunner, and log the terminal result with elapsed time.
+Purpose: Parse identity, run BtRunner lifecycle, and log the terminal result with elapsed time.
 
 ## Responsibilities
 
@@ -16,8 +16,7 @@ Every line in `main.go` MUST contribute directly to one responsibility.
 
 Parsing stays in Section 2 of `main.go`.
 
-Configuration, BtRunner construction, lifecycle, and shutdown belong in
-`internal/btrunner`.
+BtRunner owns lifecycle behavior. The command calls each lifecycle phase.
 
 Log paths and file opening belong in `internal/toolkit/logging`.
 
@@ -28,7 +27,11 @@ open server.log
 parse Sweep ID
 parse Bot ID
 set logger to Bot log
-run btrunner.Run()
+runner = BtRunner
+runner.Init()
+runner.Start()
+runner.Loop()
+runner.Stop()
 log failure and exit nonzero
 or log success and elapsed time
 ```
@@ -44,13 +47,14 @@ Console output is allowed only when `server.log` cannot open.
 
 The terminal message MUST name the failed boundary.
 
-The terminal Run result MUST include elapsed duration.
+Every log call receives one complete message string.
+
+The successful terminal message includes elapsed duration.
 
 ## Does Not
 
 - Load configuration.
-- Construct BtRunner.
-- Manage BtRunner lifecycle.
+- Know BtRunner-owned Clock, Reader, Runtime, or replay proof.
 - Open log files directly.
 - Wrap `main` with `program`, command, or local Run functions.
 
@@ -58,5 +62,5 @@ The terminal Run result MUST include elapsed duration.
 
 - Invalid input exits nonzero and writes to `server.log`.
 - Identified failures exit nonzero and write only to the Bot log.
-- Successful execution exits zero and logs elapsed duration.
+- Successful execution exits zero and logs one completion message with elapsed duration.
 - Operational output does not use stdout or stderr after logger creation.

@@ -29,14 +29,14 @@ Repeated valid stop calls MUST be safe.
 
 ```text
 Command
-  retain Run result
+  retain Loop result
   call BtRunner Stop
-  combine without hiding Run failure
+  combine without hiding Loop failure
 
 BtRunner Stop
-  stop Runtime
-  stop Reader
   stop TickClock
+  stop Reader
+  stop Runtime
 
 Runtime Stop
   latch first stop reason
@@ -65,13 +65,17 @@ Admission stops before child teardown.
 
 An active BotCycle becomes closed exactly once.
 
-Children become stopped in reverse ownership order.
+Event and input producers stop before their consumers.
+
+Remaining children stop in reverse ownership order.
 
 Terminal statistics become final.
 
 ## Failure Handling
 
 Every owner attempts all direct-child stops.
+
+BtRunner attempts TickClock, Reader, and Runtime stop in that order.
 
 BtRunner returns Runtime error before Reader error.
 
@@ -103,7 +107,7 @@ Shutdown completes when every started direct child received stop, active cycles 
 - ObserverExecutor preserves last timestamp and final price.
 - Stop methods are idempotent.
 - Start failures clean up started children.
-- Run failure still triggers teardown.
+- Loop failure still triggers teardown.
 - Started and closed cycle counts match.
 
 ## Open Decisions

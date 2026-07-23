@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -26,27 +27,50 @@ func main() {
 	var sweepID, botID uint64
 	sweepID, botID, err = parseInput(os.Args[1:])
 	if err != nil {
-		log.Error("parseInput() failed", "error", err)
+		log.Error(fmt.Sprintf("parseInput() failed: %v", err))
 		os.Exit(1)
 	}
 
 	// Set log to Bot log.
 	var botLog, botLogErr = logging.OpenBot(sweepID, botID)
 	if botLogErr != nil {
-		log.Error("logging.OpenBot() failed", "error", botLogErr)
+		log.Error(fmt.Sprintf("logging.OpenBot() failed: %v", botLogErr))
 		os.Exit(1)
 	}
 	log = botLog
 
-	// Run BtRunner.
-	err = btrunner.Run(log, sweepID, botID)
+	// create btrunner
+	var runner btrunner.BtRunner
+
+	// btrunner init
+	err = runner.Init(log, sweepID, botID)
 	if err != nil {
-		log.Error("btrunner.Run() failed", "duration", time.Since(started), "error", err)
+		log.Error(fmt.Sprintf("btrunner.Init() failed: %v", err))
+		os.Exit(1)
+	}
+
+	// btrunner start
+	err = runner.Start()
+	if err != nil {
+		err = errors.Join(err, runner.Stop())
+		log.Error(fmt.Sprintf("btrunner.Start() failed: %v", err))
+		os.Exit(1)
+	}
+
+	// btrunner loop & stop
+	var loopErr = runner.Loop()
+	var stopErr = runner.Stop()
+	if loopErr != nil {
+		log.Error(fmt.Sprintf("btrunner.Loop() failed: %v", errors.Join(loopErr, stopErr)))
+		os.Exit(1)
+	}
+	if stopErr != nil {
+		log.Error(fmt.Sprintf("btrunner.Stop() failed: %v", stopErr))
 		os.Exit(1)
 	}
 
 	// Log result.
-	log.Info("btrunner.Run() completed successfully", "duration", time.Since(started))
+	log.Info(fmt.Sprintf("btrunner completed successfully in %s", time.Since(started)))
 }
 
 // Section 2 - Domain Helpers

@@ -2,7 +2,6 @@ package runtime
 
 import (
 	"fmt"
-	"log/slog"
 	"time"
 
 	"nuubot/internal/botcycle"
@@ -12,7 +11,7 @@ import (
 	"nuubot/internal/risk"
 	"nuubot/internal/setup"
 	"nuubot/internal/signaler"
-	nuuerrors "nuubot/internal/toolkit/errors"
+	"nuubot/internal/toolkit/logging"
 )
 
 type stats struct {
@@ -28,8 +27,7 @@ type stats struct {
 
 // Runtime owns synchronous trading decisions and its direct children.
 type Runtime struct {
-	logger     *slog.Logger
-	log        *slog.Logger
+	log        *logging.Logger
 	config     config.Runtime
 	signaler   *signaler.Signaler
 	risks      []risk.Risk
@@ -44,9 +42,9 @@ type Runtime struct {
 // Section 1 - Program Flow
 
 // Init constructs one Runtime and its configured children.
-func Init(logger *slog.Logger, ctx setup.Context, end time.Time) (*Runtime, error) {
+func Init(log *logging.Logger, ctx setup.Context, end time.Time) (*Runtime, error) {
 	var cfg = ctx.Config.Runtime
-	var signals, err = signaler.Create(logger, cfg.Signaler)
+	var signals, err = signaler.Create(log, cfg.Signaler)
 	if err != nil {
 		return nil, fmt.Errorf("create signaler: %w", err)
 	}
@@ -70,43 +68,37 @@ func Init(logger *slog.Logger, ctx setup.Context, end time.Time) (*Runtime, erro
 	}
 	var risks = make([]risk.Risk, 0, len(cfg.Risks))
 	for index, riskConfig := range cfg.Risks {
-		var created, riskErr = risk.Create(logger, index+1, riskConfig)
+		var created, riskErr = risk.Create(log, index+1, riskConfig)
 		if riskErr != nil {
 			return nil, fmt.Errorf("create risk %d: %w", index+1, riskErr)
 		}
 		risks = append(risks, created)
 	}
 	var endMS = uint64(end.UnixMilli())
-	var log = logger.With("component", "runtime")
-	log.Info(
-		"runtime initialized",
-		"event", "init",
-		"status", "success",
-		"end_ts_ms", endMS,
-	)
+	log.Info(fmt.Sprintf("runtime initialized end_ts_ms=%d", endMS))
 	return &Runtime{
-		logger: logger, log: log, config: cfg, signaler: signals, risks: risks, endMS: endMS,
+		log: log, config: cfg, signaler: signals, risks: risks, endMS: endMS,
 	}, nil
 }
 
 // Start starts Runtime children and admission.
 func (r *Runtime) Start() error {
 	if r.started || r.stopped {
-		return nuuerrors.StateError("runtime", "start")
+		return fmt.Errorf("runtime cannot start from current state")
 	}
 	var err = r.signaler.Start()
 	if err != nil {
 		return fmt.Errorf("start signaler: %w", err)
 	}
 	r.started = true
-	r.log.Info("runtime started", "event", "start", "status", "success")
+	r.log.Info("runtime started")
 	return nil
 }
 
-// Pass executes one timer-driven control pass.
-func (r *Runtime) Pass(nowMS uint64) (bool, error) {
+// Run executes one timer-driven control pass.
+func (r *Runtime) Run(nowMS uint64) (bool, error) {
 	if !r.started || r.stopped {
-		return false, nuuerrors.StateError("runtime", "pass")
+		return false, fmt.Errorf("runtime cannot run from current state")
 	}
 	r.stats.passes++
 
@@ -152,24 +144,20 @@ func (r *Runtime) Stop(reason string) error {
 	}
 	r.signaler.Stop()
 	r.stopped = true
-	var status = "success"
-	if firstErr != nil {
-		status = "failed"
-	}
-	r.log.Info(
-		"runtime stopped",
-		"event", "stop",
-		"status", status,
-		"ticks_accepted", r.stats.ticks,
-		"passes", r.stats.passes,
-		"signals_received", r.stats.signals,
-		"signals_skipped", r.stats.signalsSkipped,
-		"cycles_started", r.stats.cyclesStarted,
-		"cycles_closed", r.stats.cyclesClosed,
-		"stop_loss_exits", r.stats.stopLossExits,
-		"end_date_exits", r.stats.endDateExits,
-		"stop_reason", r.stopReason,
-	)
+	r.log.Info(fmt.Sprintf(
+		"runtime stopped ticks_accepted=%d passes=%d signals_received=%d "+
+			"signals_skipped=%d cycles_started=%d cycles_closed=%d "+
+			"stop_loss_exits=%d end_date_exits=%d stop_reason=%s",
+		r.stats.ticks,
+		r.stats.passes,
+		r.stats.signals,
+		r.stats.signalsSkipped,
+		r.stats.cyclesStarted,
+		r.stats.cyclesClosed,
+		r.stats.stopLossExits,
+		r.stats.endDateExits,
+		r.stopReason,
+	))
 	return firstErr
 }
 
@@ -178,7 +166,7 @@ func (r *Runtime) Stop(reason string) error {
 // Ingest accepts one validated BBO.
 func (r *Runtime) Ingest(bbo market.BBO) error {
 	if !r.started || r.stopped || r.stopReason != "" {
-		return nuuerrors.StateError("runtime", "ingest bbo")
+		return fmt.Errorf("runtime cannot ingest bbo from current state")
 	}
 	for {
 		var signal, available, err = r.signaler.Next(bbo.TimestampMS)
@@ -210,7 +198,7 @@ func (r *Runtime) Ingest(bbo market.BBO) error {
 
 func (r *Runtime) openCycle(signal signaler.Signal) error {
 	var cycle, err = botcycle.New(
-		r.logger,
+		r.log,
 		int(r.stats.cyclesStarted+1),
 		signal,
 		r.config.Executors,

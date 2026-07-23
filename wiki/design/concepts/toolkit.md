@@ -9,8 +9,7 @@ Purpose: Group small, reusable, domain-independent packages.
 ## Packages
 
 - `clock`: deterministic clock mechanics and duration helpers.
-- `errors`: shared standard error construction.
-- `logging`: standard `slog` configuration.
+- `logging`: exact-format append-only file logging.
 
 ## Rules
 

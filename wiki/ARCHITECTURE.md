@@ -36,7 +36,7 @@ BtRunner owns historical orchestration and exact replay proof.
 
 ReplayReader validates Parquet values before returning BBO values.
 
-TickClock converts replay timestamps into Runtime pass decisions.
+TickClock invokes BtRunner's registered Runtime callback from replay timestamps.
 
 Runtime owns signals, risk checks, BotCycle decisions, and graceful shutdown.
 
@@ -53,7 +53,7 @@ main
   create logger
   create BtRunner
   start
-  run
+  loop
   stop
   return one result
 
@@ -65,11 +65,11 @@ BtRunner setup
   prepare Signaler
   calculate expected proof
 
-BtRunner run
+BtRunner loop
   read one validated BBO
   send BBO to Runtime
   advance TickClock
-  call Runtime Pass when due
+  registered timer callback runs Runtime
   stop at the configured end
   verify exact replay
 ```

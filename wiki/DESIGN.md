@@ -36,8 +36,7 @@ Nuubot5 source proves implementation. Reservation files prove names only.
 | [simulator](design/packages/simulator.md) | Reserved | Provide venue-shaped simulated execution. |
 | [trade](design/packages/trade.md) | Reserved | Own strategy-level orders and evidence. |
 | [toolkit/clock](design/packages/clock.md) | Implemented | Provide deterministic clock mechanics. |
-| [toolkit/errors](design/packages/errors.md) | Implemented | Construct shared standard errors. |
-| [toolkit/logging](design/packages/logging.md) | Implemented | Configure standard structured logging. |
+| [toolkit/logging](design/packages/logging.md) | Implemented | Write exact-format append-only file logs. |
 
 Reserved packages contain only an approved package declaration.
 

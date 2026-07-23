@@ -2,13 +2,12 @@ package executor
 
 import (
 	"fmt"
-	"log/slog"
 
 	"nuubot/internal/config"
 	"nuubot/internal/market"
 	"nuubot/internal/signaler"
 	"nuubot/internal/toolkit/clock"
-	nuuerrors "nuubot/internal/toolkit/errors"
+	"nuubot/internal/toolkit/logging"
 )
 
 type observerStats struct {
@@ -25,7 +24,7 @@ type observerStats struct {
 }
 
 type observer struct {
-	log            *slog.Logger
+	log            *logging.Logger
 	cycleNumber    int
 	executorNumber int
 	signal         signaler.Signal
@@ -39,7 +38,7 @@ type observer struct {
 // Section 1 - Program Flow
 
 func newObserver(
-	logger *slog.Logger,
+	log *logging.Logger,
 	cycleNumber int,
 	executorNumber int,
 	signal signaler.Signal,
@@ -48,21 +47,16 @@ func newObserver(
 	if cfg.StopLossPct <= 0 || cfg.StopLossPct >= 1 {
 		return nil, fmt.Errorf("observer stop_loss_pct must be between 0 and 1")
 	}
-	log := logger.With(
-		"component", "executor",
-		"cycle", cycleNumber,
-		"executor", executorNumber,
-	)
-	log.Info(
-		"executor initialized",
-		"event", "init",
-		"status", "success",
-		"kind", "observer",
-		"side", signal.Side,
-		"signal_ts_ms", signal.SignalMS,
-		"available_ts_ms", signal.AvailableMS,
-		"stop_loss_pct", cfg.StopLossPct,
-	)
+	log.Info(fmt.Sprintf(
+		"executor initialized cycle=%d executor=%d kind=observer side=%s "+
+			"signal_ts_ms=%d available_ts_ms=%d stop_loss_pct=%f",
+		cycleNumber,
+		executorNumber,
+		signal.Side,
+		signal.SignalMS,
+		signal.AvailableMS,
+		cfg.StopLossPct,
+	))
 	return &observer{
 		log: log, cycleNumber: cycleNumber, executorNumber: executorNumber,
 		signal: signal, stopLossPct: cfg.StopLossPct,
@@ -71,15 +65,14 @@ func newObserver(
 
 func (e *observer) Start() error {
 	if e.started || e.stopped {
-		return nuuerrors.StateError("observer executor", "start")
+		return fmt.Errorf("observer executor cannot start from current state")
 	}
 	e.started = true
-	e.log.Info(
-		"executor started",
-		"event", "start",
-		"status", "success",
-		"kind", "observer",
-	)
+	e.log.Info(fmt.Sprintf(
+		"executor started cycle=%d executor=%d kind=observer",
+		e.cycleNumber,
+		e.executorNumber,
+	))
 	return nil
 }
 
@@ -104,26 +97,29 @@ func (e *observer) Stop(reason string) error {
 	e.started = false
 	e.terminal = true
 	e.stopped = true
-	e.log.Info(
-		"executor stopped",
-		"event", "stop",
-		"status", "success",
-		"side", e.signal.Side,
-		"signal_ts_ms", e.signal.SignalMS,
-		"available_ts_ms", e.signal.AvailableMS,
-		"signal_price", e.signal.Price,
-		"stop_loss_pct", e.stopLossPct,
-		"start_ts_ms", e.stats.startMS,
-		"end_ts_ms", e.stats.endMS,
-		"duration_ms", clock.Duration(e.stats.startMS, e.stats.endMS),
-		"start_price", e.stats.startPrice,
-		"stop_loss_price", e.stats.stopLossPrice,
-		"exit_price", e.stats.exitPrice,
-		"final_price", e.stats.lastPrice,
-		"ticks_received", e.stats.ticks,
-		"passes", e.stats.passes,
-		"stop_reason", e.stats.reason,
-	)
+	e.log.Info(fmt.Sprintf(
+		"executor stopped cycle=%d executor=%d side=%s signal_ts_ms=%d "+
+			"available_ts_ms=%d signal_price=%f stop_loss_pct=%f start_ts_ms=%d "+
+			"end_ts_ms=%d duration_ms=%d start_price=%f stop_loss_price=%f "+
+			"exit_price=%f final_price=%f ticks_received=%d passes=%d stop_reason=%s",
+		e.cycleNumber,
+		e.executorNumber,
+		e.signal.Side,
+		e.signal.SignalMS,
+		e.signal.AvailableMS,
+		e.signal.Price,
+		e.stopLossPct,
+		e.stats.startMS,
+		e.stats.endMS,
+		clock.Duration(e.stats.startMS, e.stats.endMS),
+		e.stats.startPrice,
+		e.stats.stopLossPrice,
+		e.stats.exitPrice,
+		e.stats.lastPrice,
+		e.stats.ticks,
+		e.stats.passes,
+		e.stats.reason,
+	))
 	return nil
 }
 

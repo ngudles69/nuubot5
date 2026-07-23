@@ -2,11 +2,10 @@ package signaler
 
 import (
 	"fmt"
-	"log/slog"
 
 	"nuubot/internal/config"
 	"nuubot/internal/ohlcv"
-	nuuerrors "nuubot/internal/toolkit/errors"
+	"nuubot/internal/toolkit/logging"
 )
 
 // Side identifies the signal direction.
@@ -44,7 +43,7 @@ type Series struct {
 
 // Signaler calculates and releases ordered signals.
 type Signaler struct {
-	log        *slog.Logger
+	log        *logging.Logger
 	calculator calculator
 	rows       []Series
 	signals    []Signal
@@ -57,7 +56,7 @@ type Signaler struct {
 // Section 1 - Program Flow
 
 // Create constructs the configured Signaler.
-func Create(logger *slog.Logger, cfg config.Signaler) (*Signaler, error) {
+func Create(log *logging.Logger, cfg config.Signaler) (*Signaler, error) {
 	var implementation calculator
 	var err error
 	switch cfg.Kind {
@@ -71,20 +70,14 @@ func Create(logger *slog.Logger, cfg config.Signaler) (*Signaler, error) {
 	if err != nil {
 		return nil, err
 	}
-	log := logger.With("component", "signaler")
-	log.Info(
-		"signaler initialized",
-		"event", "init",
-		"status", "success",
-		"kind", cfg.Kind,
-	)
+	log.Info(fmt.Sprintf("signaler initialized kind=%s", cfg.Kind))
 	return &Signaler{log: log, calculator: implementation}, nil
 }
 
 // Prepare calculates and validates all signals.
 func (s *Signaler) Prepare(loaded []Series) error {
 	if s.prepared || s.started || s.stopped {
-		return nuuerrors.StateError("signaler", "prepare")
+		return fmt.Errorf("signaler cannot prepare from current state")
 	}
 	signals, err := s.calculator.Calculate(loaded)
 	if err != nil {
@@ -103,24 +96,22 @@ func (s *Signaler) Prepare(loaded []Series) error {
 	s.rows = loaded
 	s.signals = signals
 	s.prepared = true
-	s.log.Info(
-		"signaler prepared",
-		"event", "prepare",
-		"status", "success",
-		"timeframes", len(loaded),
-		"rows_loaded", rowCount,
-		"signals_calculated", len(signals),
-	)
+	s.log.Info(fmt.Sprintf(
+		"signaler prepared timeframes=%d rows_loaded=%d signals_calculated=%d",
+		len(loaded),
+		rowCount,
+		len(signals),
+	))
 	return nil
 }
 
 // Start starts signal release.
 func (s *Signaler) Start() error {
 	if !s.prepared || s.started || s.stopped {
-		return nuuerrors.StateError("signaler", "start")
+		return fmt.Errorf("signaler cannot start from current state")
 	}
 	s.started = true
-	s.log.Info("signaler started", "event", "start", "status", "success")
+	s.log.Info("signaler started")
 	return nil
 }
 
@@ -131,15 +122,14 @@ func (s *Signaler) Stop() {
 	}
 	s.started = false
 	s.stopped = true
-	s.log.Info(
-		"signaler stopped",
-		"event", "stop",
-		"status", "success",
-		"timeframes", len(s.rows),
-		"signals_calculated", len(s.signals),
-		"signals_released", s.next,
-		"signals_pending", len(s.signals)-s.next,
-	)
+	s.log.Info(fmt.Sprintf(
+		"signaler stopped timeframes=%d signals_calculated=%d "+
+			"signals_released=%d signals_pending=%d",
+		len(s.rows),
+		len(s.signals),
+		s.next,
+		len(s.signals)-s.next,
+	))
 }
 
 // Section 2 - Domain Helpers
@@ -152,7 +142,7 @@ func (s *Signaler) Requirements() []Requirement {
 // Next releases the next available signal.
 func (s *Signaler) Next(nowMS uint64) (Signal, bool, error) {
 	if !s.started || s.stopped {
-		return Signal{}, false, nuuerrors.StateError("signaler", "release signal")
+		return Signal{}, false, fmt.Errorf("signaler cannot release signal from current state")
 	}
 	if s.next == len(s.signals) || s.signals[s.next].AvailableMS >= nowMS {
 		return Signal{}, false, nil

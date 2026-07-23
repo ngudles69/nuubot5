@@ -2,16 +2,16 @@ package replay
 
 import (
 	"fmt"
-	"log/slog"
 	"time"
 
 	"nuubot/internal/market"
 	"nuubot/internal/ohlcv"
+	"nuubot/internal/toolkit/logging"
 )
 
 // Reader streams validated BBO values through OHLCV.
 type Reader struct {
-	log         *slog.Logger
+	log         *logging.Logger
 	rows        *ohlcv.Reader
 	ticksLoaded uint64
 	firstMS     uint64
@@ -23,18 +23,12 @@ type Reader struct {
 // Section 1 - Program Flow
 
 // NewReader opens one streaming six-column OHLCV reader.
-func NewReader(logger *slog.Logger, source string, start, end time.Time) (*Reader, error) {
+func NewReader(log *logging.Logger, source string, start, end time.Time) (*Reader, error) {
 	var rows, err = ohlcv.Open(source, ohlcv.Second1, start, end)
 	if err != nil {
 		return nil, err
 	}
-	var log = logger.With("component", "tickreader")
-	log.Info(
-		"tick reader initialized",
-		"event", "init",
-		"status", "success",
-		"interval", ohlcv.Second1,
-	)
+	log.Info(fmt.Sprintf("tick reader initialized interval=%s", ohlcv.Second1))
 	return &Reader{log: log, rows: rows}, nil
 }
 
@@ -69,18 +63,12 @@ func (r *Reader) Stop() error {
 	}
 	r.stopped = true
 	var err = r.rows.Close()
-	var status = "success"
-	if r.failed || err != nil {
-		status = "failed"
-	}
-	r.log.Info(
-		"tick reader stopped",
-		"event", "stop",
-		"status", status,
-		"ticks", r.ticksLoaded,
-		"first_ts_ms", r.firstMS,
-		"last_ts_ms", r.lastMS,
-	)
+	r.log.Info(fmt.Sprintf(
+		"tick reader stopped ticks=%d first_ts_ms=%d last_ts_ms=%d",
+		r.ticksLoaded,
+		r.firstMS,
+		r.lastMS,
+	))
 	return err
 }
 

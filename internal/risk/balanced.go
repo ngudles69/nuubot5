@@ -1,9 +1,13 @@
 package risk
 
-import "log/slog"
+import (
+	"fmt"
+
+	"nuubot/internal/toolkit/logging"
+)
 
 type balanced struct {
-	log         *slog.Logger
+	log         *logging.Logger
 	number      int
 	assessments uint64
 	stopped     bool
@@ -11,14 +15,8 @@ type balanced struct {
 
 // Section 1 - Program Flow
 
-func newBalanced(logger *slog.Logger, number int) *balanced {
-	log := logger.With("component", "risk", "risk", number)
-	log.Info(
-		"risk initialized",
-		"event", "init",
-		"status", "success",
-		"kind", "balanced",
-	)
+func newBalanced(log *logging.Logger, number int) *balanced {
+	log.Info(fmt.Sprintf("risk initialized risk=%d kind=balanced", number))
 	return &balanced{log: log, number: number}
 }
 
@@ -32,13 +30,11 @@ func (r *balanced) Stop() {
 		return
 	}
 	r.stopped = true
-	r.log.Info(
-		"risk stopped",
-		"event", "stop",
-		"status", "success",
-		"assessments", r.assessments,
-		"exits_requested", 0,
-	)
+	r.log.Info(fmt.Sprintf(
+		"risk stopped risk=%d assessments=%d exits_requested=0",
+		r.number,
+		r.assessments,
+	))
 }
 
 // Section 2 - Domain Helpers
