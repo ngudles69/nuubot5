@@ -3,12 +3,12 @@ package replay
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math"
 	"os"
 	"path/filepath"
 	"time"
 
-	"nuubot5/internal/common"
 	"nuubot5/internal/market"
 
 	"github.com/apache/arrow-go/v18/arrow/array"
@@ -19,8 +19,9 @@ import (
 
 const batchSize = 65_536
 
+// Reader streams validated BBO values from Parquet files.
 type Reader struct {
-	log         *common.Logger
+	log         *slog.Logger
 	files       []string
 	nextFile    int
 	file        *file.Reader
@@ -40,22 +41,33 @@ type Reader struct {
 	stopped     bool
 }
 
-func NewReader(logger *common.Logger, ticksPath string, start, end time.Time) (*Reader, error) {
+// Program Flow
+
+// NewReader opens one bounded replay reader.
+func NewReader(logger *slog.Logger, ticksPath string, start, end time.Time) (*Reader, error) {
 	files := monthFiles(ticksPath, start, end)
 	for _, path := range files {
 		if info, err := os.Stat(path); err != nil || !info.Mode().IsRegular() {
 			return nil, fmt.Errorf("replay parquet not found: %s", path)
 		}
 	}
-	logger.Info("tickreader", "init files=%d batch_size=%d", len(files), batchSize)
+	log := logger.With("component", "tickreader")
+	log.Info(
+		"tick reader initialized",
+		"event", "init",
+		"status", "success",
+		"files", len(files),
+		"batch_size", batchSize,
+	)
 	return &Reader{
-		log:     logger,
+		log:     log,
 		files:   files,
 		startUS: uint64(start.UnixMicro()),
 		endUS:   uint64(end.UnixMicro()),
 	}, nil
 }
 
+// Next returns the next validated BBO.
 func (r *Reader) Next() (market.BBO, bool, error) {
 	for {
 		if r.nextRow >= r.rows {
@@ -94,6 +106,7 @@ func (r *Reader) Next() (market.BBO, bool, error) {
 	}
 }
 
+// Stop closes the reader and reports final statistics.
 func (r *Reader) Stop() error {
 	if r.stopped {
 		return nil
@@ -105,11 +118,19 @@ func (r *Reader) Stop() error {
 		status = "failed"
 	}
 	r.log.Info(
-		"tickreader", "stop status=%s files=%d/%d ticks=%d first_ts_ms=%d last_ts_ms=%d",
-		status, r.filesLoaded, len(r.files), r.ticksLoaded, r.firstMS, r.lastMS,
+		"tick reader stopped",
+		"event", "stop",
+		"status", status,
+		"files_loaded", r.filesLoaded,
+		"files_expected", len(r.files),
+		"ticks", r.ticksLoaded,
+		"first_ts_ms", r.firstMS,
+		"last_ts_ms", r.lastMS,
 	)
 	return err
 }
+
+// Domain Helpers
 
 func (r *Reader) readBatch() error {
 	for {
@@ -128,18 +149,18 @@ func (r *Reader) readBatch() error {
 			timeFields := record.Schema().FieldIndices("close_time_us")
 			priceFields := record.Schema().FieldIndices("close")
 			if len(timeFields) != 1 || len(priceFields) != 1 {
-				return fmt.Errorf("Parquet requires unique close_time_us and close columns")
+				return fmt.Errorf("parquet requires unique close_time_us and close columns")
 			}
 			times, ok := record.Column(timeFields[0]).(*array.Int64)
 			if !ok {
-				return fmt.Errorf("close_time_us must be Int64")
+				return fmt.Errorf("close_time_us must be int64")
 			}
 			prices, ok := record.Column(priceFields[0]).(*array.Float64)
 			if !ok {
-				return fmt.Errorf("close must be Float64")
+				return fmt.Errorf("close must be float64")
 			}
 			if times.NullN() != 0 || prices.NullN() != 0 || times.Len() != prices.Len() {
-				return fmt.Errorf("Parquet BBO contains null or unequal columns")
+				return fmt.Errorf("parquet bbo contains null or unequal columns")
 			}
 			r.times = times
 			r.prices = prices
@@ -148,7 +169,7 @@ func (r *Reader) readBatch() error {
 			return nil
 		}
 		if err := r.records.Err(); err != nil {
-			return fmt.Errorf("read Parquet record batch: %w", err)
+			return fmt.Errorf("read parquet record batch: %v", err)
 		}
 		if err := r.closeFile(); err != nil {
 			return err
@@ -164,14 +185,14 @@ func (r *Reader) openFile() (bool, error) {
 	r.nextFile++
 	parquetFile, err := file.OpenParquetFile(path, false)
 	if err != nil {
-		return false, fmt.Errorf("open Parquet %s: %w", path, err)
+		return false, fmt.Errorf("open parquet %s: %v", path, err)
 	}
 	schema := parquetFile.MetaData().Schema
 	timeIndex := schema.ColumnIndexByName("close_time_us")
 	priceIndex := schema.ColumnIndexByName("close")
 	if timeIndex < 0 || priceIndex < 0 {
 		parquetFile.Close()
-		return false, fmt.Errorf("Parquet requires close_time_us and close columns")
+		return false, fmt.Errorf("parquet requires close_time_us and close columns")
 	}
 	arrowReader, err := pqarrow.NewFileReader(
 		parquetFile,
@@ -180,7 +201,7 @@ func (r *Reader) openFile() (bool, error) {
 	)
 	if err != nil {
 		parquetFile.Close()
-		return false, fmt.Errorf("create Arrow reader %s: %w", path, err)
+		return false, fmt.Errorf("create arrow reader %s: %v", path, err)
 	}
 	records, err := arrowReader.GetRecordReader(
 		context.Background(),
@@ -189,7 +210,7 @@ func (r *Reader) openFile() (bool, error) {
 	)
 	if err != nil {
 		parquetFile.Close()
-		return false, fmt.Errorf("create Parquet record reader %s: %w", path, err)
+		return false, fmt.Errorf("create parquet record reader %s: %v", path, err)
 	}
 	r.file = parquetFile
 	r.records = records
@@ -209,7 +230,10 @@ func (r *Reader) closeFile() error {
 	}
 	err := r.file.Close()
 	r.file = nil
-	return err
+	if err != nil {
+		return fmt.Errorf("close parquet file: %v", err)
+	}
+	return nil
 }
 
 func admitTick(lastMS uint64, hasLast bool, closeUS uint64, price float64) (market.BBO, error) {

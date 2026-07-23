@@ -6,5 +6,6 @@ Every coding task MUST read:
 2. [Mandatory Coding Rules](RULES.md)
 3. [Project Abbreviations](../abbreviations.md)
 
-Component behavior remains in `wiki/logic/**`. This directory owns the
-project-wide implementation contract.
+[DESIGN.md](../DESIGN.md) indexes detailed contracts in [`design/**`](../design/).
+
+Legacy process detail remains in [`logic/**`](../logic/) until separately migrated.

@@ -2,12 +2,12 @@ package clock
 
 import (
 	"fmt"
-
-	"nuubot5/internal/common"
+	"log/slog"
 )
 
+// TickClock converts replay timestamps into timed passes.
 type TickClock struct {
-	log      *common.Logger
+	log      *slog.Logger
 	interval uint64
 	nextMS   uint64
 	started  bool
@@ -16,16 +16,26 @@ type TickClock struct {
 	stopped  bool
 }
 
-func New(logger *common.Logger, intervalMS uint64) *TickClock {
-	logger.Info("tickclock", "init interval_ms=%d", intervalMS)
-	return &TickClock{log: logger, interval: intervalMS}
+// Program Flow
+
+// New constructs one TickClock.
+func New(logger *slog.Logger, intervalMS uint64) *TickClock {
+	log := logger.With("component", "tickclock")
+	log.Info(
+		"tick clock initialized",
+		"event", "init",
+		"status", "success",
+		"interval_ms", intervalMS,
+	)
+	return &TickClock{log: log, interval: intervalMS}
 }
 
+// Advance accepts one timestamp and reports whether a pass is due.
 func (c *TickClock) Advance(nowMS uint64) (bool, error) {
 	c.ticks++
 	if !c.started {
 		if nowMS > ^uint64(0)-c.interval {
-			return false, fmt.Errorf("TickClock overflow")
+			return false, fmt.Errorf("tick clock overflow")
 		}
 		c.started = true
 		c.nextMS = nowMS + c.interval
@@ -37,17 +47,24 @@ func (c *TickClock) Advance(nowMS uint64) (bool, error) {
 	}
 	intervals := (nowMS-c.nextMS)/c.interval + 1
 	if intervals > (^uint64(0)-c.nextMS)/c.interval {
-		return false, fmt.Errorf("TickClock overflow")
+		return false, fmt.Errorf("tick clock overflow")
 	}
 	c.nextMS += intervals * c.interval
 	c.passes++
 	return true, nil
 }
 
+// Stop reports final clock statistics once.
 func (c *TickClock) Stop() {
 	if c.stopped {
 		return
 	}
 	c.stopped = true
-	c.log.Info("tickclock", "stop status=success ticks_seen=%d passes_due=%d", c.ticks, c.passes)
+	c.log.Info(
+		"tick clock stopped",
+		"event", "stop",
+		"status", "success",
+		"ticks_seen", c.ticks,
+		"passes_due", c.passes,
+	)
 }

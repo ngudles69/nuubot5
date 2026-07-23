@@ -1,6 +1,8 @@
 package runtime
 
 import (
+	"fmt"
+	"log/slog"
 	"time"
 
 	"nuubot5/internal/bars"
@@ -23,8 +25,10 @@ type stats struct {
 	endDateExits   uint64
 }
 
+// Runtime owns synchronous trading decisions and its direct children.
 type Runtime struct {
-	log        *common.Logger
+	logger     *slog.Logger
+	log        *slog.Logger
 	config     config.Runtime
 	signaler   *signaler.Signaler
 	risks      []risk.Risk
@@ -36,16 +40,19 @@ type Runtime struct {
 	stopped    bool
 }
 
-func New(log *common.Logger, cfg config.Runtime, endAt *time.Time) (*Runtime, error) {
-	signals, err := signaler.New(log, cfg.Signaler)
+// Program Flow
+
+// New constructs one Runtime and its configured children.
+func New(logger *slog.Logger, cfg config.Runtime, endAt *time.Time) (*Runtime, error) {
+	signals, err := signaler.New(logger, cfg.Signaler)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create signaler: %w", err)
 	}
 	risks := make([]risk.Risk, 0, len(cfg.Risks))
 	for index, riskConfig := range cfg.Risks {
-		created, err := risk.New(log, index+1, riskConfig)
+		created, err := risk.New(logger, index+1, riskConfig)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("create risk %d: %w", index+1, err)
 		}
 		risks = append(risks, created)
 	}
@@ -53,62 +60,35 @@ func New(log *common.Logger, cfg config.Runtime, endAt *time.Time) (*Runtime, er
 	if endAt != nil {
 		endMS = uint64(endAt.UnixMilli())
 	}
-	log.Info("runtime", "init end_ts_ms=%d", endMS)
-	return &Runtime{log: log, config: cfg, signaler: signals, risks: risks, endMS: endMS}, nil
+	log := logger.With("component", "runtime")
+	log.Info(
+		"runtime initialized",
+		"event", "init",
+		"status", "success",
+		"end_ts_ms", endMS,
+	)
+	return &Runtime{
+		logger: logger, log: log, config: cfg, signaler: signals, risks: risks, endMS: endMS,
+	}, nil
 }
 
-func (r *Runtime) BarsNeeded() []bars.Requirement {
-	return r.signaler.BarsNeeded()
-}
-
-func (r *Runtime) PrepareBars(loaded []bars.Data) error {
-	return r.signaler.Prepare(loaded)
-}
-
+// Start starts Runtime children and admission.
 func (r *Runtime) Start() error {
 	if r.started || r.stopped {
-		return common.StateError("Runtime", "start")
+		return common.StateError("runtime", "start")
 	}
 	if err := r.signaler.Start(); err != nil {
-		return err
+		return fmt.Errorf("start signaler: %w", err)
 	}
 	r.started = true
-	r.log.Info("runtime", "start")
+	r.log.Info("runtime started", "event", "start", "status", "success")
 	return nil
 }
 
-func (r *Runtime) Ingest(bbo market.BBO) error {
-	if !r.started || r.stopped || r.stopReason != "" {
-		return common.StateError("Runtime", "ingest BBO")
-	}
-	for {
-		signal, available, err := r.signaler.Next(bbo.TimestampMS)
-		if err != nil {
-			return err
-		}
-		if !available {
-			break
-		}
-		r.stats.signals++
-		if r.cycle != nil {
-			r.stats.signalsSkipped++
-		} else if err := r.openCycle(signal); err != nil {
-			return err
-		}
-	}
-	if r.cycle != nil {
-		r.cycle.OnBBO(bbo)
-	}
-	r.stats.ticks++
-	if r.endMS != 0 && bbo.TimestampMS >= r.endMS {
-		r.requestStop("end_date")
-	}
-	return nil
-}
-
-func (r *Runtime) MainLoop(nowMS uint64) (bool, error) {
+// Pass executes one timer-driven control pass.
+func (r *Runtime) Pass(nowMS uint64) (bool, error) {
 	if !r.started || r.stopped {
-		return false, common.StateError("Runtime", "run main loop")
+		return false, common.StateError("runtime", "pass")
 	}
 	r.stats.passes++
 
@@ -124,15 +104,15 @@ func (r *Runtime) MainLoop(nowMS uint64) (bool, error) {
 	if r.cycle == nil {
 		return false, nil
 	}
-	completed, err := r.cycle.MainLoop(nowMS)
+	completed, err := r.cycle.Pass(nowMS)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("pass bot cycle: %w", err)
 	}
 	if !completed {
 		return false, nil
 	}
 	if err := r.closeCycle("completed"); err != nil {
-		return false, err
+		return false, fmt.Errorf("close completed bot cycle: %w", err)
 	}
 	if r.stats.cyclesClosed >= r.config.MaxCycles {
 		return true, r.Stop("max_cycles")
@@ -140,6 +120,7 @@ func (r *Runtime) MainLoop(nowMS uint64) (bool, error) {
 	return false, nil
 }
 
+// Stop closes the active BotCycle and stops children.
 func (r *Runtime) Stop(reason string) error {
 	if r.stopped {
 		return nil
@@ -157,22 +138,71 @@ func (r *Runtime) Stop(reason string) error {
 		status = "failed"
 	}
 	r.log.Info(
-		"runtime",
-		"stop status=%s ticks_accepted=%d passes=%d signals_received=%d signals_skipped=%d cycles_started=%d cycles_closed=%d stop_loss_exits=%d end_date_exits=%d stop_reason=%s",
-		status, r.stats.ticks, r.stats.passes, r.stats.signals, r.stats.signalsSkipped,
-		r.stats.cyclesStarted, r.stats.cyclesClosed, r.stats.stopLossExits,
-		r.stats.endDateExits, r.stopReason,
+		"runtime stopped",
+		"event", "stop",
+		"status", status,
+		"ticks_accepted", r.stats.ticks,
+		"passes", r.stats.passes,
+		"signals_received", r.stats.signals,
+		"signals_skipped", r.stats.signalsSkipped,
+		"cycles_started", r.stats.cyclesStarted,
+		"cycles_closed", r.stats.cyclesClosed,
+		"stop_loss_exits", r.stats.stopLossExits,
+		"end_date_exits", r.stats.endDateExits,
+		"stop_reason", r.stopReason,
 	)
 	return firstErr
 }
 
+// Domain Helpers
+
+// BarsNeeded returns Signaler bar requirements.
+func (r *Runtime) BarsNeeded() []bars.Requirement {
+	return r.signaler.BarsNeeded()
+}
+
+// PrepareBars prepares the Signaler with validated bars.
+func (r *Runtime) PrepareBars(loaded []bars.Data) error {
+	return r.signaler.Prepare(loaded)
+}
+
+// Ingest accepts one validated BBO.
+func (r *Runtime) Ingest(bbo market.BBO) error {
+	if !r.started || r.stopped || r.stopReason != "" {
+		return common.StateError("runtime", "ingest bbo")
+	}
+	for {
+		signal, available, err := r.signaler.Next(bbo.TimestampMS)
+		if err != nil {
+			return fmt.Errorf("release signal: %w", err)
+		}
+		if !available {
+			break
+		}
+		r.stats.signals++
+		if r.cycle != nil {
+			r.stats.signalsSkipped++
+		} else if err := r.openCycle(signal); err != nil {
+			return fmt.Errorf("open bot cycle: %w", err)
+		}
+	}
+	if r.cycle != nil {
+		r.cycle.OnBBO(bbo)
+	}
+	r.stats.ticks++
+	if r.endMS != 0 && bbo.TimestampMS >= r.endMS {
+		r.requestStop("end_date")
+	}
+	return nil
+}
+
 func (r *Runtime) openCycle(signal signaler.Signal) error {
-	cycle, err := botcycle.New(r.log, int(r.stats.cyclesStarted+1), signal, r.config.Executors)
+	cycle, err := botcycle.New(r.logger, int(r.stats.cyclesStarted+1), signal, r.config.Executors)
 	if err != nil {
 		return err
 	}
 	if err := cycle.Start(); err != nil {
-		return err
+		return fmt.Errorf("start bot cycle: %w", err)
 	}
 	r.cycle = cycle
 	r.stats.cyclesStarted++
@@ -187,7 +217,7 @@ func (r *Runtime) closeCycle(reason string) error {
 	r.cycle = nil
 	exitReason, err := cycle.Stop(reason)
 	if err != nil {
-		return err
+		return fmt.Errorf("stop bot cycle: %w", err)
 	}
 	r.stats.cyclesClosed++
 	switch exitReason {

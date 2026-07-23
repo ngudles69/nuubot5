@@ -336,20 +336,8 @@ Nuubot4 is reference material only.
 
 Nuubot5 owns its implementation and proof.
 
-## 11. Current Source Drift
+## 11. Current Source State
 
-Current source predates this contract.
+The implemented BtRunner path follows these rules.
 
-Known drift:
-
-- `internal/common.Logger` and formatted logging;
-- `MainLoop` in Runtime, BotCycle, and Executor;
-- missing section markers and lifecycle ordering;
-- missing exported Go doc comments;
-- test layout and markers;
-- uppercase error strings; and
-- BtRunner verification before final `Stop`.
-
-Drift is migration work, not precedent.
-
-Source migration requires separate confirmation.
+New and changed source MUST preserve this contract.

@@ -25,6 +25,9 @@ type storedBot struct {
 	} `json:"date_range"`
 }
 
+// Program Flow
+
+// LoadBot loads one validated Bot specification.
 func LoadBot(path string, sweepID, botID uint64) (BotSpec, error) {
 	var bot BotSpec
 	dsn := "file:" + filepath.ToSlash(path) + "?mode=ro&immutable=1"
@@ -41,34 +44,34 @@ func LoadBot(path string, sweepID, botID uint64) (BotSpec, error) {
 		botID,
 	).Scan(&text)
 	if err != nil {
-		return bot, fmt.Errorf("load Bot sweep_id=%d bot_id=%d: %w", sweepID, botID, err)
+		return bot, fmt.Errorf("load bot sweep_id=%d bot_id=%d: %w", sweepID, botID, err)
 	}
 
 	var stored storedBot
 	if err := json.Unmarshal([]byte(text), &stored); err != nil {
-		return bot, fmt.Errorf("parse Bot config: %w", err)
+		return bot, fmt.Errorf("parse bot config: %w", err)
 	}
 	replayStart, err := time.Parse(time.DateOnly, stored.DateRange.Start)
 	if err != nil {
-		return bot, fmt.Errorf("invalid Bot replay start date: %w", err)
+		return bot, fmt.Errorf("invalid bot replay start date: %w", err)
 	}
 	replayEnd, err := time.Parse(time.DateOnly, stored.DateRange.End)
 	if err != nil {
-		return bot, fmt.Errorf("invalid Bot replay end date: %w", err)
+		return bot, fmt.Errorf("invalid bot replay end date: %w", err)
 	}
 	startAt, err := parseOptionalTime(stored.General.Start)
 	if err != nil {
-		return bot, fmt.Errorf("invalid Bot start: %w", err)
+		return bot, fmt.Errorf("invalid bot start: %w", err)
 	}
 	endAt, err := parseOptionalTime(stored.General.End)
 	if err != nil {
-		return bot, fmt.Errorf("invalid Bot end: %w", err)
+		return bot, fmt.Errorf("invalid bot end: %w", err)
 	}
 	if stored.General.Symbol == "" || stored.Data.Ticks == "" || !replayStart.Before(replayEnd) {
-		return bot, fmt.Errorf("invalid Bot symbol, tick path, or date range")
+		return bot, fmt.Errorf("invalid bot symbol, tick path, or date range")
 	}
 	if startAt != nil && endAt != nil && !startAt.Before(*endAt) {
-		return bot, fmt.Errorf("Bot start must precede end")
+		return bot, fmt.Errorf("bot start must precede end")
 	}
 	return BotSpec{
 		Symbol:      stored.General.Symbol,
@@ -79,6 +82,8 @@ func LoadBot(path string, sweepID, botID uint64) (BotSpec, error) {
 		EndAt:       endAt,
 	}, nil
 }
+
+// Domain Helpers
 
 func parseOptionalTime(value string) (*time.Time, error) {
 	if value == "" {
@@ -91,5 +96,5 @@ func parseOptionalTime(value string) (*time.Time, error) {
 			return &parsed, nil
 		}
 	}
-	return nil, fmt.Errorf("expected RFC3339 timestamp or YYYY-MM-DD")
+	return nil, fmt.Errorf("expected rfc3339 timestamp or yyyy-mm-dd")
 }

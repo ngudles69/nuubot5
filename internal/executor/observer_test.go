@@ -4,15 +4,17 @@ import (
 	"io"
 	"testing"
 
-	"nuubot5/internal/common"
 	"nuubot5/internal/config"
+	"nuubot5/internal/logging"
 	"nuubot5/internal/market"
 	"nuubot5/internal/signaler"
 )
 
+// Program Flow
+
 func TestObserverRecordsStopLoss(t *testing.T) {
 	executor, err := newObserver(
-		common.NewLogger(io.Discard), 1, 1,
+		logging.New(io.Discard), 1, 1,
 		signaler.Signal{SignalMS: 1_000, AvailableMS: 2_000, Side: signaler.Long, Price: 100},
 		config.Executor{Kind: "observer", StopLossPct: 0.01},
 	)

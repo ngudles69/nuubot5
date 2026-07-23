@@ -2,31 +2,44 @@ package setup
 
 import (
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"strings"
 
-	"nuubot5/internal/common"
 	"nuubot5/internal/config"
 	"nuubot5/internal/datastore"
 )
 
+// Context contains validated setup values.
 type Context struct {
 	Config config.Config
 	Bot    datastore.BotSpec
 }
 
-func Init(log *common.Logger, root string, cfg config.Config, sweepID, botID uint64) (Context, error) {
+// Program Flow
+
+// Init loads and validates one bot setup.
+func Init(logger *slog.Logger, root string, cfg config.Config, sweepID, botID uint64) (Context, error) {
 	bot, err := datastore.LoadBot(config.Rooted(root, cfg.Paths.SweepDatabase), sweepID, botID)
 	if err != nil {
-		return Context{}, err
+		return Context{}, fmt.Errorf("load bot: %w", err)
 	}
 	bot.TicksPath, err = within(config.Rooted(root, cfg.Paths.SharedData), bot.TicksPath)
 	if err != nil {
-		return Context{}, err
+		return Context{}, fmt.Errorf("validate ticks path: %w", err)
 	}
-	log.Info("setup", "sweep_id=%d bot_id=%d symbol=%s", sweepID, botID, bot.Symbol)
+	logger.With("component", "setup").Info(
+		"setup initialized",
+		"event", "init",
+		"status", "success",
+		"sweep_id", sweepID,
+		"bot_id", botID,
+		"symbol", bot.Symbol,
+	)
 	return Context{Config: cfg, Bot: bot}, nil
 }
+
+// Domain Helpers
 
 func within(root, path string) (string, error) {
 	root, err := filepath.EvalSymlinks(root)

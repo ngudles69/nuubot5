@@ -1,6 +1,9 @@
 package botcycle
 
 import (
+	"fmt"
+	"log/slog"
+
 	"nuubot5/internal/common"
 	"nuubot5/internal/config"
 	"nuubot5/internal/executor"
@@ -8,8 +11,9 @@ import (
 	"nuubot5/internal/signaler"
 )
 
+// Control owns one active BotCycle and its Executors.
 type Control struct {
-	log       *common.Logger
+	log       *slog.Logger
 	number    int
 	signal    signaler.Signal
 	executors []executor.Executor
@@ -22,55 +26,55 @@ type Control struct {
 	stopped   bool
 }
 
-func New(log *common.Logger, number int, signal signaler.Signal, configs []config.Executor) (*Control, error) {
+// Program Flow
+
+// New constructs one BotCycle.
+func New(logger *slog.Logger, number int, signal signaler.Signal, configs []config.Executor) (*Control, error) {
 	executors := make([]executor.Executor, 0, len(configs))
 	for index, cfg := range configs {
-		created, err := executor.New(log, number, index+1, signal, cfg)
+		created, err := executor.New(logger, number, index+1, signal, cfg)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("create executor %d: %w", index+1, err)
 		}
 		executors = append(executors, created)
 	}
-	log.Info("botcycle", "init cycle=%d side=%s signal_ts_ms=%d available_ts_ms=%d", number, signal.Side, signal.SignalMS, signal.AvailableMS)
+	log := logger.With("component", "botcycle", "cycle", number)
+	log.Info(
+		"bot cycle initialized",
+		"event", "init",
+		"status", "success",
+		"side", signal.Side,
+		"signal_ts_ms", signal.SignalMS,
+		"available_ts_ms", signal.AvailableMS,
+	)
 	return &Control{log: log, number: number, signal: signal, executors: executors}, nil
 }
 
+// Start starts every configured Executor.
 func (c *Control) Start() error {
 	if c.running || c.stopped {
-		return common.StateError("BotCycle", "start")
+		return common.StateError("bot cycle", "start")
 	}
 	for _, executor := range c.executors {
 		if err := executor.Start(); err != nil {
 			_, _ = c.Stop("start_error")
-			return err
+			return fmt.Errorf("start executor: %w", err)
 		}
 	}
 	c.running = true
-	c.log.Info("botcycle", "start cycle=%d", c.number)
+	c.log.Info("bot cycle started", "event", "start", "status", "success")
 	return nil
 }
 
-func (c *Control) OnBBO(bbo market.BBO) {
-	if c.startMS == 0 {
-		c.startMS = bbo.TimestampMS
-	}
-	c.endMS = bbo.TimestampMS
-	c.ticks++
-	for _, executor := range c.executors {
-		if !executor.Terminal() {
-			executor.OnBBO(bbo)
-		}
-	}
-}
-
-func (c *Control) MainLoop(nowMS uint64) (bool, error) {
+// Pass runs one timer-driven Executor pass.
+func (c *Control) Pass(nowMS uint64) (bool, error) {
 	if !c.running {
-		return false, common.StateError("BotCycle", "run main loop")
+		return false, common.StateError("bot cycle", "pass")
 	}
 	c.passes++
 	for _, executor := range c.executors {
 		if !executor.Terminal() {
-			executor.MainLoop(nowMS)
+			executor.Pass(nowMS)
 		}
 	}
 	c.completed = true
@@ -83,6 +87,7 @@ func (c *Control) MainLoop(nowMS uint64) (bool, error) {
 	return c.completed, nil
 }
 
+// Stop stops Executors in reverse ownership order.
 func (c *Control) Stop(reason string) (string, error) {
 	if c.stopped {
 		return c.exitReason(reason), nil
@@ -91,7 +96,7 @@ func (c *Control) Stop(reason string) (string, error) {
 	var firstErr error
 	for index := len(c.executors) - 1; index >= 0; index-- {
 		if err := c.executors[index].Stop(reason); err != nil && firstErr == nil {
-			firstErr = err
+			firstErr = fmt.Errorf("stop executor %d: %w", index+1, err)
 		}
 	}
 	c.stopped = true
@@ -101,12 +106,35 @@ func (c *Control) Stop(reason string) (string, error) {
 		status = "failed"
 	}
 	c.log.Info(
-		"botcycle",
-		"stop status=%s cycle=%d side=%s start_ts_ms=%d end_ts_ms=%d duration_ms=%d executors=%d ticks_received=%d passes=%d stop_reason=%s",
-		status, c.number, c.signal.Side, c.startMS, c.endMS, common.Duration(c.startMS, c.endMS),
-		len(c.executors), c.ticks, c.passes, exitReason,
+		"bot cycle stopped",
+		"event", "stop",
+		"status", status,
+		"side", c.signal.Side,
+		"start_ts_ms", c.startMS,
+		"end_ts_ms", c.endMS,
+		"duration_ms", common.Duration(c.startMS, c.endMS),
+		"executors", len(c.executors),
+		"ticks_received", c.ticks,
+		"passes", c.passes,
+		"stop_reason", exitReason,
 	)
 	return exitReason, firstErr
+}
+
+// Domain Helpers
+
+// OnBBO distributes one BBO to active Executors.
+func (c *Control) OnBBO(bbo market.BBO) {
+	if c.startMS == 0 {
+		c.startMS = bbo.TimestampMS
+	}
+	c.endMS = bbo.TimestampMS
+	c.ticks++
+	for _, executor := range c.executors {
+		if !executor.Terminal() {
+			executor.OnBBO(bbo)
+		}
+	}
 }
 
 func (c *Control) exitReason(fallback string) string {

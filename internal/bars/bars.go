@@ -3,11 +3,10 @@ package bars
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math"
 	"path/filepath"
 	"time"
-
-	"nuubot5/internal/common"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
@@ -16,18 +15,23 @@ import (
 	"github.com/apache/arrow-go/v18/parquet/pqarrow"
 )
 
+// Timeframe identifies a supported bar interval.
 type Timeframe string
 
 const (
+	// Hour1 identifies one-hour bars.
 	Hour1 Timeframe = "1h"
+	// Hour4 identifies four-hour bars.
 	Hour4 Timeframe = "4h"
 )
 
+// Requirement describes one required bar series.
 type Requirement struct {
 	Timeframe Timeframe
 	PriorBars int
 }
 
+// Data contains one validated OHLCV series.
 type Data struct {
 	Timeframe Timeframe
 	PriorBars int
@@ -40,22 +44,17 @@ type Data struct {
 	Volume    []float64
 }
 
-func ParseTimeframe(value string) (Timeframe, error) {
-	switch Timeframe(value) {
-	case Hour1, Hour4:
-		return Timeframe(value), nil
-	default:
-		return "", fmt.Errorf("unknown timeframe: %s", value)
-	}
-}
+// Program Flow
 
+// Load returns all required validated bars.
 func Load(
-	log *common.Logger,
+	logger *slog.Logger,
 	ticksPath string,
 	start time.Time,
 	end time.Time,
 	requirements []Requirement,
 ) ([]Data, error) {
+	log := logger.With("component", "bars")
 	marketPath := filepath.Dir(ticksPath)
 	loaded := make([]Data, 0, len(requirements))
 	for _, requirement := range requirements {
@@ -66,12 +65,31 @@ func Load(
 			requirement,
 		)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("load %s bars: %w", requirement.Timeframe, err)
 		}
-		log.Info("bars", "timeframe=%s rows=%d prior_bars=%d", data.Timeframe, len(data.Close), data.PriorBars)
+		log.Info(
+			"bars loaded",
+			"event", "load",
+			"status", "success",
+			"timeframe", data.Timeframe,
+			"rows", len(data.Close),
+			"prior_bars", data.PriorBars,
+		)
 		loaded = append(loaded, data)
 	}
 	return loaded, nil
+}
+
+// Domain Helpers
+
+// ParseTimeframe returns a supported Timeframe.
+func ParseTimeframe(value string) (Timeframe, error) {
+	switch Timeframe(value) {
+	case Hour1, Hour4:
+		return Timeframe(value), nil
+	default:
+		return "", fmt.Errorf("unknown timeframe: %s", value)
+	}
 }
 
 func loadTimeframe(path string, start, end time.Time, requirement Requirement) (Data, error) {
@@ -103,7 +121,7 @@ func loadTimeframe(path string, start, end time.Time, requirement Requirement) (
 func readFile(path string, start, end time.Time, duration time.Duration, data *Data) error {
 	parquetFile, err := file.OpenParquetFile(path, false)
 	if err != nil {
-		return fmt.Errorf("open bars parquet %s: %w", path, err)
+		return fmt.Errorf("open bars parquet %s: %v", path, err)
 	}
 	defer parquetFile.Close()
 
@@ -121,11 +139,11 @@ func readFile(path string, start, end time.Time, duration time.Duration, data *D
 		memory.NewGoAllocator(),
 	)
 	if err != nil {
-		return fmt.Errorf("create bars arrow reader %s: %w", path, err)
+		return fmt.Errorf("create bars arrow reader %s: %v", path, err)
 	}
 	records, err := reader.GetRecordReader(context.Background(), columns, nil)
 	if err != nil {
-		return fmt.Errorf("create bars record reader %s: %w", path, err)
+		return fmt.Errorf("create bars record reader %s: %v", path, err)
 	}
 	defer records.Release()
 
@@ -200,7 +218,7 @@ func readFile(path string, start, end time.Time, duration time.Duration, data *D
 		}
 	}
 	if err := records.Err(); err != nil {
-		return fmt.Errorf("read bars parquet %s: %w", path, err)
+		return fmt.Errorf("read bars parquet %s: %v", path, err)
 	}
 	return nil
 }

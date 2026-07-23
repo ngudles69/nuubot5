@@ -734,24 +734,11 @@ Table tests MUST exist only when cases share identical logic.
 
 Test-only interfaces MUST NOT exist solely for mocking.
 
-## 11. Current Migration State
+## 11. Current Source State
 
-Current source predates this contract.
+The implemented BtRunner path uses this style.
 
-Migration requires a separately confirmed source change.
-
-Known drift:
-
-- `internal/common.Logger` wraps standard `log`;
-- logging uses formatted strings instead of structured fields;
-- Runtime, BotCycle, and Executor use `MainLoop`;
-- required section markers and lifecycle ordering are missing;
-- exported declarations lack required Go doc comments;
-- tests lack required section layout;
-- error strings contain uppercase component names; and
-- BtRunner verifies before its final `Stop`.
-
-These deviations are migration work, not precedent.
+New and changed source MUST preserve this contract.
 
 ## 12. Review Test
 

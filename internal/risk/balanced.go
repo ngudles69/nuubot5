@@ -1,16 +1,24 @@
 package risk
 
-import "nuubot5/internal/common"
+import "log/slog"
 
 type balanced struct {
-	log         *common.Logger
+	log         *slog.Logger
 	number      int
 	assessments uint64
 	stopped     bool
 }
 
-func newBalanced(log *common.Logger, number int) *balanced {
-	log.Info("risk", "init risk=%d kind=balanced", number)
+// Program Flow
+
+func newBalanced(logger *slog.Logger, number int) *balanced {
+	log := logger.With("component", "risk", "risk", number)
+	log.Info(
+		"risk initialized",
+		"event", "init",
+		"status", "success",
+		"kind", "balanced",
+	)
 	return &balanced{log: log, number: number}
 }
 
@@ -24,5 +32,11 @@ func (r *balanced) Stop() {
 		return
 	}
 	r.stopped = true
-	r.log.Info("risk", "stop status=success risk=%d assessments=%d exits_requested=0", r.number, r.assessments)
+	r.log.Info(
+		"risk stopped",
+		"event", "stop",
+		"status", "success",
+		"assessments", r.assessments,
+		"exits_requested", 0,
+	)
 }

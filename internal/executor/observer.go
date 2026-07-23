@@ -2,6 +2,7 @@ package executor
 
 import (
 	"fmt"
+	"log/slog"
 
 	"nuubot5/internal/common"
 	"nuubot5/internal/config"
@@ -23,7 +24,7 @@ type observerStats struct {
 }
 
 type observer struct {
-	log            *common.Logger
+	log            *slog.Logger
 	cycleNumber    int
 	executorNumber int
 	signal         signaler.Signal
@@ -34,8 +35,10 @@ type observer struct {
 	stopped        bool
 }
 
+// Program Flow
+
 func newObserver(
-	log *common.Logger,
+	logger *slog.Logger,
 	cycleNumber int,
 	executorNumber int,
 	signal signaler.Signal,
@@ -44,10 +47,20 @@ func newObserver(
 	if cfg.StopLossPct <= 0 || cfg.StopLossPct >= 1 {
 		return nil, fmt.Errorf("observer stop_loss_pct must be between 0 and 1")
 	}
+	log := logger.With(
+		"component", "executor",
+		"cycle", cycleNumber,
+		"executor", executorNumber,
+	)
 	log.Info(
-		"executor",
-		"init cycle=%d executor=%d side=%s signal_ts_ms=%d available_ts_ms=%d stop_loss_pct=%g",
-		cycleNumber, executorNumber, signal.Side, signal.SignalMS, signal.AvailableMS, cfg.StopLossPct,
+		"executor initialized",
+		"event", "init",
+		"status", "success",
+		"kind", "observer",
+		"side", signal.Side,
+		"signal_ts_ms", signal.SignalMS,
+		"available_ts_ms", signal.AvailableMS,
+		"stop_loss_pct", cfg.StopLossPct,
 	)
 	return &observer{
 		log: log, cycleNumber: cycleNumber, executorNumber: executorNumber,
@@ -57,12 +70,63 @@ func newObserver(
 
 func (e *observer) Start() error {
 	if e.started || e.stopped {
-		return common.StateError("ObserverExecutor", "start")
+		return common.StateError("observer executor", "start")
 	}
 	e.started = true
-	e.log.Info("executor", "start cycle=%d executor=%d kind=observer", e.cycleNumber, e.executorNumber)
+	e.log.Info(
+		"executor started",
+		"event", "start",
+		"status", "success",
+		"kind", "observer",
+	)
 	return nil
 }
+
+func (e *observer) Pass(_ uint64) bool {
+	e.stats.passes++
+	return e.terminal
+}
+
+func (e *observer) Stop(reason string) error {
+	if e.stopped {
+		return nil
+	}
+	if e.stats.reason == "" {
+		e.stats.reason = reason
+	}
+	if e.stats.endMS == 0 {
+		e.stats.endMS = e.stats.lastMS
+		if e.stats.endMS == 0 {
+			e.stats.endMS = e.signal.AvailableMS
+		}
+	}
+	e.started = false
+	e.terminal = true
+	e.stopped = true
+	e.log.Info(
+		"executor stopped",
+		"event", "stop",
+		"status", "success",
+		"side", e.signal.Side,
+		"signal_ts_ms", e.signal.SignalMS,
+		"available_ts_ms", e.signal.AvailableMS,
+		"signal_price", e.signal.Price,
+		"stop_loss_pct", e.stopLossPct,
+		"start_ts_ms", e.stats.startMS,
+		"end_ts_ms", e.stats.endMS,
+		"duration_ms", common.Duration(e.stats.startMS, e.stats.endMS),
+		"start_price", e.stats.startPrice,
+		"stop_loss_price", e.stats.stopLossPrice,
+		"exit_price", e.stats.exitPrice,
+		"final_price", e.stats.lastPrice,
+		"ticks_received", e.stats.ticks,
+		"passes", e.stats.passes,
+		"stop_reason", e.stats.reason,
+	)
+	return nil
+}
+
+// Domain Helpers
 
 func (e *observer) OnBBO(bbo market.BBO) {
 	if !e.started || e.terminal {
@@ -88,38 +152,6 @@ func (e *observer) OnBBO(bbo market.BBO) {
 		e.stats.reason = "stop_loss"
 		e.terminal = true
 	}
-}
-
-func (e *observer) MainLoop(_ uint64) bool {
-	e.stats.passes++
-	return e.terminal
-}
-
-func (e *observer) Stop(reason string) error {
-	if e.stopped {
-		return nil
-	}
-	if e.stats.reason == "" {
-		e.stats.reason = reason
-	}
-	if e.stats.endMS == 0 {
-		e.stats.endMS = e.stats.lastMS
-		if e.stats.endMS == 0 {
-			e.stats.endMS = e.signal.AvailableMS
-		}
-	}
-	e.started = false
-	e.terminal = true
-	e.stopped = true
-	e.log.Info(
-		"executor",
-		"stop status=success cycle=%d executor=%d side=%s signal_ts_ms=%d available_ts_ms=%d signal_price=%g stop_loss_pct=%g start_ts_ms=%d end_ts_ms=%d duration_ms=%d start_price=%g stop_loss_price=%g exit_price=%g final_price=%g ticks_received=%d passes=%d stop_reason=%s",
-		e.cycleNumber, e.executorNumber, e.signal.Side, e.signal.SignalMS, e.signal.AvailableMS,
-		e.signal.Price, e.stopLossPct, e.stats.startMS, e.stats.endMS,
-		common.Duration(e.stats.startMS, e.stats.endMS), e.stats.startPrice, e.stats.stopLossPrice,
-		e.stats.exitPrice, e.stats.lastPrice, e.stats.ticks, e.stats.passes, e.stats.reason,
-	)
-	return nil
 }
 
 func (e *observer) Terminal() bool {

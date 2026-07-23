@@ -1,235 +1,226 @@
 # Nuubot5 Architecture
 
-## Scope
+## Purpose
 
 This page owns system layers, ownership, flows, concurrency, persistence, and deployment boundaries.
 
-[DESIGN.md](DESIGN.md) owns object contracts. `wiki/logic/**` owns detailed algorithms.
+[DESIGN.md](DESIGN.md) owns the high-level object catalog.
 
-## Current Layers
+[`design/**`](design/) owns detailed contracts. [`logic/**`](logic/) remains legacy detail.
 
-```text
-Command
-  cmd/nuubot-btrunner
+## Rules
 
-Orchestration
-  btrunner -> setup -> replay.Reader + TickClock + Runtime
+- Every mutable object has one direct owner.
+- A parent controls only direct children.
+- Values and narrow intent calls cross ownership boundaries.
+- Dependencies point from composition toward domain and adapters.
+- Nuubot4 process remains canonical unless the user approves a change.
 
-Runtime domain
-  Runtime -> Signaler + []Risk + active BotCycle
-  BotCycle -> []Executor
-
-Data and adapters
-  config + datastore + bars + replay
-
-Shared values and mechanics
-  market.BBO + common.Logger + common helpers
-```
-
-Dependencies MUST point downward.
-
-Domain packages MUST NOT import commands, servers, or concrete future infrastructure.
-
-## Current Ownership
+## Implemented BtRunner
 
 ```text
-main
+command
 `-- BtRunner
-    |-- replay.Reader
+    |-- ReplayReader
     |-- TickClock
     `-- Runtime
         |-- Signaler
-        |   `-- calculator
-        |-- []Risk
+        |   `-- MacrossSignaler or RsiSignaler
+        |-- Risks
         `-- active BotCycle
-            `-- []Executor
+            `-- Executors
+                `-- ObserverExecutor
 ```
 
-Each mutable object has one direct owner.
+BtRunner owns historical orchestration and exact replay proof.
 
-A parent creates, starts, calls, and stops only its direct children.
+ReplayReader validates Parquet values before returning BBO values.
 
-Values cross boundaries without exposing child mutable state.
+TickClock converts replay timestamps into Runtime pass decisions.
 
-## Current BtRunner Flow
+Runtime owns signals, risk checks, BotCycle decisions, and graceful shutdown.
+
+BotCycle coordinates Executors. Executor implementations own execution policy.
+
+BalancedRisk is a stub. ObserverExecutor observes BBO values and records simulated exits.
+
+## Canonical BtRunner Flow
 
 ```text
 main
-  parse sweep and bot identities
+  parse identities
   load configuration
-  create process logger
+  create logger
   create BtRunner
   start
   run
   stop
-  return one terminal error
+  return one result
 
-BtRunner.New
+BtRunner setup
   load BotSpec
-  resolve the effective end date
-  create TickClock
-  create replay.Reader
-  create Runtime
+  resolve replay end
+  create reader, clock, and Runtime
   load required bars
   prepare Signaler
   calculate expected proof
 
-BtRunner.Run
+BtRunner run
   read one validated BBO
-  pass BBO to Runtime
+  send BBO to Runtime
   advance TickClock
-  run one Runtime pass when due
-  stop Runtime at the end date
+  call Runtime Pass when due
+  stop at the configured end
   verify exact replay
 ```
 
-[BtRunner Logic](logic/btrunner.md) owns replay and completion details.
+Detailed behavior remains in [BtRunner](design/btrunner.md) and [Replay](design/replay.md).
 
-## Runtime Flow
+## Approved Live Ownership
 
-Runtime receives validated BBO values and releases available signals.
-
-Runtime owns the decision to open or close one active BotCycle.
-
-Runtime runs Risk before BotCycle work during each timed pass.
-
-Runtime owns every graceful stop reason and closes the active BotCycle before its remaining children.
-
-Signaler owns indicator calculation and ordered signal release.
-
-BotCycle coordinates configured Executors. Executor implementations own execution policy.
-
-[Signaler Logic](logic/signaler.md), [Executor Logic](logic/executor.md), and [Risk Logic](logic/risk.md) own detailed behavior.
-
-## Approved Live Architecture
-
-The live architecture is approved design. It is not implemented.
+This architecture is approved but unimplemented.
 
 ```text
-server composition
-  |-- process and datastore resources
-  |-- BotManager
-  |   `-- Runner per active Bot
-  |       |-- WallClock
-  |       |-- BBO feed
-  |       |-- user-event feed
-  |       `-- Runtime
-  |-- SweepManager
-  `-- HTTP application
-      |-- API routes
-      `-- web routes and assets
+Server
+|-- DataEngine
+|-- ProcessStore
+|-- BotManager
+|   `-- Runner
+|       |-- WallClock
+|       |-- subscriptions and local feed state
+|       `-- Runtime
+|           |-- RuntimeStore
+|           |-- Signaler
+|           |-- Risks
+|           `-- active BotCycle
+|               `-- Executors
+|                   `-- Accounts
+|                       |-- Venue
+|                       `-- Ledger
+|                           `-- Trades
+|                               `-- Orders
+|                                   `-- Fills
+|-- SweepManager
+`-- HTTP application
+    |-- API routes
+    `-- web routes and assets
 ```
 
-The server composition function owns shared resources, managers, clock services, and HTTP application assembly.
+Server owns shared process resources and service lifecycles.
 
-API and web packages are thin route modules. They are not required to become classes or stateful service objects.
+BotManager owns active Runner lifecycles. SweepManager owns Sweep coordination.
 
-BotManager owns active Runner lifecycles.
+DataEngine owns shared external data acquisition, validation, connection reuse, and multiplexing.
 
-SweepManager owns Sweep orchestration. It MUST NOT manage Runtime internals.
+Runner owns subscriptions, local feed state, WallClock, and one Runtime.
 
-Runner owns one live Bot input path, its feeds, its clock, and one Runtime.
+DataEngine MUST NOT call Runtime. Runner routes subscribed events through Runtime.
 
-Runtime remains synchronous at decision boundaries.
+Runtime owns RuntimeStore. RuntimeStore persists Runtime and BotCycle state only.
 
-[Live Runner Logic](logic/runner.md) owns the approved event and cadence contract.
+Runtime owns decisions but does not own Accounts.
 
-Current Nuubot3 live wiring is incomplete. Nuubot5 MUST NOT claim copied or proven live behavior.
+BotCycle owns Executors. Each Executor owns its Accounts.
 
-## Approved Account Boundary
+Each Account owns one Venue and one Ledger.
 
-Account integration is approved design but incomplete in the reference and absent from Nuubot5.
+Ledger owns Trades. Each Trade owns Orders. Each Order owns Fills.
+
+Venue owns external or simulated execution truth. Ledger owns local evidence.
+
+Simulator implements Venue behavior and stores venue-shaped truth only.
+
+## Approved Live Flow
+
+### BBO
 
 ```text
-Runtime authoritative active Account list
-`-- Account
-    |-- Ledger
-    |   `-- Trades
-    |       `-- Orders
-    |           `-- Fills
-    `-- Exchange adapter
-        |-- live or testnet adapter
-        `-- Simulator
+Venue feed
+  -> DataEngine
+  -> Runner subscription and local state
+  -> Runtime
+  -> BotCycle
+  -> Executors
 ```
 
-Executors create required Accounts and register the same objects with Runtime.
+BBO events support responsive stop-loss and trailing-stop decisions.
 
-Runtime owns the authoritative active Account list for reconciliation, BBO delivery, close, and stop.
+Runtime evaluates decisions during its configured synchronous pass.
 
-Account owns one Ledger and one selected Exchange adapter.
+### User Events and Reconciliation
 
-Ledger owns local Trade, Order, and Fill evidence.
+```text
+user event
+  -> DataEngine
+  -> Runner
+  -> Runtime
+  -> BotCycle
+  -> Executor
+  -> Account marks its Ledger dirty
 
-Exchange or Simulator owns external execution truth.
+reconciliation cadence
+  -> Runtime
+  -> BotCycle
+  -> Executor
+  -> Account reconciles Venue into Ledger
+  -> AccountSnapshot returns upward
+```
 
-Simulator stores exchange-shaped state. It MUST NOT store domain Order or Fill objects.
+Dirty state clears only after successful reconciliation.
 
-Whether the project names this protocol `Venue` or `Exchange` remains unresolved.
-
-No Nuubot5 implementation may silently settle that naming decision.
+Runtime receives snapshots. It MUST NOT reach into Account, Ledger, Trade, Order, or Fill state.
 
 ## Concurrency
 
 Current BtRunner execution is synchronous.
 
-Live WebSocket readers will run in Runner-owned goroutines.
+Future DataEngine readers may use owned goroutines for external connections.
 
-Each goroutine MUST have one owner, stop condition, context, and error path.
+Every goroutine MUST have one owner, stop condition, context, and error path.
 
-BBO and user-event readers publish typed events or update their explicitly owned feed state.
+Runner serializes external events and clock events into Runtime calls.
 
-Feed goroutines MUST NOT place orders, reconcile Accounts, stop BotCycles, or execute Runtime policy.
+Runtime policy remains synchronous.
 
-BBO updates drive responsive stop checks on the configured fast Runtime cadence.
-
-User events mark Account and Ledger dirty.
-
-The configured reconciliation pass reads authoritative Exchange or Simulator truth and clears dirty state only after success.
-
-This is not an HFT architecture. Clear ownership and bounded polling take priority over unnecessary concurrency.
+This is not an HFT design. Bounded polling and clear ownership take priority.
 
 ## Data Boundaries
 
-Parquet files and database rows are untrusted inputs.
+Parquet files, database rows, and venue messages are untrusted inputs.
 
-Boundary packages validate shape, range, identity, timestamps, and sequence before returning trusted Go values.
+Boundary packages validate shape, identity, timestamps, prices, quantities, and sequence before returning trusted Go values.
 
-BtRunner receives normalized BBO values. Runtime MUST NOT decode Parquet or query Sweep storage.
+Runtime MUST NOT decode Parquet, query Sweep storage, or parse venue messages.
 
 Signaler receives validated bars. Indicator code MUST NOT read files.
 
-External exchange responses will enter through the Account-facing adapter boundary.
+Venue normalizes external outcomes. Account reconciles them into Ledger evidence.
 
-## Persistence
+## Persistence Boundaries
 
-Current backtesting reads Bot configuration from SQLite.
+Current BtRunner reads Bot configuration from SQLite and market data from Parquet.
 
-Current market data comes from read-only Parquet files.
+Approved live persistence separates:
+
+- ProcessStore for process and manager state.
+- RuntimeStore for Runtime, BotCycle, and executor records.
+- Account persistence for Ledger, Trade, Order, and Fill evidence.
+- Simulator persistence for venue-shaped simulated state.
+
+These are logical boundaries, not one database graph.
 
 SQLite remains the backtesting datastore.
 
-PostgreSQL is the approved future datastore for live, simulator, and paper operation.
+PostgreSQL is approved for future live, simulator, and paper operation.
 
-Result persistence remains an unimplemented boundary.
-
-No result store object, schema, or publication contract is approved.
-
-## Logging
-
-Current source uses `common.Logger` and formatted messages.
-
-That implementation predates the coding contract and remains documented drift.
-
-The approved target is standard `log/slog`, configured once at each executable or server boundary.
-
-Logging migration requires a separately confirmed source change.
+Physical tables, keys, migrations, and transaction boundaries require later approval.
 
 ## Deployment
 
-Current execution proof is Windows-only.
+Windows BtRunner execution is proven.
 
 Ubuntu 24 is the intended VPS target.
 
-Pure-Go dependencies and the standard Go toolchain preserve the intended portable build boundary.
+The standard Go toolchain and pure-Go boundary preserve portable builds.
 
 Linux runtime and deployment remain unproven.

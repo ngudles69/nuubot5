@@ -55,15 +55,19 @@ for ((run = 1; run <= runs; run++)); do
     if [[ "$output" =~ replay_completed=true[[:space:]]replay_ms=([0-9]+) ]]; then
         replay_ms="${BASH_REMATCH[1]}"
     fi
-    runtime_line="$(printf '%s\n' "$output" | grep 'runtime: stop status=' | tail -n 1)"
+    runtime_line="$(printf '%s\n' "$output" | grep 'msg="runtime stopped".*component=runtime.*event=stop' | tail -n 1)"
     runtime_ok=0
-    if [[ "$runtime_line" =~ status=success.*signals_received=([0-9]+).*cycles_started=([0-9]+).*cycles_closed=([0-9]+).*stop_loss_exits=([0-9]+).*end_date_exits=([0-9]+).*stop_reason=end_date ]]; then
-        signals="${BASH_REMATCH[1]}"
-        cycles_started="${BASH_REMATCH[2]}"
-        cycles_closed="${BASH_REMATCH[3]}"
-        stop_loss_exits="${BASH_REMATCH[4]}"
-        end_date_exits="${BASH_REMATCH[5]}"
-        if [[ $signals -eq 55 && $cycles_started -eq $cycles_closed && $((stop_loss_exits + end_date_exits)) -eq $cycles_closed ]]; then
+    if [[ "$runtime_line" =~ status=success.*ticks_accepted=([0-9]+).*passes=([0-9]+).*signals_received=([0-9]+).*cycles_started=([0-9]+).*cycles_closed=([0-9]+).*stop_loss_exits=([0-9]+).*end_date_exits=([0-9]+).*stop_reason=end_date ]]; then
+        ticks="${BASH_REMATCH[1]}"
+        passes="${BASH_REMATCH[2]}"
+        signals="${BASH_REMATCH[3]}"
+        cycles_started="${BASH_REMATCH[4]}"
+        cycles_closed="${BASH_REMATCH[5]}"
+        stop_loss_exits="${BASH_REMATCH[6]}"
+        end_date_exits="${BASH_REMATCH[7]}"
+        if [[ $ticks -eq 7948800 && $passes -eq 794880 && $signals -eq 55 &&
+              $cycles_started -eq 18 && $cycles_closed -eq 18 &&
+              $stop_loss_exits -eq 17 && $end_date_exits -eq 1 ]]; then
             runtime_ok=1
         fi
     fi
@@ -80,7 +84,7 @@ for ((run = 1; run <= runs; run++)); do
         exit "$status"
     fi
 
-    printf '%s\n' "$output" | grep -E 'signaler: prepare|runtime: stop|tickreader: stop|btrunner: stop'
+    printf '%s\n' "$output" | grep -E 'msg="(signaler prepared|runtime stopped|tick reader stopped|btrunner stopped)"'
 
     replay_total_ms=$((replay_total_ms + replay_ms))
     if [[ $replay_minimum_ms -eq 0 || $replay_ms -lt $replay_minimum_ms ]]; then
@@ -90,8 +94,8 @@ for ((run = 1; run <= runs; run++)); do
         replay_maximum_ms=$replay_ms
     fi
     ((passed += 1))
-    printf 'run=%d result=PASS exit=0 process_ms=%d replay_ms=%d signals=%d cycles=%d stop_loss=%d end_date=%d\n' \
-        "$run" "$elapsed_ms" "$replay_ms" "$signals" "$cycles_closed" "$stop_loss_exits" "$end_date_exits"
+    printf 'run=%d result=PASS exit=0 process_ms=%d replay_ms=%d ticks=%d passes=%d signals=%d cycles=%d stop_loss=%d end_date=%d\n' \
+        "$run" "$elapsed_ms" "$replay_ms" "$ticks" "$passes" "$signals" "$cycles_closed" "$stop_loss_exits" "$end_date_exits"
 done
 
 printf 'requested=%d attempted=%d passed=%d failed=0 process_total_ms=%d process_average_ms=%d process_min_ms=%d process_max_ms=%d replay_total_ms=%d replay_average_ms=%d replay_min_ms=%d replay_max_ms=%d log=%s\n' \

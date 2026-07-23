@@ -2,19 +2,24 @@ package signaler
 
 import (
 	"fmt"
+	"log/slog"
 
 	"nuubot5/internal/bars"
 	"nuubot5/internal/common"
 	"nuubot5/internal/config"
 )
 
+// Side identifies the signal direction.
 type Side string
 
 const (
-	Long  Side = "long"
+	// Long identifies a long signal.
+	Long Side = "long"
+	// Short identifies a short signal.
 	Short Side = "short"
 )
 
+// Signal describes one ordered trading signal.
 type Signal struct {
 	SignalMS    uint64
 	AvailableMS uint64
@@ -27,8 +32,9 @@ type calculator interface {
 	Calculate([]bars.Data) ([]Signal, error)
 }
 
+// Signaler calculates and releases ordered signals.
 type Signaler struct {
-	log        *common.Logger
+	log        *slog.Logger
 	calculator calculator
 	bars       []bars.Data
 	signals    []Signal
@@ -38,7 +44,10 @@ type Signaler struct {
 	stopped    bool
 }
 
-func New(log *common.Logger, cfg config.Signaler) (*Signaler, error) {
+// Program Flow
+
+// New constructs the configured Signaler.
+func New(logger *slog.Logger, cfg config.Signaler) (*Signaler, error) {
 	var implementation calculator
 	var err error
 	switch cfg.Kind {
@@ -52,21 +61,24 @@ func New(log *common.Logger, cfg config.Signaler) (*Signaler, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Info("signaler", "init kind=%s", cfg.Kind)
+	log := logger.With("component", "signaler")
+	log.Info(
+		"signaler initialized",
+		"event", "init",
+		"status", "success",
+		"kind", cfg.Kind,
+	)
 	return &Signaler{log: log, calculator: implementation}, nil
 }
 
-func (s *Signaler) BarsNeeded() []bars.Requirement {
-	return s.calculator.BarsNeeded()
-}
-
+// Prepare calculates and validates all signals.
 func (s *Signaler) Prepare(loaded []bars.Data) error {
 	if s.prepared || s.started || s.stopped {
-		return common.StateError("Signaler", "prepare")
+		return common.StateError("signaler", "prepare")
 	}
 	signals, err := s.calculator.Calculate(loaded)
 	if err != nil {
-		return err
+		return fmt.Errorf("calculate signals: %w", err)
 	}
 	for index, signal := range signals {
 		if signal.SignalMS >= signal.AvailableMS ||
@@ -81,31 +93,28 @@ func (s *Signaler) Prepare(loaded []bars.Data) error {
 	s.bars = loaded
 	s.signals = signals
 	s.prepared = true
-	s.log.Info("signaler", "prepare timeframes=%d bars_loaded=%d signals_calculated=%d", len(loaded), barCount, len(signals))
+	s.log.Info(
+		"signaler prepared",
+		"event", "prepare",
+		"status", "success",
+		"timeframes", len(loaded),
+		"bars_loaded", barCount,
+		"signals_calculated", len(signals),
+	)
 	return nil
 }
 
+// Start starts signal release.
 func (s *Signaler) Start() error {
 	if !s.prepared || s.started || s.stopped {
-		return common.StateError("Signaler", "start")
+		return common.StateError("signaler", "start")
 	}
 	s.started = true
-	s.log.Info("signaler", "start")
+	s.log.Info("signaler started", "event", "start", "status", "success")
 	return nil
 }
 
-func (s *Signaler) Next(nowMS uint64) (Signal, bool, error) {
-	if !s.started || s.stopped {
-		return Signal{}, false, common.StateError("Signaler", "release signal")
-	}
-	if s.next == len(s.signals) || s.signals[s.next].AvailableMS >= nowMS {
-		return Signal{}, false, nil
-	}
-	signal := s.signals[s.next]
-	s.next++
-	return signal, true, nil
-}
-
+// Stop stops signal release and reports final statistics.
 func (s *Signaler) Stop() {
 	if s.stopped {
 		return
@@ -113,8 +122,32 @@ func (s *Signaler) Stop() {
 	s.started = false
 	s.stopped = true
 	s.log.Info(
-		"signaler",
-		"stop status=success timeframes=%d signals_calculated=%d signals_released=%d signals_pending=%d",
-		len(s.bars), len(s.signals), s.next, len(s.signals)-s.next,
+		"signaler stopped",
+		"event", "stop",
+		"status", "success",
+		"timeframes", len(s.bars),
+		"signals_calculated", len(s.signals),
+		"signals_released", s.next,
+		"signals_pending", len(s.signals)-s.next,
 	)
+}
+
+// Domain Helpers
+
+// BarsNeeded returns the calculator bar requirements.
+func (s *Signaler) BarsNeeded() []bars.Requirement {
+	return s.calculator.BarsNeeded()
+}
+
+// Next releases the next available signal.
+func (s *Signaler) Next(nowMS uint64) (Signal, bool, error) {
+	if !s.started || s.stopped {
+		return Signal{}, false, common.StateError("signaler", "release signal")
+	}
+	if s.next == len(s.signals) || s.signals[s.next].AvailableMS >= nowMS {
+		return Signal{}, false, nil
+	}
+	signal := s.signals[s.next]
+	s.next++
+	return signal, true, nil
 }

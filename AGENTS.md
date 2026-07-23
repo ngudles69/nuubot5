@@ -46,6 +46,21 @@ Before coding:
 - Never commit or push without explicit user authority.
 - Report confirmed facts separately from inference.
 
+## Orchestration Continuity
+
+- The root MUST NEVER stop while authorized `TODO` items remain.
+- The root agent owns continuity, sequencing, delegation, verification, and final reporting. It MUST keep work moving without waiting for the user to manage it.
+- The root MUST maintain visible `DONE`, `TODO`, and `PENDING USER APPROVAL` lists during active work.
+- The root MUST update all three lists when work changes.
+- Empty lists MUST show `None`.
+- The root MUST never require the user to reconstruct or manage task state.
+- The root MUST continuously optimize task order, dependencies, and safe parallelism.
+- After each completion, failure, or user message, the root MUST continue or delegate the next authorized `TODO` immediately.
+- Stopping is permitted only when every `TODO` is `DONE`, genuinely blocked, or moved to `PENDING USER APPROVAL`.
+- The root MUST NOT serialize independent work without a stated reason.
+- `HANDOFF.md` MUST record the active task immediately.
+- `HANDOFF.md` MUST update proof when work completes. It is not only a closeout report.
+
 ## Prose Contract
 
 This contract applies to chat, plans, reports, wiki, handoff, comments, and

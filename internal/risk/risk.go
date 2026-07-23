@@ -2,20 +2,24 @@ package risk
 
 import (
 	"fmt"
+	"log/slog"
 
-	"nuubot5/internal/common"
 	"nuubot5/internal/config"
 )
 
+// Risk defines one Runtime-owned risk policy.
 type Risk interface {
 	Assess() bool
 	Stop()
 }
 
-func New(log *common.Logger, number int, cfg config.Risk) (Risk, error) {
+// Program Flow
+
+// New constructs the configured Risk.
+func New(logger *slog.Logger, number int, cfg config.Risk) (Risk, error) {
 	switch cfg.Kind {
 	case "balanced":
-		return newBalanced(log, number), nil
+		return newBalanced(logger, number), nil
 	default:
 		return nil, fmt.Errorf("unknown risk: %s", cfg.Kind)
 	}
