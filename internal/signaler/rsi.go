@@ -1,8 +1,8 @@
 package signaler
 
 import (
-	"nuubot5/internal/bars"
-	"nuubot5/internal/config"
+	"nuubot/internal/bars"
+	"nuubot/internal/config"
 )
 
 type rsi struct {
@@ -10,6 +10,8 @@ type rsi struct {
 	rsiPeriod    int
 	volumePeriod int
 }
+
+// Section 1 - Program Flow
 
 func newRSI(cfg config.Signaler) (*rsi, error) {
 	timeframe, err := bars.ParseTimeframe(cfg.SignalTimeframe)
@@ -54,6 +56,8 @@ func (r *rsi) Calculate(loaded []bars.Data) ([]Signal, error) {
 	return signals, nil
 }
 
+// Section 2 - Domain Helpers
+
 func relativeStrength(values []float64, period int) []float64 {
 	result := make([]float64, len(values))
 	if len(values) == 0 {
@@ -75,6 +79,8 @@ func relativeStrength(values []float64, period int) []float64 {
 	}
 	return result
 }
+
+// Section 3 - Generic Helpers
 
 func simpleMovingAverage(values []float64, period int) []float64 {
 	result := make([]float64, len(values))

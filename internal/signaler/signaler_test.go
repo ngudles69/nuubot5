@@ -3,9 +3,11 @@ package signaler
 import (
 	"testing"
 
-	"nuubot5/internal/bars"
-	"nuubot5/internal/config"
+	"nuubot/internal/bars"
+	"nuubot/internal/config"
 )
+
+// Section 1 - Program Flow
 
 func TestMacrossUsesOnlyClosedRegimeBars(t *testing.T) {
 	strategy, err := newMacross(config.Signaler{
@@ -53,6 +55,8 @@ func TestRSIRequiresVolumeConfirmation(t *testing.T) {
 	}
 }
 
+// Section 2 - Domain Helpers
+
 func testBars(timeframe bars.Timeframe, closes []float64, ends []uint64) bars.Data {
 	starts := make([]uint64, len(ends))
 	for index, end := range ends {
@@ -64,3 +68,5 @@ func testBars(timeframe bars.Timeframe, closes []float64, ends []uint64) bars.Da
 		Volume: make([]float64, len(closes)),
 	}
 }
+
+// Section 3 - Generic Helpers

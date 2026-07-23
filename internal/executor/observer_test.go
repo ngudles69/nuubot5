@@ -4,13 +4,13 @@ import (
 	"io"
 	"testing"
 
-	"nuubot5/internal/config"
-	"nuubot5/internal/logging"
-	"nuubot5/internal/market"
-	"nuubot5/internal/signaler"
+	"nuubot/internal/config"
+	"nuubot/internal/market"
+	"nuubot/internal/signaler"
+	"nuubot/internal/toolkit/logging"
 )
 
-// Program Flow
+// Section 1 - Program Flow
 
 func TestObserverRecordsStopLoss(t *testing.T) {
 	executor, err := newObserver(
@@ -31,3 +31,7 @@ func TestObserverRecordsStopLoss(t *testing.T) {
 		t.Fatalf("unexpected observer state: %+v", executor.stats)
 	}
 }
+
+// Section 2 - Domain Helpers
+
+// Section 3 - Generic Helpers

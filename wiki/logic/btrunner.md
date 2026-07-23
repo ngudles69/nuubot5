@@ -5,7 +5,7 @@
 - `cmd/nuubot-btrunner/main.go`
 - `internal/btrunner/btrunner.go`
 - `internal/setup/setup.go`
-- `internal/clock/clock.go`
+- `internal/toolkit/clock/clock.go`
 - `internal/runtime/runtime.go`
 - `internal/replay/parquet.go`
 

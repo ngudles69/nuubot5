@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"nuubot5/internal/market"
+	"nuubot/internal/market"
 
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
@@ -41,7 +41,7 @@ type Reader struct {
 	stopped     bool
 }
 
-// Program Flow
+// Section 1 - Program Flow
 
 // NewReader opens one bounded replay reader.
 func NewReader(logger *slog.Logger, ticksPath string, start, end time.Time) (*Reader, error) {
@@ -130,7 +130,7 @@ func (r *Reader) Stop() error {
 	return err
 }
 
-// Domain Helpers
+// Section 2 - Domain Helpers
 
 func (r *Reader) readBatch() error {
 	for {
@@ -263,3 +263,5 @@ func monthFiles(path string, start, end time.Time) []string {
 	}
 	return files
 }
+
+// Section 3 - Generic Helpers

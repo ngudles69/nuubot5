@@ -37,12 +37,21 @@ process_maximum_ms=0
 replay_total_ms=0
 replay_minimum_ms=0
 replay_maximum_ms=0
+suite_started_ms="$(date +%s%3N)"
+bot_log="$log_dir/bot_${sweep_id}_${bot_id}.log"
 
 for ((run = 1; run <= runs; run++)); do
+    before_lines=0
+    if [[ -f "$bot_log" ]]; then
+        before_lines="$(wc -l < "$bot_log")"
+    fi
     started_ms="$(date +%s%3N)"
     output="$(cd "$repo_root" && timeout 120s "$binary" "$sweep_id" "$bot_id" 2>&1)"
     status=$?
     elapsed_ms=$(( $(date +%s%3N) - started_ms ))
+    if [[ -f "$bot_log" ]]; then
+        output="$(tail -n "+$((before_lines + 1))" "$bot_log")"
+    fi
     process_total_ms=$((process_total_ms + elapsed_ms))
     if [[ $process_minimum_ms -eq 0 || $elapsed_ms -lt $process_minimum_ms ]]; then
         process_minimum_ms=$elapsed_ms
@@ -78,8 +87,9 @@ for ((run = 1; run <= runs; run++)); do
             printf 'run=%d incomplete_replay=missing_completion_timing_or_runtime_stats\n' "$run"
         fi
         printf 'run=%d result=FAIL exit=%d elapsed_ms=%d\n' "$run" "$status" "$elapsed_ms"
-        printf 'requested=%d attempted=%d passed=%d failed=1 process_total_ms=%d process_min_ms=%d process_max_ms=%d replay_total_ms=%d replay_min_ms=%d replay_max_ms=%d log=%s\n' \
-            "$runs" "$run" "$passed" "$process_total_ms" "$process_minimum_ms" "$process_maximum_ms" \
+        printf 'requested=%d attempted=%d passed=%d failed=1 suite_ms=%d process_total_ms=%d process_average_ms=%d process_min_ms=%d process_max_ms=%d replay_total_ms=%d replay_min_ms=%d replay_max_ms=%d log=%s\n' \
+            "$runs" "$run" "$passed" "$(( $(date +%s%3N) - suite_started_ms ))" \
+            "$process_total_ms" "$((process_total_ms / run))" "$process_minimum_ms" "$process_maximum_ms" \
             "$replay_total_ms" "$replay_minimum_ms" "$replay_maximum_ms" "$result_log"
         exit "$status"
     fi
@@ -98,7 +108,8 @@ for ((run = 1; run <= runs; run++)); do
         "$run" "$elapsed_ms" "$replay_ms" "$ticks" "$passes" "$signals" "$cycles_closed" "$stop_loss_exits" "$end_date_exits"
 done
 
-printf 'requested=%d attempted=%d passed=%d failed=0 process_total_ms=%d process_average_ms=%d process_min_ms=%d process_max_ms=%d replay_total_ms=%d replay_average_ms=%d replay_min_ms=%d replay_max_ms=%d log=%s\n' \
+printf 'requested=%d attempted=%d passed=%d failed=0 suite_ms=%d process_total_ms=%d process_average_ms=%d process_min_ms=%d process_max_ms=%d replay_total_ms=%d replay_average_ms=%d replay_min_ms=%d replay_max_ms=%d log=%s\n' \
     "$runs" "$runs" "$passed" \
+    "$(( $(date +%s%3N) - suite_started_ms ))" \
     "$process_total_ms" "$((process_total_ms / runs))" "$process_minimum_ms" "$process_maximum_ms" \
     "$replay_total_ms" "$((replay_total_ms / runs))" "$replay_minimum_ms" "$replay_maximum_ms" "$result_log"

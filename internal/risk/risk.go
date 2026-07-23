@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"nuubot5/internal/config"
+	"nuubot/internal/config"
 )
 
 // Risk defines one Runtime-owned risk policy.
@@ -13,10 +13,10 @@ type Risk interface {
 	Stop()
 }
 
-// Program Flow
+// Section 1 - Program Flow
 
-// New constructs the configured Risk.
-func New(logger *slog.Logger, number int, cfg config.Risk) (Risk, error) {
+// Create constructs the configured Risk.
+func Create(logger *slog.Logger, number int, cfg config.Risk) (Risk, error) {
 	switch cfg.Kind {
 	case "balanced":
 		return newBalanced(logger, number), nil
@@ -24,3 +24,7 @@ func New(logger *slog.Logger, number int, cfg config.Risk) (Risk, error) {
 		return nil, fmt.Errorf("unknown risk: %s", cfg.Kind)
 	}
 }
+
+// Section 2 - Domain Helpers
+
+// Section 3 - Generic Helpers

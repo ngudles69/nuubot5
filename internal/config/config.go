@@ -17,7 +17,6 @@ type Config struct {
 type Paths struct {
 	SharedData    string `toml:"shared_data"`
 	SweepDatabase string `toml:"sweep_database"`
-	Logs          string `toml:"logs"`
 }
 
 type BtRunner struct {
@@ -51,6 +50,8 @@ type Risk struct {
 	Kind string `toml:"kind"`
 }
 
+// Section 1 - Program Flow
+
 func Load(path string) (Config, error) {
 	var cfg Config
 	metadata, err := toml.DecodeFile(path, &cfg)
@@ -60,7 +61,7 @@ func Load(path string) (Config, error) {
 	if undecoded := metadata.Undecoded(); len(undecoded) != 0 {
 		return cfg, fmt.Errorf("unknown config fields: %v", undecoded)
 	}
-	if cfg.Paths.SharedData == "" || cfg.Paths.SweepDatabase == "" || cfg.Paths.Logs == "" {
+	if cfg.Paths.SharedData == "" || cfg.Paths.SweepDatabase == "" {
 		return cfg, fmt.Errorf("configured paths must not be empty")
 	}
 	if cfg.BtRunner.TimerIntervalMS == 0 {
@@ -71,6 +72,8 @@ func Load(path string) (Config, error) {
 	}
 	return cfg, nil
 }
+
+// Section 2 - Domain Helpers
 
 func validateRuntime(cfg Runtime) error {
 	if cfg.MaxCycles == 0 || len(cfg.Executors) == 0 {
@@ -99,6 +102,8 @@ func validateRuntime(cfg Runtime) error {
 	}
 	return nil
 }
+
+// Section 3 - Generic Helpers
 
 func Rooted(root, path string) string {
 	if filepath.IsAbs(path) {

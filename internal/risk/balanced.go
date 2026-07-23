@@ -9,7 +9,7 @@ type balanced struct {
 	stopped     bool
 }
 
-// Program Flow
+// Section 1 - Program Flow
 
 func newBalanced(logger *slog.Logger, number int) *balanced {
 	log := logger.With("component", "risk", "risk", number)
@@ -40,3 +40,7 @@ func (r *balanced) Stop() {
 		"exits_requested", 0,
 	)
 }
+
+// Section 2 - Domain Helpers
+
+// Section 3 - Generic Helpers

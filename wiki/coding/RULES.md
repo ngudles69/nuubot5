@@ -184,21 +184,35 @@ contracts.
 External input MUST be validated before mutation, persistence, or external
 calls.
 
-The executable boundary MUST use:
+An identity-bearing executable MUST:
 
 ```go
-func program(args []string, logger *slog.Logger) int {
-	if err := run(args, logger); err != nil {
-		logger.Error(
-			"program failed",
-			"component", "nuubot-btrunner",
-			"event", "run",
-			"status", "failed",
-			"error", err,
-		)
-		return 1
+func main() {
+	started := time.Now()
+	log, err := logging.Open(logging.ServerLog)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "unable to open log file:", err)
+		os.Exit(1)
 	}
-	return 0
+
+	sweepID, botID, err := parseInput(os.Args[1:])
+	if err != nil {
+		log.Error("parseInput() failed", "error", err)
+		os.Exit(1)
+	}
+
+	botLog, err := logging.OpenBot(sweepID, botID)
+	if err != nil {
+		log.Error("logging.OpenBot() failed", "error", err)
+		os.Exit(1)
+	}
+	log = botLog
+
+	if err := btrunner.Run(log, sweepID, botID); err != nil {
+		log.Error("btrunner.Run() failed", "duration", time.Since(started), "error", err)
+		os.Exit(1)
+	}
+	log.Info("btrunner.Run() completed successfully", "duration", time.Since(started))
 }
 ```
 
@@ -206,7 +220,11 @@ func program(args []string, logger *slog.Logger) int {
 
 Nuubot5 MUST use standard `log/slog`.
 
-`internal/logging.New(io.Writer) *slog.Logger` MUST own logging configuration.
+`internal/toolkit/logging.Open` MUST own directories, filenames, append-only opening, and handler configuration.
+
+No executable or component may write operational output to stdout or stderr after a logger exists.
+
+If `server.log` cannot open, the executable MUST report that failure to stderr and exit nonzero.
 
 Custom Logger types and duplicate logging methods are prohibited.
 
@@ -226,19 +244,11 @@ Formatted log messages are prohibited.
 
 Field names MUST remain stable snake_case machine data.
 
-Lifecycle logs MUST contain:
+Log fields MUST exist only when removing them would hide useful operational information.
 
-- bound `component`;
-- `event`;
-- `status`; and
-- owning identity fields.
+BtRunner Run results MUST include `duration`.
 
-Boundary error logs MUST contain:
-
-- `component`;
-- `event`;
-- `status`; and
-- `error`.
+Boundary failures MUST include `error`.
 
 Terminal logs MUST prove completion, locate failures, measure work, or report
 domain results.

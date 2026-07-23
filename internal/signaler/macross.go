@@ -3,8 +3,8 @@ package signaler
 import (
 	"fmt"
 
-	"nuubot5/internal/bars"
-	"nuubot5/internal/config"
+	"nuubot/internal/bars"
+	"nuubot/internal/config"
 )
 
 type macross struct {
@@ -14,6 +14,8 @@ type macross struct {
 	slowPeriod      int
 	regimePeriod    int
 }
+
+// Section 1 - Program Flow
 
 func newMacross(cfg config.Signaler) (*macross, error) {
 	signalTimeframe, err := bars.ParseTimeframe(cfg.SignalTimeframe)
@@ -96,6 +98,8 @@ func (m *macross) Calculate(loaded []bars.Data) ([]Signal, error) {
 	return signals, nil
 }
 
+// Section 2 - Domain Helpers
+
 func ema(values []float64, period int) []float64 {
 	result := make([]float64, len(values))
 	if len(values) == 0 {
@@ -117,3 +121,5 @@ func findBars(loaded []bars.Data, timeframe bars.Timeframe) (*bars.Data, error) 
 	}
 	return nil, fmt.Errorf("signaler missing %s bars", timeframe)
 }
+
+// Section 3 - Generic Helpers

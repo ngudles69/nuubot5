@@ -1,4 +1,4 @@
-module nuubot5
+module nuubot
 
 go 1.26.0
 

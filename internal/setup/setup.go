@@ -3,11 +3,12 @@ package setup
 import (
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 
-	"nuubot5/internal/config"
-	"nuubot5/internal/datastore"
+	"nuubot/internal/config"
+	"nuubot/internal/datastore"
 )
 
 // Context contains validated setup values.
@@ -16,13 +17,25 @@ type Context struct {
 	Bot    datastore.BotSpec
 }
 
-// Program Flow
+// Section 1 - Program Flow
 
-// Init loads and validates one bot setup.
-func Init(logger *slog.Logger, root string, cfg config.Config, sweepID, botID uint64) (Context, error) {
-	bot, err := datastore.LoadBot(config.Rooted(root, cfg.Paths.SweepDatabase), sweepID, botID)
+// Init loads and validates one Bot setup.
+func Init(logger *slog.Logger, sweepID, botID uint64) (Context, error) {
+	var root, err = os.Getwd()
 	if err != nil {
-		return Context{}, fmt.Errorf("load bot: %w", err)
+		return Context{}, fmt.Errorf("get working directory: %w", err)
+	}
+	var cfg, configErr = config.Load(filepath.Join(root, "config.toml"))
+	if configErr != nil {
+		return Context{}, configErr
+	}
+	var bot, botErr = datastore.LoadBot(
+		config.Rooted(root, cfg.Paths.SweepDatabase),
+		sweepID,
+		botID,
+	)
+	if botErr != nil {
+		return Context{}, fmt.Errorf("load bot: %w", botErr)
 	}
 	bot.TicksPath, err = within(config.Rooted(root, cfg.Paths.SharedData), bot.TicksPath)
 	if err != nil {
@@ -39,10 +52,11 @@ func Init(logger *slog.Logger, root string, cfg config.Config, sweepID, botID ui
 	return Context{Config: cfg, Bot: bot}, nil
 }
 
-// Domain Helpers
+// Section 2 - Domain Helpers
 
 func within(root, path string) (string, error) {
-	root, err := filepath.EvalSymlinks(root)
+	var err error
+	root, err = filepath.EvalSymlinks(root)
 	if err != nil {
 		return "", fmt.Errorf("resolve shared_data %s: %w", root, err)
 	}
@@ -50,9 +64,12 @@ func within(root, path string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("resolve data path %s: %w", path, err)
 	}
-	relative, err := filepath.Rel(root, path)
+	var relative string
+	relative, err = filepath.Rel(root, path)
 	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
 		return "", fmt.Errorf("data path is outside shared_data: %s", path)
 	}
 	return path, nil
 }
+
+// Section 3 - Generic Helpers

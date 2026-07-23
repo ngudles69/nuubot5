@@ -25,7 +25,7 @@ type storedBot struct {
 	} `json:"date_range"`
 }
 
-// Program Flow
+// Section 1 - Program Flow
 
 // LoadBot loads one validated Bot specification.
 func LoadBot(path string, sweepID, botID uint64) (BotSpec, error) {
@@ -83,7 +83,7 @@ func LoadBot(path string, sweepID, botID uint64) (BotSpec, error) {
 	}, nil
 }
 
-// Domain Helpers
+// Section 2 - Domain Helpers
 
 func parseOptionalTime(value string) (*time.Time, error) {
 	if value == "" {
@@ -98,3 +98,5 @@ func parseOptionalTime(value string) (*time.Time, error) {
 	}
 	return nil, fmt.Errorf("expected rfc3339 timestamp or yyyy-mm-dd")
 }
+
+// Section 3 - Generic Helpers

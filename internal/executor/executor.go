@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	"nuubot5/internal/config"
-	"nuubot5/internal/market"
-	"nuubot5/internal/signaler"
+	"nuubot/internal/config"
+	"nuubot/internal/market"
+	"nuubot/internal/signaler"
 )
 
 // Executor defines one BotCycle-owned execution policy.
@@ -19,10 +19,10 @@ type Executor interface {
 	ExitReason() string
 }
 
-// Program Flow
+// Section 1 - Program Flow
 
-// New constructs the configured Executor.
-func New(
+// Create constructs the configured Executor.
+func Create(
 	logger *slog.Logger,
 	cycleNumber int,
 	executorNumber int,
@@ -36,3 +36,7 @@ func New(
 		return nil, fmt.Errorf("unknown executor: %s", cfg.Kind)
 	}
 }
+
+// Section 2 - Domain Helpers
+
+// Section 3 - Generic Helpers

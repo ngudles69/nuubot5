@@ -2,6 +2,8 @@ package replay
 
 import "testing"
 
+// Section 1 - Program Flow
+
 func TestAdmitTickMixedPrecisionAndSequence(t *testing.T) {
 	first, err := admitTick(0, false, 1_735_689_599_999_000, 1)
 	if err != nil {
@@ -18,3 +20,7 @@ func TestAdmitTickMixedPrecisionAndSequence(t *testing.T) {
 		t.Fatal("gap was accepted")
 	}
 }
+
+// Section 2 - Domain Helpers
+
+// Section 3 - Generic Helpers

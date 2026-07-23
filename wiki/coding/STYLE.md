@@ -35,14 +35,14 @@ required shape.
 
 ## 1. Required File Shape
 
-Every orchestration or component file MUST use:
+Every hand-written Go file MUST use:
 
 ```text
 package
 imports
 related declarations grouped idiomatically
 
-// Program Flow
+// Section 1 - Program Flow
 New
 Init
 Start
@@ -50,24 +50,24 @@ Loop or Run
 Stop
 decisions and paths in call order
 
-// Domain Helpers
+// Section 2 - Domain Helpers
 domain mechanics
 
-// Generic Helpers
+// Section 3 - Generic Helpers
 file-local domain-neutral mechanics
 ```
 
-Empty sections MUST be omitted.
+All three section comments MUST remain, including empty sections.
 
 Section comments MUST use exactly:
 
 ```go
-// Program Flow
-// Domain Helpers
-// Generic Helpers
+// Section 1 - Program Flow
+// Section 2 - Domain Helpers
+// Section 3 - Generic Helpers
 ```
 
-Data-only and single-purpose files MUST omit meaningless section comments.
+Data-only and single-purpose files MUST retain all three section comments.
 
 Related declarations MUST be grouped for readability.
 
@@ -78,13 +78,13 @@ A rigid constants-before-types order is prohibited.
 Tests MUST map into the same sections:
 
 ```text
-// Program Flow
+// Section 1 - Program Flow
 TestX functions in tested-flow order
 
-// Domain Helpers
+// Section 2 - Domain Helpers
 domain test builders and assertions
 
-// Generic Helpers
+// Section 3 - Generic Helpers
 domain-neutral test mechanics
 ```
 
@@ -103,13 +103,16 @@ Program Flow MUST reveal:
 Use one statement per intent:
 
 ```go
-if err := loadConfig(); err != nil {
+var err = loadConfig()
+if err != nil {
 	return err
 }
-if err := startFeeds(); err != nil {
+err = startFeeds()
+if err != nil {
 	return err
 }
-if err := runRuntime(); err != nil {
+err = runRuntime()
+if err != nil {
 	return err
 }
 ```
@@ -118,7 +121,7 @@ Fluent program-flow chains are prohibited:
 
 ```go
 // Prohibited
-result := loadConfig().startFeeds().runRuntime()
+var result = loadConfig().startFeeds().runRuntime()
 ```
 
 A library chain is allowed inside a Domain Helper only when its API requires
@@ -251,14 +254,21 @@ External contracts retain exact required names.
 
 ## 6. Branches and Returns
 
+Ordinary local declarations MUST use `var`.
+
+Later assignment MUST use `=`.
+
+`:=` is allowed only when `var` or `=` is impossible or materially less clear.
+
 Guard clauses MUST reject invalid state early:
 
 ```go
 func (r *Runner) Start() error {
 	if r.started || r.stopped {
-		return common.StateError("runner", "start")
+		return nuuerrors.StateError("runner", "start")
 	}
-	if err := r.runtime.Start(); err != nil {
+	var err = r.runtime.Start()
+	if err != nil {
 		return fmt.Errorf("start runtime: %w", err)
 	}
 	r.started = true
@@ -268,9 +278,7 @@ func (r *Runner) Start() error {
 
 Nested success paths are prohibited when a guard keeps flow flat.
 
-An `if` initializer MUST be used when its value belongs only to that decision.
-
-Values needed later MUST use separate declarations.
+Values MUST be declared immediately before their first use.
 
 ## 7. Comments
 
@@ -306,7 +314,7 @@ import (
 	"log/slog"
 	"time"
 
-	"nuubot5/internal/common"
+	nuuerrors "nuubot/internal/toolkit/errors"
 )
 
 // Mode selects one Runner path.
@@ -340,15 +348,17 @@ type Runner struct {
 	stopped bool
 }
 
-// Program Flow
+// Section 1 - Program Flow
 
 // NewRunner constructs one stopped Runner.
 func NewRunner(logger *slog.Logger, config Config) (*Runner, error) {
-	if err := validateConfig(config); err != nil {
+	var err = validateConfig(config)
+	if err != nil {
 		return nil, fmt.Errorf("create runner: %w", err)
 	}
 
-	runtime, err := NewRuntime(logger, config.End)
+	var runtime *Runtime
+	runtime, err = NewRuntime(logger, config.End)
 	if err != nil {
 		return nil, fmt.Errorf("create runtime: %w", err)
 	}
@@ -375,17 +385,18 @@ func (r *Runner) Init(ctx context.Context) error {
 // Start starts Runtime and its input.
 func (r *Runner) Start(ctx context.Context) error {
 	if r.started || r.stopped {
-		return common.StateError("runner", "start")
+		return nuuerrors.StateError("runner", "start")
 	}
 
-	if err := r.runtime.Start(); err != nil {
+	var err = r.runtime.Start()
+	if err != nil {
 		return fmt.Errorf("start runtime: %w", err)
 	}
 
 	if r.feed != nil {
-		feedErr := r.feed.Start(ctx)
+		var feedErr = r.feed.Start(ctx)
 		if feedErr != nil {
-			stopErr := r.runtime.Stop("start_error")
+			var stopErr = r.runtime.Stop("start_error")
 			if stopErr != nil {
 				stopErr = fmt.Errorf(
 					"stop runtime after feed start failure: %w",
@@ -407,7 +418,7 @@ func (r *Runner) Start(ctx context.Context) error {
 // Run executes one complete configured job.
 func (r *Runner) Run(ctx context.Context) error {
 	if !r.started || r.stopped {
-		return common.StateError("runner", "run")
+		return nuuerrors.StateError("runner", "run")
 	}
 
 	switch r.config.Mode {
@@ -437,13 +448,13 @@ func (r *Runner) Stop() error {
 		}
 	}
 
-	runtimeErr := r.runtime.Stop("parent_stop")
+	var runtimeErr = r.runtime.Stop("parent_stop")
 	if runtimeErr != nil {
 		runtimeErr = fmt.Errorf("stop runtime: %w", runtimeErr)
 	}
 
-	err := errors.Join(feedErr, runtimeErr)
-	status := "success"
+	var err = errors.Join(feedErr, runtimeErr)
+	var status = "success"
 	if err != nil {
 		status = "failed"
 	}
@@ -457,7 +468,7 @@ func (r *Runner) Stop() error {
 }
 
 func (r *Runner) initLive(ctx context.Context) error {
-	feed, err := openWebSocketFeed(ctx, r.config.Venue, r.config.Symbol)
+	var feed, err = openWebSocketFeed(ctx, r.config.Venue, r.config.Symbol)
 	if err != nil {
 		return err
 	}
@@ -466,12 +477,12 @@ func (r *Runner) initLive(ctx context.Context) error {
 }
 
 func (r *Runner) initBacktest(ctx context.Context) error {
-	end := time.Now().UTC()
+	var end = time.Now().UTC()
 	if r.config.End != nil {
 		end = *r.config.End
 	}
 
-	bars, err := readParquetFile(
+	var bars, err = readParquetFile(
 		ctx,
 		r.config.Symbol,
 		r.config.Interval,
@@ -487,11 +498,12 @@ func (r *Runner) initBacktest(ctx context.Context) error {
 
 func (r *Runner) loopLive(ctx context.Context) error {
 	for {
-		event, err := r.feed.Next(ctx)
+		var event, err = r.feed.Next(ctx)
 		if err != nil {
 			return fmt.Errorf("read live feed: %w", err)
 		}
-		if err := r.onEvent(event); err != nil {
+		err = r.onEvent(event)
+		if err != nil {
 			return err
 		}
 		if r.runtime.Stopped() {
@@ -501,11 +513,14 @@ func (r *Runner) loopLive(ctx context.Context) error {
 }
 
 func (r *Runner) runBacktest(ctx context.Context) error {
-	for _, bar := range r.bars {
-		if err := ctx.Err(); err != nil {
+	var bar Bar
+	for _, bar = range r.bars {
+		var err = ctx.Err()
+		if err != nil {
 			return err
 		}
-		if err := r.onBar(bar); err != nil {
+		err = r.onBar(bar)
+		if err != nil {
 			return err
 		}
 		if r.runtime.Stopped() {
@@ -528,13 +543,14 @@ func (r *Runner) onEvent(event Event) error {
 }
 
 func (r *Runner) onBar(bar Bar) error {
-	if err := r.runtime.OnBar(bar); err != nil {
+	var err = r.runtime.OnBar(bar)
+	if err != nil {
 		return fmt.Errorf("accept replay bar: %w", err)
 	}
 	return nil
 }
 
-// Domain Helpers
+// Section 2 - Domain Helpers
 
 func readParquetFile(
 	ctx context.Context,
@@ -543,13 +559,14 @@ func readParquetFile(
 	start time.Time,
 	end time.Time,
 ) ([]Bar, error) {
-	path := parquetPath(symbol, interval, start)
+	var path = parquetPath(symbol, interval, start)
 
-	bars, err := readArrowBars(ctx, path, start, end)
+	var bars, err = readArrowBars(ctx, path, start, end)
 	if err != nil {
 		return nil, fmt.Errorf("read parquet %s: %w", path, err)
 	}
-	if err := validateBars(bars, start, end); err != nil {
+	err = validateBars(bars, start, end)
+	if err != nil {
 		return nil, fmt.Errorf("validate parquet %s: %w", path, err)
 	}
 	return bars, nil
@@ -562,7 +579,7 @@ func placeOrder(
 ) (OrderResult, error) {
 	switch venue.Kind {
 	case VenueHyperliquid:
-		result, err := placeHyperliquidOrder(ctx, venue, order)
+		var result, err = placeHyperliquidOrder(ctx, venue, order)
 		if err != nil {
 			return OrderResult{}, fmt.Errorf(
 				"place Hyperliquid order: %w",
@@ -571,14 +588,15 @@ func placeOrder(
 		}
 		return result, nil
 	case VenuePolymarket:
-		market, err := identifyPolymarket(ctx, venue, order.Symbol)
+		var market, err = identifyPolymarket(ctx, venue, order.Symbol)
 		if err != nil {
 			return OrderResult{}, fmt.Errorf(
 				"identify Polymarket: %w",
 				err,
 			)
 		}
-		result, err := placePolymarketOrder(ctx, venue, market, order)
+		var result OrderResult
+		result, err = placePolymarketOrder(ctx, venue, market, order)
 		if err != nil {
 			return OrderResult{}, fmt.Errorf(
 				"place Polymarket order: %w",
@@ -594,7 +612,7 @@ func placeOrder(
 	}
 }
 
-// Generic Helpers
+// Section 3 - Generic Helpers
 
 func formatDate(value time.Time) string {
 	return value.UTC().Format(time.DateOnly)
@@ -608,6 +626,8 @@ func benchmark(started time.Time) time.Duration {
 ## 9. Fixed Errors and Logging
 
 Shared invalid lifecycle state MUST use:
+
+`internal/toolkit/errors.StateError` owns this construction.
 
 ```go
 func StateError(owner, action string) error {
@@ -624,19 +644,47 @@ Internal Nuubot errors MUST use `%w` at boundaries defined in `RULES.md`.
 Third-party errors MUST use `%v` or translation unless their contract exposes
 them to `errors.Is` or `errors.As`.
 
-`internal/logging/logging.go` MUST own logging setup:
+`internal/toolkit/logging/logging.go` MUST own logging setup:
 
 ```go
 package logging
 
 import (
+	"fmt"
 	"io"
 	"log/slog"
+	"os"
+	"path/filepath"
 )
+
+const ServerLog = "server.log"
 
 // New returns the process logger.
 func New(output io.Writer) *slog.Logger {
 	return slog.New(slog.NewTextHandler(output, nil))
+}
+
+// Open returns an append-only file logger.
+func Open(name string) (*slog.Logger, error) {
+	var err = os.MkdirAll("workspace/logs", 0o755)
+	if err != nil {
+		return nil, err
+	}
+	var output *os.File
+	output, err = os.OpenFile(
+		filepath.Join("workspace/logs", name),
+		os.O_CREATE|os.O_APPEND|os.O_WRONLY,
+		0o644,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return New(output), nil
+}
+
+// BotLog returns one Bot log filename.
+func BotLog(sweepID, botID uint64) string {
+	return fmt.Sprintf("bot_%d_%d.log", sweepID, botID)
 }
 ```
 
@@ -644,52 +692,56 @@ Logging MUST return `*slog.Logger`.
 
 Custom Logger wrappers are prohibited.
 
-Executables MUST create one logger and log returned errors once:
+Identity-bearing executables MUST start with `server.log`, then replace the logger after identity:
 
 ```go
 package main
 
 import (
 	"fmt"
-	"io"
 	"os"
+	"time"
 
-	"nuubot5/internal/logging"
+	"nuubot/internal/btrunner"
+	"nuubot/internal/toolkit/logging"
 )
 
+const program = "nuubot-btrunner"
+
 func main() {
-	os.Exit(program(os.Args[1:]))
-}
-
-func program(args []string) int {
-	logFile, err := os.OpenFile(
-		"workspace/logs/nuubot5.log",
-		os.O_CREATE|os.O_APPEND|os.O_WRONLY,
-		0o644,
-	)
+	var started = time.Now()
+	var log, err = logging.Open(logging.ServerLog)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
+		fmt.Fprintln(os.Stderr, "unable to open log file:", err)
+		os.Exit(1)
 	}
-	defer logFile.Close()
 
-	logger := logging.New(io.MultiWriter(os.Stdout, logFile))
-
-	if err := run(args, logger); err != nil {
-		logger.Error(
-			"program failed",
-			"component", "nuubot-btrunner",
-			"event", "run",
-			"status", "failed",
-			"error", err,
-		)
-		return 1
+	var sweepID, botID uint64
+	sweepID, botID, err = parseInput(os.Args[1:])
+	if err != nil {
+		log.Error("parseInput() failed", "error", err)
+		os.Exit(1)
 	}
-	return 0
+
+	var botLog, botLogErr = logging.OpenBot(sweepID, botID)
+	if botLogErr != nil {
+		log.Error("logging.OpenBot() failed", "error", botLogErr)
+		os.Exit(1)
+	}
+	log = botLog
+
+	err = btrunner.Run(log, sweepID, botID)
+	if err != nil {
+		log.Error("btrunner.Run() failed", "duration", time.Since(started), "error", err)
+		os.Exit(1)
+	}
+	log.Info("btrunner.Run() completed successfully", "duration", time.Since(started))
 }
 ```
 
-Pre-logger failure is the only permitted `fmt.Fprintln` fallback.
+Executables MUST NOT write operational output to stdout or stderr after a logger exists.
+
+If `server.log` cannot open, the executable reports that failure to stderr and exits nonzero.
 
 Components MUST receive explicit `*slog.Logger` values.
 
@@ -709,18 +761,18 @@ Global `slog` configuration and `slog.SetDefault` are prohibited.
 Tests MUST use ordinary Go checks and the same three sections.
 
 ```go
-// Program Flow
+// Section 1 - Program Flow
 
 func TestRuntimePassStopsAtEndDate(t *testing.T) {
-	actual := runPass(t)
-	expected := "end_date"
+	var actual = runPass(t)
+	var expected = "end_date"
 
 	if actual != expected {
 		t.Fatalf("actual %q, expected %q", actual, expected)
 	}
 }
 
-// Domain Helpers
+// Section 2 - Domain Helpers
 
 func runPass(t *testing.T) string {
 	t.Helper()

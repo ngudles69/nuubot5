@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"log/slog"
 
-	"nuubot5/internal/common"
-	"nuubot5/internal/config"
-	"nuubot5/internal/market"
-	"nuubot5/internal/signaler"
+	"nuubot/internal/config"
+	"nuubot/internal/market"
+	"nuubot/internal/signaler"
+	"nuubot/internal/toolkit/clock"
+	nuuerrors "nuubot/internal/toolkit/errors"
 )
 
 type observerStats struct {
@@ -35,7 +36,7 @@ type observer struct {
 	stopped        bool
 }
 
-// Program Flow
+// Section 1 - Program Flow
 
 func newObserver(
 	logger *slog.Logger,
@@ -70,7 +71,7 @@ func newObserver(
 
 func (e *observer) Start() error {
 	if e.started || e.stopped {
-		return common.StateError("observer executor", "start")
+		return nuuerrors.StateError("observer executor", "start")
 	}
 	e.started = true
 	e.log.Info(
@@ -114,7 +115,7 @@ func (e *observer) Stop(reason string) error {
 		"stop_loss_pct", e.stopLossPct,
 		"start_ts_ms", e.stats.startMS,
 		"end_ts_ms", e.stats.endMS,
-		"duration_ms", common.Duration(e.stats.startMS, e.stats.endMS),
+		"duration_ms", clock.Duration(e.stats.startMS, e.stats.endMS),
 		"start_price", e.stats.startPrice,
 		"stop_loss_price", e.stats.stopLossPrice,
 		"exit_price", e.stats.exitPrice,
@@ -126,7 +127,7 @@ func (e *observer) Stop(reason string) error {
 	return nil
 }
 
-// Domain Helpers
+// Section 2 - Domain Helpers
 
 func (e *observer) OnBBO(bbo market.BBO) {
 	if !e.started || e.terminal {
@@ -161,3 +162,5 @@ func (e *observer) Terminal() bool {
 func (e *observer) ExitReason() string {
 	return e.stats.reason
 }
+
+// Section 3 - Generic Helpers

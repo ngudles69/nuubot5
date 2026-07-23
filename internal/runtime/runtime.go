@@ -5,13 +5,14 @@ import (
 	"log/slog"
 	"time"
 
-	"nuubot5/internal/bars"
-	"nuubot5/internal/botcycle"
-	"nuubot5/internal/common"
-	"nuubot5/internal/config"
-	"nuubot5/internal/market"
-	"nuubot5/internal/risk"
-	"nuubot5/internal/signaler"
+	"nuubot/internal/bars"
+	"nuubot/internal/botcycle"
+	"nuubot/internal/config"
+	"nuubot/internal/market"
+	"nuubot/internal/risk"
+	"nuubot/internal/setup"
+	"nuubot/internal/signaler"
+	nuuerrors "nuubot/internal/toolkit/errors"
 )
 
 type stats struct {
@@ -40,27 +41,39 @@ type Runtime struct {
 	stopped    bool
 }
 
-// Program Flow
+// Section 1 - Program Flow
 
-// New constructs one Runtime and its configured children.
-func New(logger *slog.Logger, cfg config.Runtime, endAt *time.Time) (*Runtime, error) {
-	signals, err := signaler.New(logger, cfg.Signaler)
+// Init constructs one Runtime and its configured children.
+func Init(logger *slog.Logger, ctx setup.Context, end time.Time) (*Runtime, error) {
+	var cfg = ctx.Config.Runtime
+	var signals, err = signaler.Create(logger, cfg.Signaler)
 	if err != nil {
 		return nil, fmt.Errorf("create signaler: %w", err)
 	}
-	risks := make([]risk.Risk, 0, len(cfg.Risks))
+	var loaded, barsErr = bars.Load(
+		logger,
+		ctx.Bot.TicksPath,
+		ctx.Bot.ReplayStart,
+		end,
+		signals.BarsNeeded(),
+	)
+	if barsErr != nil {
+		return nil, fmt.Errorf("load signaler bars: %w", barsErr)
+	}
+	err = signals.Prepare(loaded)
+	if err != nil {
+		return nil, fmt.Errorf("prepare signaler: %w", err)
+	}
+	var risks = make([]risk.Risk, 0, len(cfg.Risks))
 	for index, riskConfig := range cfg.Risks {
-		created, err := risk.New(logger, index+1, riskConfig)
-		if err != nil {
-			return nil, fmt.Errorf("create risk %d: %w", index+1, err)
+		var created, riskErr = risk.Create(logger, index+1, riskConfig)
+		if riskErr != nil {
+			return nil, fmt.Errorf("create risk %d: %w", index+1, riskErr)
 		}
 		risks = append(risks, created)
 	}
-	var endMS uint64
-	if endAt != nil {
-		endMS = uint64(endAt.UnixMilli())
-	}
-	log := logger.With("component", "runtime")
+	var endMS = uint64(end.UnixMilli())
+	var log = logger.With("component", "runtime")
 	log.Info(
 		"runtime initialized",
 		"event", "init",
@@ -75,9 +88,10 @@ func New(logger *slog.Logger, cfg config.Runtime, endAt *time.Time) (*Runtime, e
 // Start starts Runtime children and admission.
 func (r *Runtime) Start() error {
 	if r.started || r.stopped {
-		return common.StateError("runtime", "start")
+		return nuuerrors.StateError("runtime", "start")
 	}
-	if err := r.signaler.Start(); err != nil {
+	var err = r.signaler.Start()
+	if err != nil {
 		return fmt.Errorf("start signaler: %w", err)
 	}
 	r.started = true
@@ -88,7 +102,7 @@ func (r *Runtime) Start() error {
 // Pass executes one timer-driven control pass.
 func (r *Runtime) Pass(nowMS uint64) (bool, error) {
 	if !r.started || r.stopped {
-		return false, common.StateError("runtime", "pass")
+		return false, nuuerrors.StateError("runtime", "pass")
 	}
 	r.stats.passes++
 
@@ -98,24 +112,25 @@ func (r *Runtime) Pass(nowMS uint64) (bool, error) {
 		}
 	}
 	if r.stopReason != "" {
-		reason := r.stopReason
-		return true, r.Stop(reason)
+		return true, nil
 	}
 	if r.cycle == nil {
 		return false, nil
 	}
-	completed, err := r.cycle.Pass(nowMS)
+	var completed, err = r.cycle.Pass(nowMS)
 	if err != nil {
 		return false, fmt.Errorf("pass bot cycle: %w", err)
 	}
 	if !completed {
 		return false, nil
 	}
-	if err := r.closeCycle("completed"); err != nil {
+	err = r.closeCycle("completed")
+	if err != nil {
 		return false, fmt.Errorf("close completed bot cycle: %w", err)
 	}
 	if r.stats.cyclesClosed >= r.config.MaxCycles {
-		return true, r.Stop("max_cycles")
+		r.requestStop("max_cycles")
+		return true, nil
 	}
 	return false, nil
 }
@@ -127,13 +142,13 @@ func (r *Runtime) Stop(reason string) error {
 	}
 	r.requestStop(reason)
 	r.started = false
-	firstErr := r.closeCycle(r.stopReason)
+	var firstErr = r.closeCycle(r.stopReason)
 	for index := len(r.risks) - 1; index >= 0; index-- {
 		r.risks[index].Stop()
 	}
 	r.signaler.Stop()
 	r.stopped = true
-	status := "success"
+	var status = "success"
 	if firstErr != nil {
 		status = "failed"
 	}
@@ -154,25 +169,15 @@ func (r *Runtime) Stop(reason string) error {
 	return firstErr
 }
 
-// Domain Helpers
-
-// BarsNeeded returns Signaler bar requirements.
-func (r *Runtime) BarsNeeded() []bars.Requirement {
-	return r.signaler.BarsNeeded()
-}
-
-// PrepareBars prepares the Signaler with validated bars.
-func (r *Runtime) PrepareBars(loaded []bars.Data) error {
-	return r.signaler.Prepare(loaded)
-}
+// Section 2 - Domain Helpers
 
 // Ingest accepts one validated BBO.
 func (r *Runtime) Ingest(bbo market.BBO) error {
 	if !r.started || r.stopped || r.stopReason != "" {
-		return common.StateError("runtime", "ingest bbo")
+		return nuuerrors.StateError("runtime", "ingest bbo")
 	}
 	for {
-		signal, available, err := r.signaler.Next(bbo.TimestampMS)
+		var signal, available, err = r.signaler.Next(bbo.TimestampMS)
 		if err != nil {
 			return fmt.Errorf("release signal: %w", err)
 		}
@@ -182,8 +187,11 @@ func (r *Runtime) Ingest(bbo market.BBO) error {
 		r.stats.signals++
 		if r.cycle != nil {
 			r.stats.signalsSkipped++
-		} else if err := r.openCycle(signal); err != nil {
-			return fmt.Errorf("open bot cycle: %w", err)
+		} else {
+			err = r.openCycle(signal)
+			if err != nil {
+				return fmt.Errorf("open bot cycle: %w", err)
+			}
 		}
 	}
 	if r.cycle != nil {
@@ -197,11 +205,17 @@ func (r *Runtime) Ingest(bbo market.BBO) error {
 }
 
 func (r *Runtime) openCycle(signal signaler.Signal) error {
-	cycle, err := botcycle.New(r.logger, int(r.stats.cyclesStarted+1), signal, r.config.Executors)
+	var cycle, err = botcycle.New(
+		r.logger,
+		int(r.stats.cyclesStarted+1),
+		signal,
+		r.config.Executors,
+	)
 	if err != nil {
 		return err
 	}
-	if err := cycle.Start(); err != nil {
+	err = cycle.Start()
+	if err != nil {
 		return fmt.Errorf("start bot cycle: %w", err)
 	}
 	r.cycle = cycle
@@ -213,9 +227,9 @@ func (r *Runtime) closeCycle(reason string) error {
 	if r.cycle == nil {
 		return nil
 	}
-	cycle := r.cycle
+	var cycle = r.cycle
 	r.cycle = nil
-	exitReason, err := cycle.Stop(reason)
+	var exitReason, err = cycle.Stop(reason)
 	if err != nil {
 		return fmt.Errorf("stop bot cycle: %w", err)
 	}
@@ -234,3 +248,5 @@ func (r *Runtime) requestStop(reason string) {
 		r.stopReason = reason
 	}
 }
+
+// Section 3 - Generic Helpers

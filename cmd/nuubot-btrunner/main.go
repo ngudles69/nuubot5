@@ -2,105 +2,81 @@ package main
 
 import (
 	"fmt"
-	"io"
-	"log/slog"
 	"os"
-	"path/filepath"
 	"strconv"
+	"time"
 
-	"nuubot5/internal/btrunner"
-	"nuubot5/internal/config"
-	"nuubot5/internal/logging"
+	"nuubot/internal/btrunner"
+	"nuubot/internal/toolkit/logging"
 )
 
-// Program Flow
+const program = "nuubot-btrunner"
+
+// Section 1 - Program Flow
 
 func main() {
-	os.Exit(program(os.Args[1:]))
+	var started = time.Now()
+	var log, err = logging.Open(logging.ServerLog)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "unable to open log file:", err)
+		os.Exit(1)
+	}
+
+	// Parse input.
+	var sweepID, botID uint64
+	sweepID, botID, err = parseInput(os.Args[1:])
+	if err != nil {
+		log.Error("parseInput() failed", "error", err)
+		os.Exit(1)
+	}
+
+	// Set log to Bot log.
+	var botLog, botLogErr = logging.OpenBot(sweepID, botID)
+	if botLogErr != nil {
+		log.Error("logging.OpenBot() failed", "error", botLogErr)
+		os.Exit(1)
+	}
+	log = botLog
+
+	// Run BtRunner.
+	err = btrunner.Run(log, sweepID, botID)
+	if err != nil {
+		log.Error("btrunner.Run() failed", "duration", time.Since(started), "error", err)
+		os.Exit(1)
+	}
+
+	// Log result.
+	log.Info("btrunner.Run() completed successfully", "duration", time.Since(started))
 }
 
-func program(args []string) int {
+// Section 2 - Domain Helpers
+
+func parseInput(args []string) (uint64, uint64, error) {
 	if len(args) != 2 {
-		fmt.Fprintln(os.Stderr, "usage: nuubot-btrunner <sweep_id> <bot_id>")
-		return 1
-	}
-	sweepID, err := positiveID(args[0])
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
-	}
-	botID, err := positiveID(args[1])
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
+		return 0, 0, fmt.Errorf("usage: %s <sweep_id> <bot_id>", program)
 	}
 
-	root, err := os.Getwd()
+	// extract sweepID
+	var sweepID, err = positiveID(args[0])
 	if err != nil {
-		fmt.Fprintln(os.Stderr, fmt.Errorf("get working directory: %w", err))
-		return 1
-	}
-	cfg, err := config.Load(filepath.Join(root, "config.toml"))
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
+		return 0, 0, fmt.Errorf("parse sweep id: %w", err)
 	}
 
-	logDir := config.Rooted(root, cfg.Paths.Logs)
-	if err := os.MkdirAll(logDir, 0o755); err != nil {
-		fmt.Fprintln(os.Stderr, fmt.Errorf("create log directory %s: %w", logDir, err))
-		return 1
-	}
-	logPath := filepath.Join(logDir, fmt.Sprintf("nuubot5-bot-%d-%d.log", sweepID, botID))
-	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	// extract botID
+	var botID uint64
+	botID, err = positiveID(args[1])
 	if err != nil {
-		fmt.Fprintln(os.Stderr, fmt.Errorf("open log %s: %w", logPath, err))
-		return 1
+		return 0, 0, fmt.Errorf("parse bot id: %w", err)
 	}
-	defer file.Close()
-	logger := logging.New(io.MultiWriter(os.Stdout, file)).With(
-		"sweep_id", sweepID,
-		"bot_id", botID,
-	)
-
-	if err := run(logger, root, cfg, sweepID, botID); err != nil {
-		logger.Error(
-			"program failed",
-			"component", "nuubot-btrunner",
-			"event", "run",
-			"status", "failed",
-			"error", err,
-		)
-		return 1
-	}
-	return 0
+	return sweepID, botID, nil
 }
-
-func run(logger *slog.Logger, root string, cfg config.Config, sweepID, botID uint64) error {
-	runner, err := btrunner.New(logger, root, cfg, sweepID, botID)
-	if err != nil {
-		return fmt.Errorf("create btrunner: %w", err)
-	}
-	if err := runner.Start(); err != nil {
-		return fmt.Errorf("start btrunner: %w", err)
-	}
-	runErr := runner.Run()
-	stopErr := runner.Stop()
-	if runErr != nil {
-		return fmt.Errorf("run btrunner: %w", runErr)
-	}
-	if stopErr != nil {
-		return fmt.Errorf("stop btrunner: %w", stopErr)
-	}
-	return nil
-}
-
-// Generic Helpers
 
 func positiveID(value string) (uint64, error) {
-	id, err := strconv.ParseUint(value, 10, 64)
+	var id, err = strconv.ParseUint(value, 10, 64)
 	if err != nil || id == 0 {
 		return 0, fmt.Errorf("invalid positive id: %s", value)
 	}
 	return id, nil
 }
+
+// Section 3 - Generic Helpers

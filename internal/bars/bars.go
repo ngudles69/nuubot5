@@ -44,7 +44,7 @@ type Data struct {
 	Volume    []float64
 }
 
-// Program Flow
+// Section 1 - Program Flow
 
 // Load returns all required validated bars.
 func Load(
@@ -80,7 +80,7 @@ func Load(
 	return loaded, nil
 }
 
-// Domain Helpers
+// Section 2 - Domain Helpers
 
 // ParseTimeframe returns a supported Timeframe.
 func ParseTimeframe(value string) (Timeframe, error) {
@@ -299,3 +299,5 @@ func last(values []uint64) uint64 {
 	}
 	return values[len(values)-1]
 }
+
+// Section 3 - Generic Helpers

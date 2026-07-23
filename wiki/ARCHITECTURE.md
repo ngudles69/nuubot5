@@ -74,7 +74,7 @@ BtRunner run
   verify exact replay
 ```
 
-Detailed behavior remains in [BtRunner](design/btrunner.md) and [Replay](design/replay.md).
+Detailed behavior remains in [BtRunner](design/packages/btrunner.md) and [Replay](design/concepts/replay.md).
 
 ## Approved Live Ownership
 
