@@ -4,7 +4,7 @@ Last updated: 2026-07-23
 
 ## Focus
 
-Review completed six-column OHLCV Stream with row-group-sized Arrow batches.
+OHLCV batch decision documented.
 
 ## Current status
 
@@ -17,6 +17,8 @@ Review completed six-column OHLCV Stream with row-group-sized Arrow batches.
 - The next `StartMS` proves the previous bar closed.
 - Six-column Stream passed full tests, 2x, and 500x.
 - Arrow batch size matches the standard 122,880-row Parquet group.
+- `wiki/design/packages/ohlcv.md` records the accepted 500x result and tradeoff.
+- Confirmed implementation facts now update their owning design page.
 - `internal/ohlcv` is the only Parquet decoder.
 - `wiki/PERFORMANCE.md` records commit-linked benchmark history.
 - Nuubot4 core ownership is ported into compact Go designs and one cascading implementation.
@@ -175,7 +177,7 @@ Review completed six-column OHLCV Stream with row-group-sized Arrow batches.
 
 ## Not run
 
-- The OHLCV hardcut is not committed or pushed.
+- This documentation update is not committed or pushed.
 
 ## Next action
 

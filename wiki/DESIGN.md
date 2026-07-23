@@ -78,6 +78,7 @@ Reserved packages contain only an approved package declaration.
 - `Status`, `Covers`, and `Purpose` form the standard design header.
 - `Covers` names current Nuubot source.
 - `Canonical Sources` names Nuubot4 source.
+- Confirmed implementation facts update the owning design page in the same change.
 - Package pages own package contracts.
 - Concept pages may span packages.
 - A concept page does not create a Go package.

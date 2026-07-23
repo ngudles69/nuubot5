@@ -47,6 +47,7 @@ Before coding:
 - Make one coherent scoped change.
 - Follow `wiki/coding/STYLE.md` and `wiki/coding/RULES.md`.
 - Keep durable design in `wiki/**` and current restart state in `HANDOFF.md`.
+- Update the owning `wiki/design/**` page when implementation proves a new design fact.
 - Never commit or push without explicit user authority.
 - Report confirmed facts separately from inference.
 
