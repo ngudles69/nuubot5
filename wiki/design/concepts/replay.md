@@ -33,7 +33,7 @@ Purpose: Drive one exact historical market sequence through the canonical Runtim
 ## Ordered Flow
 
 ```text
-start Reader and OHLCV at ReplayStart
+initialize Reader and OHLCV at ReplayStart
 open one streaming 1s OHLCV reader
 read one BBO
 send BBO to Runtime
@@ -43,15 +43,17 @@ TickClock invokes the registered Runtime callback when scheduled
 when Runtime requests stop
   end replay
 when Reader completes
-  stop Runtime with end_date
-verify count, passes, and range
+verify count, runs, and range
+stop BtRunner
+  stop Runtime
+    close any active BotCycle
 ```
 
 ## Decisions
 
 Reader decides whether decoded data is admissible.
 
-TickClock decides when its registered timer runs.
+TickClock decides when its registered timers run.
 
 BtRunner decides that the timer callback runs Runtime.
 
@@ -63,7 +65,7 @@ BtRunner decides whether replay evidence is exact.
 
 Reader advances file, batch, and row positions.
 
-BtRunner records served ticks, triggered passes, and replay boundaries.
+BtRunner records served ticks, triggered Runtime runs, and replay boundaries.
 
 Runtime updates Signals, cycles, and stop state.
 
@@ -85,7 +87,7 @@ Restart creates a fresh process and replays from the beginning.
 
 ## Completion
 
-Completion requires exact expected ticks, passes, first timestamp, last timestamp, successful child teardown, and semantic terminal statistics.
+Completion requires exact expected ticks, runs, first timestamp, last timestamp, successful child teardown, and semantic terminal statistics.
 
 Exit zero alone is insufficient.
 
@@ -100,7 +102,7 @@ Exit zero alone is insufficient.
 ## Required Proof
 
 - Sweep 6 Bot 9 serves 7,948,800 ticks.
-- TickClock triggers 794,880 passes.
+- TickClock triggers 794,880 Runtime runs.
 - Runtime produces 55 Signals and 18 closed cycles.
 - Reader and BtRunner ranges match expected boundaries.
 - Canonical `noasm` stability gate passes.

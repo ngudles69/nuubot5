@@ -104,7 +104,7 @@ Components MUST NOT expose internal mutable state.
 Lifecycle methods MUST remain ordered:
 
 ```text
-New
+Create
 Init
 Start
 Loop or Run
@@ -117,9 +117,17 @@ Stop
 
 Repeated iteration MUST belong inside `Loop`.
 
-`Pass` MUST execute one timer-driven control pass.
-
 Empty lifecycle phases MUST be omitted.
+
+Operations outside this lifecycle vocabulary MUST be precise Domain Helpers.
+
+Each indented owning-design action step MUST match one lower-case source
+comment and its code block in exact order.
+
+Each action step and source comment MUST start with a verb and then name its
+target.
+
+Design and source MUST change together when ownership or sequence changes.
 
 `Stop` MUST be safe after successful `Start`.
 
@@ -272,9 +280,9 @@ Required:
 
 ```go
 var message = fmt.Sprintf(
-	"runtime stopped ticks_accepted=%d passes=%d",
+	"runtime stopped ticks_accepted=%d runs=%d",
 	stats.ticks,
-	stats.passes,
+	stats.runs,
 )
 log.Info(message)
 ```
@@ -303,7 +311,7 @@ A mutex MUST NOT compensate for unclear ownership.
 
 WebSocket readers MUST publish typed events or update owned feed state.
 
-Runtime decisions MUST remain in Runtime's timed synchronous pass.
+Runtime decisions MUST remain in Runtime's timed synchronous Run.
 
 BBO checks MUST use the configured fast cadence.
 

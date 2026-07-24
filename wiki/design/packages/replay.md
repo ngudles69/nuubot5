@@ -20,22 +20,22 @@ Replay owns BBO conversion and replay statistics.
 ## Program Flow
 
 ```text
-Reader(source, start, end)
-
 init
-  rows = ohlcv.Open(source, "1s", start, end)
+  open ohlcv
+  initialize reader
 
 Next
-  row = rows.Next()
-  convert row close into BBO
-  return BBO
+  read next ohlcv
+  create bbo
+  record proof
 
-Stop
-  close rows
-  report statistics
+stop
+  close ohlcv
+  report proof
 ```
 
 ## Notes
 
 - Replay streams; Signalers retain complete ranges through `ohlcv.Load`.
 - Reader is synchronous and has one caller.
+- `Next` remains a domain helper because it advances one streaming reader.

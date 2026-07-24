@@ -19,19 +19,19 @@ Purpose: Move admitted live BBO, bar, and user events into one Runner without mo
 
 ```text
 BBO event
-  DataEngine validates and publishes typed BBO
-  Runner updates local BBO state
-  fast Clock pass asks Runtime to evaluate responsive exits
+  validate and publish typed BBO through DataEngine
+  update Runner-local BBO state
+  ask Runtime to evaluate responsive exits on fast Clock timer
 
 user event
-  DataEngine validates account identity
-  Runner marks matching Account and Ledger dirty
-  next recon timer asks Runtime to reconcile dirty Accounts
+  validate account identity through DataEngine
+  mark matching Account and Ledger dirty
+  ask Runtime to reconcile dirty Accounts on next recon timer
 
 bar event
-  DataEngine validates completed Bar
-  Runner updates local Bar state
-  Runtime admits the Bar through Signaler boundary
+  validate completed Bar through DataEngine
+  update Runner-local Bar state
+  admit Bar through Runtime Signaler boundary
 ```
 
 ## Decisions

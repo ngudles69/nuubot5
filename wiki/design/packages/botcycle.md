@@ -11,34 +11,35 @@ Purpose: Own configured Executors for one accepted Signal.
 ## Scope & Responsibilities
 
 BotCycle creates Executors through ExecutorFactory and gives each the same
-Signal, BBO stream, and control passes.
+Signal, BBO stream, and timed Runs.
 
 ## Program Flow
 
 ```text
-BotCycle(log, cycle, signal, executor_configs)
-
 init
-  executors = ExecutorFactory(executor_configs).init(log, cycle, signal)
+  create executors
+  initialize botcycle
 
 start
-  for executor in executors
-    executor.start()
+  start executors
+  start botcycle
 
-run(bbo)
-  for active executor in executors
-    executor.ingest(bbo)
-
-run(now)
-  for active executor in executors
-    executor.run(now)
-
-  return all executors completed
+run
+  run executors
+  check completion
 
 stop
-  stop executors in reverse order
+  stop executors
+  resolve exit reason
+  calculate duration
+  report proof
+
+OnBBO
+  record cycle time
+  ingest executor bbo
 ```
 
 ## Notes
 
 - BotCycle knows the Executor interface, never concrete Executor types.
+- `OnBBO` remains a domain helper because it accepts one market event.

@@ -69,18 +69,16 @@ Unknown intervals or missing required OHLCV fail.
 ## Program Flow
 
 ```text
+createRSI
+  parse interval
+
 Requirements
-  request maximum indicator warmup
+  create requirements
 
 Calculate
-  find required Bars
-  calculate RSI
-  calculate volume average
-  scan OHLCV after warmup
-  apply volume confirmation
-  select threshold side
-  suppress repeated side
-  append Signal
+  find rows
+  calculate indicators
+  calculate signals
 ```
 
 ## Required Proof

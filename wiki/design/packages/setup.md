@@ -16,15 +16,15 @@ owned paths, and enforces the shared-data boundary.
 ## Program Flow
 
 ```text
-nuubot_setup(log, sweep_id, bot_id) -> ctx
-
 init
-  config = Config(repository/config.toml)
-  bot    = SweepStore(config.sweep_database).load(sweep_id, bot_id)
-  verify bot.ticks_path is inside config.shared_data
-  return ctx(config, bot)
+  resolve root
+  load config
+  load bot
+  validate ticks path
+  return setup
 ```
 
 ## Notes
 
 - Setup performs admission only. It owns no running child.
+- Setup returns one value, so Create, Start, Run, Loop, and Stop do not apply.

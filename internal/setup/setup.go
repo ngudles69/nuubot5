@@ -21,14 +21,17 @@ type Context struct {
 
 // Init loads and validates one Bot setup.
 func Init(log *logging.Logger, sweepID, botID uint64) (Context, error) {
+	// resolve root
 	var root, err = os.Getwd()
 	if err != nil {
 		return Context{}, fmt.Errorf("get working directory: %w", err)
 	}
+	// load config
 	var cfg, configErr = config.Load(filepath.Join(root, "config.toml"))
 	if configErr != nil {
 		return Context{}, configErr
 	}
+	// load bot
 	var bot, botErr = datastore.LoadBot(
 		config.Rooted(root, cfg.Paths.SweepDatabase),
 		sweepID,
@@ -37,10 +40,12 @@ func Init(log *logging.Logger, sweepID, botID uint64) (Context, error) {
 	if botErr != nil {
 		return Context{}, fmt.Errorf("load bot: %w", botErr)
 	}
+	// validate ticks path
 	bot.TicksPath, err = within(config.Rooted(root, cfg.Paths.SharedData), bot.TicksPath)
 	if err != nil {
 		return Context{}, fmt.Errorf("validate ticks path: %w", err)
 	}
+	// return setup
 	log.Info(fmt.Sprintf("setup initialized symbol=%s", bot.Symbol))
 	return Context{Config: cfg, Bot: bot}, nil
 }

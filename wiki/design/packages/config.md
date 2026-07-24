@@ -69,12 +69,11 @@ Decode, unknown-field, missing-value, and invalid-range failures return errors.
 
 ```text
 Load
-  decode TOML
+  decode toml
   reject unknown fields
   validate paths
-  validate BtRunner
-  validate Runtime
-  return Config
+  validate cadence
+  validate runtime
 ```
 
 ## Required Proof

@@ -17,7 +17,8 @@ type macross struct {
 
 // Section 1 - Program Flow
 
-func newMacross(cfg config.Signaler) (*macross, error) {
+func createMacross(cfg config.Signaler) (*macross, error) {
+	// parse intervals
 	signalInterval, err := ohlcv.ParseInterval(cfg.SignalTimeframe)
 	if err != nil {
 		return nil, err
@@ -26,6 +27,7 @@ func newMacross(cfg config.Signaler) (*macross, error) {
 	if err != nil {
 		return nil, err
 	}
+	// validate intervals
 	if signalInterval == regimeInterval {
 		return nil, fmt.Errorf("macross signal and regime timeframes must differ")
 	}
@@ -39,6 +41,7 @@ func newMacross(cfg config.Signaler) (*macross, error) {
 }
 
 func (m *macross) Requirements() []Requirement {
+	// create requirements
 	return []Requirement{
 		{Interval: m.signalInterval, PriorRows: m.slowPeriod + 10},
 		{Interval: m.regimeInterval, PriorRows: m.regimePeriod + 10},
@@ -46,6 +49,7 @@ func (m *macross) Requirements() []Requirement {
 }
 
 func (m *macross) Calculate(loaded []Series) ([]Signal, error) {
+	// find rows
 	signalBars, err := findRows(loaded, m.signalInterval)
 	if err != nil {
 		return nil, err
@@ -54,10 +58,12 @@ func (m *macross) Calculate(loaded []Series) ([]Signal, error) {
 	if err != nil {
 		return nil, err
 	}
+	// calculate emas
 	fast := ema(signalBars.Close, m.fastPeriod)
 	slow := ema(signalBars.Close, m.slowPeriod)
 	regime := ema(regimeBars.Close, m.regimePeriod)
 
+	// align regime
 	aligned := make([]float64, len(signalBars.Close))
 	ready := make([]bool, len(signalBars.Close))
 	regimeRow := 0
@@ -77,6 +83,7 @@ func (m *macross) Calculate(loaded []Series) ([]Signal, error) {
 		ready[row] = hasLatest
 	}
 
+	// calculate signals
 	signals := make([]Signal, 0, 64)
 	for row := signalBars.PriorRows; row+1 < len(signalBars.Close); row++ {
 		if !ready[row] || row == 0 || row+1 < m.slowPeriod {

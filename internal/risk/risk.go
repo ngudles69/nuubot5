@@ -9,7 +9,7 @@ import (
 
 // Risk defines one Runtime-owned risk policy.
 type Risk interface {
-	Assess() bool
+	AssessStop() bool
 	Stop()
 }
 
@@ -17,9 +17,10 @@ type Risk interface {
 
 // Create constructs the configured Risk.
 func Create(log *logging.Logger, number int, cfg config.Risk) (Risk, error) {
+	// select implementation
 	switch cfg.Kind {
 	case "balanced":
-		return newBalanced(log, number), nil
+		return createBalanced(log, number), nil
 	default:
 		return nil, fmt.Errorf("unknown risk: %s", cfg.Kind)
 	}

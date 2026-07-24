@@ -2,7 +2,7 @@
 
 Status: Implemented.
 Covers: `internal/signaler/*.go`
-Purpose: Create and run one configured Signal strategy behind a stable factory.
+Purpose: Initialize and run one Signaler with one configured calculator.
 
 ## Canonical Source
 
@@ -10,33 +10,31 @@ Purpose: Create and run one configured Signal strategy behind a stable factory.
 
 ## Scope & Responsibilities
 
-SignalerFactory selects one concrete Signaler. Runtime knows only the common
-Signaler contract.
+Runtime owns one concrete Signaler.
 
-- Concrete Signalers own configuration, OHLCV requirements, and Signal calculation.
-- New strategies add one concrete file and one factory case.
+- Signaler owns calculator selection, OHLCV requirements, loading, and Signal calculation.
+- Macross and RSI are calculator implementations, not separate Signalers.
+- New strategies add one calculator file and one selection case.
 
 ## Program Flow
 
 ```text
-SignalerFactory(kind, log, ctx) -> Signaler
-
 init
-  concrete = select kind
-  rows       = load complete Backtest range
-  indicators = concrete.calculate(rows)
-  candidates = concrete.generate(rows, all)
+  select calculator
+  resolve requirements
+  load ohlcv
+  calculate signals
+  validate signals
+  initialize signaler
 
 start
-  no-op
+  start signaler
 
-run(now)
-  when now crosses candidate next-row start
-    set candidate availability to now
-    return candidate
+run
+  release signal
 
 stop
-  no-op
+  stop signaler
 
 ---
 
@@ -46,7 +44,8 @@ domain
 
 ## Notes
 
-- Current configured Signaler is Macross.
+- Current configured calculator is Macross.
+- Signaler Init loads required OHLCV, calculates Signals, and validates them.
 - Backtest calculates wholesale but releases only after the next row starts.
 - Live Signaler is approved but unimplemented.
 - Live initialization loads warmup plus buffer and generates only its required tail.

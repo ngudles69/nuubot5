@@ -16,38 +16,44 @@ type Reader struct {
 	ticksLoaded uint64
 	firstMS     uint64
 	lastMS      uint64
-	failed      bool
 	stopped     bool
 }
 
 // Section 1 - Program Flow
 
-// NewReader opens one streaming six-column OHLCV reader.
-func NewReader(log *logging.Logger, source string, start, end time.Time) (*Reader, error) {
-	var rows, err = ohlcv.Open(source, ohlcv.Second1, start, end)
+// Init prepares one streaming six-column OHLCV reader.
+func (r *Reader) Init(log *logging.Logger, source string, start, end time.Time) error {
+	r.log = log
+
+	// open ohlcv
+	var err error
+	r.rows, err = ohlcv.Open(source, ohlcv.Second1, start, end)
 	if err != nil {
-		return nil, err
+		return err
 	}
+
+	// initialize reader
 	log.Info(fmt.Sprintf("tick reader initialized interval=%s", ohlcv.Second1))
-	return &Reader{log: log, rows: rows}, nil
+	return nil
 }
 
 // Next returns the next validated BBO.
 func (r *Reader) Next() (market.BBO, bool, error) {
+	// read next ohlcv
 	var row, ok, err = r.rows.Next()
 	if err != nil {
-		r.failed = true
 		return market.BBO{}, false, err
 	}
 	if !ok {
 		return market.BBO{}, false, nil
 	}
+	// create bbo
 	var bbo market.BBO
-	bbo, err = market.NewBBO(row.StartMS+1000, row.Close)
+	bbo, err = market.CreateBBO(row.StartMS+1000, row.Close)
 	if err != nil {
-		r.failed = true
 		return market.BBO{}, false, fmt.Errorf("convert OHLCV row to BBO: %w", err)
 	}
+	// record proof
 	r.ticksLoaded++
 	if r.firstMS == 0 {
 		r.firstMS = bbo.TimestampMS
@@ -61,8 +67,11 @@ func (r *Reader) Stop() error {
 	if r.stopped {
 		return nil
 	}
+	// close ohlcv
 	r.stopped = true
 	var err = r.rows.Close()
+
+	// report proof
 	r.log.Info(fmt.Sprintf(
 		"tick reader stopped ticks=%d first_ts_ms=%d last_ts_ms=%d",
 		r.ticksLoaded,

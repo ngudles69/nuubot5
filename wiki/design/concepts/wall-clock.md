@@ -1,62 +1,49 @@
 # WallClock
 
-Status: Approved — unimplemented.
-Covers: No implemented source.
+Status: Implemented.
+Covers: `internal/toolkit/clock/wallclock.go`, `internal/toolkit/clock/timer.go`
 Purpose: Drive live Bot callbacks from UTC wall time.
 
-## Canonical Sources
+## Canonical Source
 
-- Nuubot4: `D:/rust/nuubot4/wiki/logic/runner.md`
-- Nuubot3: `D:/rust/nuubot3/nuubot/core/clock.py`
+- NautilusTrader: `D:/rust/nuutrader-references/nautilus_trader/crates/common/src/live/clock.rs`
 
 ## Scope
 
-WallClock owns live time advancement and registered callback schedules for one Runner.
+WallClock implements the same Clock contract as TickClock.
 
-## Owner and Children
+Runner owns WallClock. WallClock owns its wall-time advancement loop.
 
-Runner owns WallClock.
+## Flow
 
-WallClock owns no Runtime, Account, feed, or trading object.
+```text
+Clock.Create(Wall)
+WallClock.Init
+  initialize clock
+  initialize loop
 
-## Responsibilities
+WallClock.RegisterTimer
+  register timer
 
-- Return current UTC milliseconds.
-- Register named timer callbacks before Start.
-- Advance timers on one bounded internal tick.
-- Dispatch each due callback once per advance.
-- Prevent overlapping dispatch for one clock.
-- Stop dispatch before Runner tears down inputs.
+WallClock.Start
+  start clock
+  start loop
 
-## Does Not
+WallClock.Loop
+  read next timer
+  wait for timer
+  advance clock
 
-- Decide callback business order.
-- Execute Runtime policy outside registered callbacks.
-- Read market data.
-- Reconcile Accounts.
-- Persist state.
-- Retry failed callbacks silently.
-
-## Lifecycle
-
-`NewWallClock` constructs a stopped clock.
-
-`Start` opens dispatch.
-
-`Loop` advances wall time until cancellation or failure.
-
-`Stop` closes dispatch and releases owned timer work.
+WallClock.Stop
+  stop loop
+  stop clock
+```
 
 ## Invariants
 
-- Runner registers callback cadence and intent.
-- A callback receives its admitted `now_ms` value.
-- Callback failure reaches Runner.
-- Stop is idempotent after successful Start.
-
-## Required Proof
-
-- Fast BBO checks and slower recon requests follow configured cadences.
-- Callback failure stops supervision.
-- Cancellation ends Loop without leaked work.
-- No callback runs after Stop completes.
+- `NowMS` returns current UTC wall time.
+- `Advance` uses the same timer mechanics as TickClock.
+- Timer callbacks receive their scheduled fire timestamp.
+- Callback failure stops the loop and remains available through `Err`.
+- WallClock serializes its own advancement.
+- WallClock owns no Runtime, Account, feed, or trading policy.

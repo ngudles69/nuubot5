@@ -13,7 +13,8 @@ type rsi struct {
 
 // Section 1 - Program Flow
 
-func newRSI(cfg config.Signaler) (*rsi, error) {
+func createRSI(cfg config.Signaler) (*rsi, error) {
+	// parse interval
 	interval, err := ohlcv.ParseInterval(cfg.SignalTimeframe)
 	if err != nil {
 		return nil, err
@@ -22,18 +23,22 @@ func newRSI(cfg config.Signaler) (*rsi, error) {
 }
 
 func (r *rsi) Requirements() []Requirement {
+	// create requirements
 	prior := max(r.rsiPeriod, r.volumePeriod) + 10
 	return []Requirement{{Interval: r.interval, PriorRows: prior}}
 }
 
 func (r *rsi) Calculate(loaded []Series) ([]Signal, error) {
+	// find rows
 	data, err := findRows(loaded, r.interval)
 	if err != nil {
 		return nil, err
 	}
+	// calculate indicators
 	rsiValues := relativeStrength(data.Close, r.rsiPeriod)
 	volumeAverage := simpleMovingAverage(data.Volume, r.volumePeriod)
 	ready := max(r.rsiPeriod, r.volumePeriod)
+	// calculate signals
 	signals := make([]Signal, 0, 64)
 	var previous Side
 	for row := data.PriorRows; row+1 < len(data.Close); row++ {

@@ -55,6 +55,7 @@ Reserved packages contain only an approved package declaration.
 | [Macross signaler](design/concepts/macross-signaler.md) | EMA crossover implementation. |
 | [nuubot-btrunner](design/concepts/nuubot-btrunner.md) | Standalone historical replay command. |
 | [Observer executor](design/concepts/observer-executor.md) | Observer execution implementation. |
+| [PocketBase](design/concepts/pocketbase.md) | Server-owned web, API, authentication, realtime, and SQLite framework. |
 | [Process store](design/concepts/process-store.md) | Process persistence boundary. |
 | [Reconciliation](design/concepts/recon.md) | Venue-to-ledger repair flow. |
 | [Recovery](design/concepts/recovery.md) | Startup state restoration. |

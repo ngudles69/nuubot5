@@ -65,17 +65,21 @@ None.
 
 ## Errors
 
-Signaler preparation rejects invalid timestamp ordering.
+Signaler initialization rejects invalid timestamp ordering.
 
 ## Program Flow
 
 ```text
-calculator detects intent
-  create Signal
-Signaler validates order
-Signaler releases after availability
-Runtime accepts Signal
-BotCycle passes Signal to Executors
+Init
+  select calculator
+  resolve requirements
+  load ohlcv
+  calculate signals
+  validate signals
+  initialize signaler
+
+Run
+  release signal
 ```
 
 ## Required Proof

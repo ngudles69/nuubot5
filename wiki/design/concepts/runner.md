@@ -49,7 +49,7 @@ Runner directly owns:
 
 ## Lifecycle
 
-`NewRunner` constructs one stopped Runner.
+`Create` constructs one stopped Runner.
 
 `Init` loads its Bot and prepares direct children.
 
@@ -78,7 +78,8 @@ Start
   mark running
 
 Loop
-  supervise Clock, subscriptions, Runtime, and stop request
+  wait for feed events
+  supervise WallClock, subscriptions, Runtime, and stop request
 
 Stop
   stop Clock admission

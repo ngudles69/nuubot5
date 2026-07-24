@@ -29,6 +29,7 @@ type storedBot struct {
 
 // LoadBot loads one validated Bot specification.
 func LoadBot(path string, sweepID, botID uint64) (BotSpec, error) {
+	// open database
 	var bot BotSpec
 	dsn := "file:" + filepath.ToSlash(path) + "?mode=ro&immutable=1"
 	db, err := sql.Open("sqlite", dsn)
@@ -37,6 +38,7 @@ func LoadBot(path string, sweepID, botID uint64) (BotSpec, error) {
 	}
 	defer db.Close()
 
+	// query bot
 	var text string
 	err = db.QueryRow(
 		"SELECT config_json FROM bot WHERE sweep_id = ? AND bot_id = ?",
@@ -47,10 +49,12 @@ func LoadBot(path string, sweepID, botID uint64) (BotSpec, error) {
 		return bot, fmt.Errorf("load bot sweep_id=%d bot_id=%d: %w", sweepID, botID, err)
 	}
 
+	// decode bot
 	var stored storedBot
 	if err := json.Unmarshal([]byte(text), &stored); err != nil {
 		return bot, fmt.Errorf("parse bot config: %w", err)
 	}
+	// parse dates
 	replayStart, err := time.Parse(time.DateOnly, stored.DateRange.Start)
 	if err != nil {
 		return bot, fmt.Errorf("invalid bot replay start date: %w", err)
@@ -67,12 +71,14 @@ func LoadBot(path string, sweepID, botID uint64) (BotSpec, error) {
 	if err != nil {
 		return bot, fmt.Errorf("invalid bot end: %w", err)
 	}
+	// validate bot
 	if stored.General.Symbol == "" || stored.Data.Ticks == "" || !replayStart.Before(replayEnd) {
 		return bot, fmt.Errorf("invalid bot symbol, tick path, or date range")
 	}
 	if startAt != nil && endAt != nil && !startAt.Before(*endAt) {
 		return bot, fmt.Errorf("bot start must precede end")
 	}
+	// return bot
 	return BotSpec{
 		Symbol:      stored.General.Symbol,
 		TicksPath:   filepath.Clean(stored.Data.Ticks),

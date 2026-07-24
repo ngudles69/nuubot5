@@ -10,53 +10,51 @@ Purpose: Own and sequence one Bot's control components.
 
 ## Scope & Responsibilities
 
-Runtime owns one factory-created Signaler, factory-created Risks, and at most
-one BotCycle.
+Runtime owns one Signaler, factory-created Risks, and at most one BotCycle.
 
 - Release due Signals before delivering each BBO.
-- Run Risks before the active BotCycle.
+- Assess Risks before the active BotCycle.
 - Own graceful stop decisions.
 
 ## Program Flow
 
 ```text
-Runtime(log, ctx)
+Runtime
 
 init
-  signaler = SignalerFactory(ctx.config.signaler).init(log, ctx)
-  for requirement in signaler.requirements
-    rows = OHLCV.Load(ctx.bot.source, requirement.interval, warmup, end)
-  signaler.prepare(rows)
-  risks    = RiskFactory(ctx.config.risks).init(log, ctx)
+  initialize signaler
+  create risks
+  initialize runtime
 
 start
-  signaler.start()
+  start signaler
+  start runtime
 
-run(bbo)
-  for signal in signaler.release(bbo.time)
-    if no botcycle
-      botcycle = BotCycle(log, signal, ctx.config.executors)
-      botcycle.start()
+ingest
+  run signaler
+  initialize botcycle
+  start botcycle
+  ingest botcycle bbo
 
-  botcycle.ingest(bbo)
-
-run(now)
-  if any risk requests exit
-    stop active botcycle
-    return stop
-
-  if botcycle.run(now) completes
-    stop botcycle
-
-  return continue
+run
+  assess risk stops
+  check stop request
+  run botcycle
+  close botcycle
+  check max cycles
 
 stop
-  botcycle.stop()
-  risks.stop()
-  signaler.stop()
+  request stop
+  stop botcycle
+  stop risks
+  stop signaler
+  stop runtime
 ```
 
 ## Notes
 
-- Runtime uses factories. It never selects concrete Signalers, Risks, or Executors.
-- Runtime preparation belongs inside Runtime initialization.
+- Runtime never selects Signaler calculators, Risks, or Executors.
+- Runtime does not know Signaler requirements, OHLCV, calculation, or validation.
+- Runtime does not use replay dates to stop; BtRunner owns Reader exhaustion.
+- `Ingest` remains a domain helper because it accepts one BBO event.
+- Runtime initialization receives the Setup context from BtRunner.

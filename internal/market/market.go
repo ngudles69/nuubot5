@@ -12,10 +12,14 @@ type BBO struct {
 
 // Section 1 - Program Flow
 
-func NewBBO(timestampMS uint64, price float64) (BBO, error) {
+// CreateBBO validates and creates one BBO.
+func CreateBBO(timestampMS uint64, price float64) (BBO, error) {
+	// validate bbo
 	if timestampMS == 0 || math.IsNaN(price) || math.IsInf(price, 0) || price <= 0 {
 		return BBO{}, fmt.Errorf("invalid BBO timestamp=%d price=%g", timestampMS, price)
 	}
+
+	// create bbo
 	return BBO{TimestampMS: timestampMS, Price: price}, nil
 }
 

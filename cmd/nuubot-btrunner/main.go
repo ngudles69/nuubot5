@@ -17,13 +17,15 @@ const program = "nuubot-btrunner"
 
 func main() {
 	var started = time.Now()
+
+	// open server log
 	var log, err = logging.Open(logging.ServerLog)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "unable to open log file:", err)
 		os.Exit(1)
 	}
 
-	// Parse input.
+	// parse input
 	var sweepID, botID uint64
 	sweepID, botID, err = parseInput(os.Args[1:])
 	if err != nil {
@@ -31,7 +33,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Set log to Bot log.
+	// open bot log
 	var botLog, botLogErr = logging.OpenBot(sweepID, botID)
 	if botLogErr != nil {
 		log.Error(fmt.Sprintf("logging.OpenBot() failed: %v", botLogErr))
@@ -42,14 +44,14 @@ func main() {
 	// create btrunner
 	var runner btrunner.BtRunner
 
-	// btrunner init
+	// initialize btrunner
 	err = runner.Init(log, sweepID, botID)
 	if err != nil {
 		log.Error(fmt.Sprintf("btrunner.Init() failed: %v", err))
 		os.Exit(1)
 	}
 
-	// btrunner start
+	// start btrunner
 	err = runner.Start()
 	if err != nil {
 		err = errors.Join(err, runner.Stop())
@@ -57,8 +59,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	// btrunner loop & stop
+	// loop btrunner
 	var loopErr = runner.Loop()
+
+	// stop btrunner
 	var stopErr = runner.Stop()
 	if loopErr != nil {
 		log.Error(fmt.Sprintf("btrunner.Loop() failed: %v", errors.Join(loopErr, stopErr)))
@@ -69,7 +73,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Log result.
+	// log result
 	log.Info(fmt.Sprintf("btrunner completed successfully in %s", time.Since(started)))
 }
 
@@ -80,13 +84,13 @@ func parseInput(args []string) (uint64, uint64, error) {
 		return 0, 0, fmt.Errorf("usage: %s <sweep_id> <bot_id>", program)
 	}
 
-	// extract sweepID
+	// parse sweep id
 	var sweepID, err = positiveID(args[0])
 	if err != nil {
 		return 0, 0, fmt.Errorf("parse sweep id: %w", err)
 	}
 
-	// extract botID
+	// parse bot id
 	var botID uint64
 	botID, err = positiveID(args[1])
 	if err != nil {

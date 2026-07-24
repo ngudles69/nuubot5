@@ -2,6 +2,7 @@ package signaler
 
 import (
 	"fmt"
+	"time"
 
 	"nuubot/internal/config"
 	"nuubot/internal/ohlcv"
@@ -43,64 +44,85 @@ type Series struct {
 
 // Signaler calculates and releases ordered signals.
 type Signaler struct {
-	log        *logging.Logger
-	calculator calculator
-	rows       []Series
-	signals    []Signal
-	next       int
-	started    bool
-	prepared   bool
-	stopped    bool
+	log      *logging.Logger
+	rows     []Series
+	signals  []Signal
+	next     int
+	started  bool
+	prepared bool
+	stopped  bool
 }
 
 // Section 1 - Program Flow
 
-// Create constructs the configured Signaler.
-func Create(log *logging.Logger, cfg config.Signaler) (*Signaler, error) {
+// Init prepares the configured Signaler and its complete Signal range.
+func (s *Signaler) Init(
+	log *logging.Logger,
+	cfg config.Signaler,
+	source string,
+	start time.Time,
+	end time.Time,
+) error {
+	s.log = log
+
+	// select calculator
 	var implementation calculator
 	var err error
 	switch cfg.Kind {
 	case "macross":
-		implementation, err = newMacross(cfg)
+		implementation, err = createMacross(cfg)
 	case "rsi":
-		implementation, err = newRSI(cfg)
+		implementation, err = createRSI(cfg)
 	default:
 		err = fmt.Errorf("unknown signaler: %s", cfg.Kind)
 	}
 	if err != nil {
-		return nil, err
+		return err
 	}
-	log.Info(fmt.Sprintf("signaler initialized kind=%s", cfg.Kind))
-	return &Signaler{log: log, calculator: implementation}, nil
-}
 
-// Prepare calculates and validates all signals.
-func (s *Signaler) Prepare(loaded []Series) error {
-	if s.prepared || s.started || s.stopped {
-		return fmt.Errorf("signaler cannot prepare from current state")
+	// resolve requirements
+	var requirements = implementation.Requirements()
+	s.rows = make([]Series, 0, len(requirements))
+	for _, requirement := range requirements {
+		var duration, durationErr = requirement.Interval.Duration()
+		if durationErr != nil {
+			return fmt.Errorf("resolve signaler interval: %w", durationErr)
+		}
+		var loadStart = start.Add(-duration * time.Duration(requirement.PriorRows))
+
+		// load ohlcv
+		var rows, loadErr = ohlcv.Load(source, requirement.Interval, loadStart, end)
+		if loadErr != nil {
+			return fmt.Errorf("load signaler OHLCV: %w", loadErr)
+		}
+		s.rows = append(s.rows, Series{Data: rows, PriorRows: requirement.PriorRows})
 	}
-	signals, err := s.calculator.Calculate(loaded)
+
+	// calculate signals
+	s.signals, err = implementation.Calculate(s.rows)
 	if err != nil {
 		return fmt.Errorf("calculate signals: %w", err)
 	}
-	for index, signal := range signals {
+
+	// validate signals
+	for index, signal := range s.signals {
 		if signal.SignalMS >= signal.AvailableMS ||
-			(index > 0 && signals[index-1].AvailableMS >= signal.AvailableMS) {
+			(index > 0 && s.signals[index-1].AvailableMS >= signal.AvailableMS) {
 			return fmt.Errorf("signaler produced invalid timestamp order")
 		}
 	}
 	rowCount := 0
-	for _, data := range loaded {
+	for _, data := range s.rows {
 		rowCount += len(data.Close)
 	}
-	s.rows = loaded
-	s.signals = signals
 	s.prepared = true
+
+	// initialize signaler
 	s.log.Info(fmt.Sprintf(
-		"signaler prepared timeframes=%d rows_loaded=%d signals_calculated=%d",
-		len(loaded),
+		"signaler initialized timeframes=%d rows_loaded=%d signals_calculated=%d",
+		len(s.rows),
 		rowCount,
-		len(signals),
+		len(s.signals),
 	))
 	return nil
 }
@@ -110,6 +132,7 @@ func (s *Signaler) Start() error {
 	if !s.prepared || s.started || s.stopped {
 		return fmt.Errorf("signaler cannot start from current state")
 	}
+	// start signaler
 	s.started = true
 	s.log.Info("signaler started")
 	return nil
@@ -120,6 +143,7 @@ func (s *Signaler) Stop() {
 	if s.stopped {
 		return
 	}
+	// stop signaler
 	s.started = false
 	s.stopped = true
 	s.log.Info(fmt.Sprintf(
@@ -134,16 +158,13 @@ func (s *Signaler) Stop() {
 
 // Section 2 - Domain Helpers
 
-// Requirements returns the calculator OHLCV requirements.
-func (s *Signaler) Requirements() []Requirement {
-	return s.calculator.Requirements()
-}
-
-// Next releases the next available signal.
-func (s *Signaler) Next(nowMS uint64) (Signal, bool, error) {
+// Run releases one available signal.
+func (s *Signaler) Run(nowMS uint64) (Signal, bool, error) {
 	if !s.started || s.stopped {
 		return Signal{}, false, fmt.Errorf("signaler cannot release signal from current state")
 	}
+
+	// release signal
 	if s.next == len(s.signals) || s.signals[s.next].AvailableMS >= nowMS {
 		return Signal{}, false, nil
 	}

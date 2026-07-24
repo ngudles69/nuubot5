@@ -43,23 +43,25 @@ Do not modify a reference repository without explicit user authority.
 - Go BtRunner command and configuration.
 - Read-only SQLite Bot loading.
 - Parquet tick replay and OHLCV loading.
+- Shared TickClock and WallClock timer mechanics.
 - TickClock-driven Runtime passes.
 - Macross and RSI signalers.
 - ObserverExecutor stop-loss behavior.
 - BalancedRisk stub.
-- End-date shutdown through Runtime.
+- Reader-exhaustion shutdown through BtRunner.
 - Exact replay and semantic completion checks.
 
 ## Approved Unimplemented Scope
 
 - `nuubot-server`, `nuubot-cli`, and `nuubot-runner` command shells reserve
   canonical executable names and print `Under Construction.`.
-- Live Runner, WallClock, DataEngine, and live events.
+- Live Runner, DataEngine, and live events.
 - Server, API, web server, BotManager, and SweepManager.
 - Account, Ledger, Trade, Order, Fill, Venue, and Simulator.
 - Execution, reconciliation, recovery, and CLOID handling.
 - RuntimeStore, ProcessStore, RunnerControl, and ResultPublisher.
-- PostgreSQL live, simulator, and paper persistence.
+- PocketBase-backed HTTP, API, authentication, administration, realtime, and
+  SQLite persistence.
 
 Approved design does not authorize implementation, dependencies, transport, or schema choices.
 
@@ -73,7 +75,7 @@ BtRunner succeeds only when:
 - every input timestamp and value passes validation;
 - served ticks, passes, and replay range match expectations;
 - Runtime statistics remain internally consistent;
-- any active BotCycle closes at the effective end date; and
+- any active BotCycle closes during graceful shutdown after replay completion; and
 - every direct child stops successfully.
 
 Go passes the current speed gate when replay remains below twice the accepted Rust reference.
@@ -84,7 +86,7 @@ Correctness and fresh-process stability take priority over speed.
 
 Sweep 6 Bot 9 replays 7,948,800 one-second ticks through 794,880 Runtime passes.
 
-Each accepted run reports 55 signals, 18 cycles, 17 stop-loss exits, and one end-date exit.
+Each accepted run reports 55 signals, 18 cycles, and 17 stop-loss exits.
 
 The canonical `noasm` build passed 1,000 of 1,000 fresh-process runs without delay.
 
@@ -110,7 +112,16 @@ This evidence selects `-tags noasm`. It does not identify the dependency fault.
 
 SQLite is approved for backtesting.
 
-PostgreSQL is approved for future live, simulator, and paper operation.
+PocketBase-owned SQLite is approved for future live, simulator, and paper
+operation.
+
+One embedded PocketBase application in `nuubot-server` owns the writable
+database, web server, API, authentication, administration, and realtime.
+
+Nuubot owns the trading interface, operational dashboards, analytics, and
+reports.
+
+Runners and Bots MUST NOT open the PocketBase database directly.
 
 Physical schemas, migrations, and result publication remain unresolved.
 

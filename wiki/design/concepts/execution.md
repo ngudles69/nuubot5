@@ -69,7 +69,7 @@ Immediate Fills MUST still enter canonical domain truth through recon.
 
 ## Shutdown Execution
 
-User stop and end-date stop MUST use the same graceful Runtime stop path.
+User stop and parent stop MUST use the same graceful Runtime stop path.
 
 An active BotCycle MUST close through its Executors and Accounts.
 

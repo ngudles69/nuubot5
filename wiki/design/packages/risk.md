@@ -2,7 +2,7 @@
 
 Status: Implemented.
 Covers: `internal/risk/*.go`
-Purpose: Create and run configured stop policies behind a stable factory.
+Purpose: Create and assess configured stop policies behind a stable factory.
 
 ## Canonical Source
 
@@ -19,22 +19,20 @@ contract.
 ## Program Flow
 
 ```text
-RiskFactory(kind, log, risk, config) -> Risk
+create
+  select implementation
+  create risk
 
-init
-  concrete = select kind
-  concrete.init(log, risk, config)
-
-start
-  ready to assess
-
-run
-  return concrete.assess()
+assess stop
+  record assessment
 
 stop
-  concrete.stop()
+  stop risk
 ```
 
 ## Notes
 
 - Current BalancedRisk records assessments and never requests exit.
+- Risk has no separate Init or Start work, so those phases are omitted.
+- Risk uses `AssessStop`, not `Run`, because future policies may assess other
+  actions such as position reduction.

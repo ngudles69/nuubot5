@@ -83,17 +83,16 @@ for ((run = 1; run <= runs; run++)); do
     done
     runtime_line="$(printf '%s\n' "$output" | grep '] runtime stopped ' | tail -n 1)"
     runtime_ok=0
-    if [[ "$runtime_line" =~ ticks_accepted=([0-9]+).*passes=([0-9]+).*signals_received=([0-9]+).*cycles_started=([0-9]+).*cycles_closed=([0-9]+).*stop_loss_exits=([0-9]+).*end_date_exits=([0-9]+).*stop_reason=end_date ]]; then
+    if [[ "$runtime_line" =~ ticks_accepted=([0-9]+).*runs=([0-9]+).*signals_received=([0-9]+).*cycles_started=([0-9]+).*cycles_closed=([0-9]+).*stop_loss_exits=([0-9]+).*stop_reason=parent_stop ]]; then
         ticks="${BASH_REMATCH[1]}"
-        passes="${BASH_REMATCH[2]}"
+        runtime_runs="${BASH_REMATCH[2]}"
         signals="${BASH_REMATCH[3]}"
         cycles_started="${BASH_REMATCH[4]}"
         cycles_closed="${BASH_REMATCH[5]}"
         stop_loss_exits="${BASH_REMATCH[6]}"
-        end_date_exits="${BASH_REMATCH[7]}"
-        if [[ $ticks -eq 7948800 && $passes -eq 794880 && $signals -eq 55 &&
+        if [[ $ticks -eq 7948800 && $runtime_runs -eq 794880 && $signals -eq 55 &&
               $cycles_started -eq 18 && $cycles_closed -eq 18 &&
-              $stop_loss_exits -eq 17 && $end_date_exits -eq 1 ]]; then
+              $stop_loss_exits -eq 17 ]]; then
             runtime_ok=1
         fi
     fi
@@ -126,9 +125,9 @@ for ((run = 1; run <= runs; run++)); do
     gc_run_values+=("$gc_runs")
     gc_pause_values+=("$gc_pause_ms")
     ((passed += 1))
-    printf 'run=%d result=PASS exit=0 process_ms=%d replay_ms=%d heap_mb=%s total_alloc_mb=%s gc_runs=%s gc_pause_ms=%s ticks=%d passes=%d signals=%d cycles=%d stop_loss=%d end_date=%d\n' \
+    printf 'run=%d result=PASS exit=0 process_ms=%d replay_ms=%d heap_mb=%s total_alloc_mb=%s gc_runs=%s gc_pause_ms=%s ticks=%d runs=%d signals=%d cycles=%d stop_loss=%d\n' \
         "$run" "$elapsed_ms" "$replay_ms" "$heap_mb" "$total_alloc_mb" "$gc_runs" "$gc_pause_ms" \
-        "$ticks" "$passes" "$signals" "$cycles_closed" "$stop_loss_exits" "$end_date_exits"
+        "$ticks" "$runtime_runs" "$signals" "$cycles_closed" "$stop_loss_exits"
 done
 
 printf 'requested=%d attempted=%d passed=%d failed=0 suite_ms=%d process_total_ms=%d process_average_ms=%d process_min_ms=%d process_max_ms=%d replay_total_ms=%d replay_average_ms=%d replay_min_ms=%d replay_max_ms=%d log=%s\n' \

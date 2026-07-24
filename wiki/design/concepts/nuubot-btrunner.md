@@ -23,17 +23,20 @@ Log paths and file opening belong in `internal/toolkit/logging`.
 ## Program Flow
 
 ```text
-open server.log
-parse Sweep ID
-parse Bot ID
-set logger to Bot log
-runner = BtRunner
-runner.Init()
-runner.Start()
-runner.Loop()
-runner.Stop()
-log failure and exit nonzero
-or log success and elapsed time
+main
+  open server log
+  parse input
+  open bot log
+  create btrunner
+  initialize btrunner
+  start btrunner
+  loop btrunner
+  stop btrunner
+  log result
+
+parseInput
+  parse sweep id
+  parse bot id
 ```
 
 ## Logging

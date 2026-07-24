@@ -48,21 +48,24 @@ BalancedRisk is a stub. ObserverExecutor observes BBO values and records simulat
 
 ```text
 main
+  open Server logger
   parse identities
-  load configuration
-  create logger
+  open Bot logger
   create BtRunner
+  initialize
   start
   loop
   stop
-  return one result
+  log one result
 
-BtRunner setup
+BtRunner init
+  initialize Setup
   load BotSpec
   resolve replay end
-  create reader, clock, and Runtime
-  load required OHLCV
-  prepare Signaler
+  create and initialize TickClock
+  register Runtime timer
+  initialize Reader
+  create and initialize Runtime
   calculate expected proof
 
 BtRunner loop
@@ -70,7 +73,7 @@ BtRunner loop
   send BBO to Runtime
   advance TickClock
   registered timer callback runs Runtime
-  stop at the configured end
+  stop at Reader exhaustion or Runtime request
   verify exact replay
 ```
 
@@ -101,14 +104,29 @@ Server
 |                               `-- Orders
 |                                   `-- Fills
 |-- SweepManager
-`-- HTTP application
+`-- PocketBase
+    |-- HTTP web server
     |-- API routes
-    `-- web routes and assets
+    |-- authentication and authorization
+    |-- administration dashboard
+    |-- realtime subscriptions
+    |-- Nuubot trading and reporting routes
+    |-- Nuubot web assets
+    `-- writable SQLite
 ```
 
 Server owns shared process resources and service lifecycles.
 
 BotManager owns active Runner lifecycles. SweepManager owns Sweep coordination.
+
+Server owns one embedded PocketBase application.
+
+PocketBase owns the HTTP server, API assembly, authentication, administration,
+realtime subscriptions, migrations, SQLite connections, and physical write
+serialization.
+
+Nuubot owns the trading interface, operational dashboards, analytics, reports,
+and their application routes.
 
 DataEngine owns shared external data acquisition, validation, connection reuse, and multiplexing.
 
@@ -145,7 +163,7 @@ Venue feed
 
 BBO events support responsive stop-loss and trailing-stop decisions.
 
-Runtime evaluates decisions during its configured synchronous pass.
+Runtime evaluates decisions during its configured synchronous Run.
 
 ### User Events and Reconciliation
 
@@ -209,9 +227,22 @@ Approved live persistence separates:
 
 These are logical boundaries, not one database graph.
 
-SQLite remains the backtesting datastore.
+The existing SQLite Sweep database remains the read-only backtesting datastore.
 
-PostgreSQL is approved for future live, simulator, and paper operation.
+One Server-owned PocketBase application owns the writable SQLite database for
+live, simulator, and paper operation.
+
+PocketBase queues writes through one write connection. SQLite WAL permits
+concurrent reads while a write transaction runs.
+
+Runners and Bots use Server-owned store operations. They MUST NOT open the
+PocketBase database directly.
+
+Nuubot owns domain transactions, conditional transitions, generations,
+idempotency, and unique trading identities.
+
+PocketBase owns physical database concurrency. Nuubot MUST NOT add a generic
+write queue or database mutex.
 
 Physical tables, keys, migrations, and transaction boundaries require later approval.
 

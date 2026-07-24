@@ -52,21 +52,27 @@ type Risk struct {
 
 // Section 1 - Program Flow
 
+// Load decodes and validates one Config.
 func Load(path string) (Config, error) {
+	// decode toml
 	var cfg Config
 	metadata, err := toml.DecodeFile(path, &cfg)
 	if err != nil {
 		return cfg, fmt.Errorf("load config %s: %w", path, err)
 	}
+	// reject unknown fields
 	if undecoded := metadata.Undecoded(); len(undecoded) != 0 {
 		return cfg, fmt.Errorf("unknown config fields: %v", undecoded)
 	}
+	// validate paths
 	if cfg.Paths.SharedData == "" || cfg.Paths.SweepDatabase == "" {
 		return cfg, fmt.Errorf("configured paths must not be empty")
 	}
+	// validate cadence
 	if cfg.BtRunner.TimerIntervalMS == 0 {
 		return cfg, fmt.Errorf("btrunner.timer_interval_ms must be positive")
 	}
+	// validate runtime
 	if err := validateRuntime(cfg.Runtime); err != nil {
 		return cfg, err
 	}
@@ -105,6 +111,7 @@ func validateRuntime(cfg Runtime) error {
 
 // Section 3 - Generic Helpers
 
+// Rooted resolves one configured path beneath root.
 func Rooted(root, path string) string {
 	if filepath.IsAbs(path) {
 		return filepath.Clean(path)

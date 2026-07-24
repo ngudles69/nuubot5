@@ -15,8 +15,8 @@ BtRunner MUST run one configured Sweep Bot over one bounded historical range.
 
 It MUST serve validated replay ticks and drive Runtime on the configured clock.
 
-It MUST close an active BotCycle at the effective end date and prove exact
-completion.
+It MUST close an active BotCycle during shutdown after Reader exhaustion and
+prove exact completion.
 
 BtRunner MUST NOT own trading decisions or collect child statistics.
 
@@ -54,18 +54,18 @@ run(args)
   stopErr = runner.Stop()
   return both errors without hiding loopErr
 
-btrunner.New(...)
+btrunner.Init(...)
   setup.Init(...)
   select effective end date
   create TickClock
+  initialize TickClock at replay start
   register Runtime timer callback
-  create replay.Reader
-  create Runtime
-  load required Bars
-  prepare Signaler
+  initialize replay.Reader
+  initialize Runtime
   calculate expected replay proof
 
 BtRunner.Start()
+  start TickClock
   start Runtime
   mark started
 
@@ -77,7 +77,6 @@ BtRunner.Loop()
       registered timer callback runs Runtime
     stop when Runtime requests stop
 
-  Runtime.Stop("end_date")
   verify exact replay
 
 BtRunner.Stop()
@@ -120,7 +119,6 @@ signals skipped              37
 cycles started               18
 cycles closed                18
 stop-loss exits              17
-end-date exits                1
 ```
 
 ## Exclusions

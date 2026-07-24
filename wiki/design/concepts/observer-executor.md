@@ -38,21 +38,17 @@ ObserverExecutor owns no child.
 
 ## Lifecycle
 
-Construct, `Start`, repeated `OnBBO` and timed passes, then idempotent `Stop`.
+Create, `Start`, repeated `OnBBO` and timed `Run`, then idempotent `Stop`.
 
 Invalid `Start` returns an error.
 
 `OnBBO` silently ignores inactive or terminal states.
 
-Current `MainLoop` returns terminal state successfully and has no error path.
-
-Canonical target names the timed method `Pass`.
-
-Current Go names it `MainLoop`. This is documented pre-contract drift.
+`Run` returns terminal state successfully and has no error path.
 
 ## Inputs and Outputs
 
-Inputs are Signal, stop-loss percentage, BBO values, pass timestamps, and parent stop reason.
+Inputs are Signal, stop-loss percentage, BBO values, Run timestamps, and parent stop reason.
 
 Outputs are terminal state, exit reason, and execution evidence in terminal statistics.
 
@@ -80,43 +76,43 @@ Invalid construction and invalid `Start` calls fail.
 
 `OnBBO` silently ignores inactive or terminal states.
 
-Current `MainLoop` and `Stop` return no operational error.
+Current `Run` and `Stop` return no operational error.
 
 `Stop` is idempotent.
 
 ## Program Flow
 
 ```text
+createObserver
+  validate config
+  create observer
+
 Start
-  mark started
+  start observer
 
 OnBBO
-  record last value
-  if first value
-    record entry
-    calculate stop price
-  count tick
-  test side-specific stop
-  record stop_loss terminal evidence when triggered
+  record last bbo
+  record entry
+  check stop loss
 
-Pass
-  count pass
-  return terminal state
+Run
+  record run
 
 Stop
-  preserve existing reason or accept parent reason
-  preserve final timestamp and price
-  mark terminal
-  report evidence
+  preserve stop reason
+  preserve end time
+  stop observer
+  calculate duration
+  report proof
 ```
 
 ## Required Proof
 
 - Long and short inclusive stop boundaries trigger.
 - Entry comes from first received BBO.
-- Parent end-date stop records final evidence.
+- Parent shutdown after Reader exhaustion records final evidence.
 - Stop is idempotent.
-- Accepted replay reports 17 stop-loss exits and one end-date exit.
+- Accepted replay reports 17 stop-loss exits and one parent-stop closure.
 
 ## Open Decisions
 

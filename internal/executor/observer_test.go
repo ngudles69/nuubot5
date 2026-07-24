@@ -13,8 +13,8 @@ import (
 // Section 1 - Program Flow
 
 func TestObserverRecordsStopLoss(t *testing.T) {
-	executor, err := newObserver(
-		logging.New(io.Discard), 1, 1,
+	executor, err := createObserver(
+		logging.Create(io.Discard), 1, 1,
 		signaler.Signal{SignalMS: 1_000, AvailableMS: 2_000, Side: signaler.Long, Price: 100},
 		config.Executor{Kind: "observer", StopLossPct: 0.01},
 	)

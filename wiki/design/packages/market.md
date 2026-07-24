@@ -67,11 +67,9 @@ Invalid timestamp or price fails admission.
 ## Program Flow
 
 ```text
-Replay Reader validates decoded row
-NewBBO validates trusted value shape
-BtRunner sends BBO to Runtime
-Runtime sends BBO to active BotCycle
-BotCycle sends BBO to active Executors
+CreateBBO
+  validate bbo
+  create bbo
 ```
 
 ## Required Proof

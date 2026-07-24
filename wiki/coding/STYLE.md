@@ -100,6 +100,20 @@ Program Flow MUST reveal:
 - selected paths; and
 - meaningful work order.
 
+Each indented action step in an owning `wiki/design/**` Program Flow MUST
+appear as the exact lower-case source comment above its implementing code block.
+
+Action steps and matching source comments MUST start with a verb and then name
+the target: `initialize clock`, never `clock initialize`.
+
+Design steps and source comments MUST use the same order.
+
+One step comment MUST own one coherent code block.
+
+Design and source MUST change together when ownership or sequence changes.
+
+A missing, extra, renamed, reordered, or falsely implemented step fails review.
+
 Use one statement per intent:
 
 ```go
@@ -130,7 +144,7 @@ that chain.
 Lifecycle methods MUST remain contiguous:
 
 ```go
-func NewRunner(...) (*Runner, error)
+func Create(...) (*Runner, error)
 func (r *Runner) Init() error
 func (r *Runner) Start() error
 func (r *Runner) Run() error
@@ -139,13 +153,12 @@ func (r *Runner) Stop() error
 
 Lifecycle rules:
 
-- `NewX` constructs one valid value without background work.
+- `Create` constructs one object or selects one configured implementation.
 - `Init` performs explicit fallible preparation.
 - `Start` begins admission or owned background work.
 - `Run` executes one operation.
 - `Loop` repeats work until its stop condition.
 - Repeated iteration belongs inside `Loop`.
-- `Pass` executes one timer-driven control pass.
 - `Stop` stops admission and releases owned resources.
 - Empty lifecycle phases MUST be omitted.
 
@@ -238,12 +251,11 @@ Lifecycle names have fixed meanings:
 
 | Name | Required meaning |
 |---|---|
-| `NewX` | Construct one valid value without background work. |
+| `Create` | Construct one object or select one configured implementation. |
 | `Init` | Perform explicit fallible preparation. |
 | `Start` | Begin admission or owned background work. |
 | `Run` | Execute one operation. |
 | `Loop` | Repeat work until its stop condition. |
-| `Pass` | Execute one timer-driven control pass. |
 | `Stop` | Stop admission and release owned resources. |
 | `OnX` | Accept one named event. |
 
@@ -349,15 +361,15 @@ type Runner struct {
 
 // Section 1 - Program Flow
 
-// NewRunner constructs one stopped Runner.
-func NewRunner(log *logging.Logger, config Config) (*Runner, error) {
+// Create constructs one stopped Runner.
+func Create(log *logging.Logger, config Config) (*Runner, error) {
 	var err = validateConfig(config)
 	if err != nil {
 		return nil, fmt.Errorf("create runner: %w", err)
 	}
 
 	var runtime *Runtime
-	runtime, err = NewRuntime(log, config.End)
+	runtime, err = runtime.Create(log, config.End)
 	if err != nil {
 		return nil, fmt.Errorf("create runtime: %w", err)
 	}

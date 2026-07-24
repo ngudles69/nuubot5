@@ -10,7 +10,7 @@ import (
 // Section 1 - Program Flow
 
 func TestMacrossUsesOnlyClosedRegimeBars(t *testing.T) {
-	strategy, err := newMacross(config.Signaler{
+	strategy, err := createMacross(config.Signaler{
 		SignalTimeframe: "1h", RegimeTimeframe: "4h",
 		FastMA: 2, SlowMA: 3, RegimeEMA: 2,
 	})
@@ -40,7 +40,7 @@ func TestMacrossUsesOnlyClosedRegimeBars(t *testing.T) {
 }
 
 func TestRSIRequiresVolumeConfirmation(t *testing.T) {
-	strategy, err := newRSI(config.Signaler{SignalTimeframe: "1h", RSIPeriod: 2, VolumePeriod: 2})
+	strategy, err := createRSI(config.Signaler{SignalTimeframe: "1h", RSIPeriod: 2, VolumePeriod: 2})
 	if err != nil {
 		t.Fatal(err)
 	}

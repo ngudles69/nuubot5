@@ -15,12 +15,14 @@ type balanced struct {
 
 // Section 1 - Program Flow
 
-func newBalanced(log *logging.Logger, number int) *balanced {
+func createBalanced(log *logging.Logger, number int) *balanced {
+	// create risk
 	log.Info(fmt.Sprintf("risk initialized risk=%d kind=balanced", number))
 	return &balanced{log: log, number: number}
 }
 
-func (r *balanced) Assess() bool {
+func (r *balanced) AssessStop() bool {
+	// record assessment
 	r.assessments++
 	return false
 }
@@ -29,6 +31,7 @@ func (r *balanced) Stop() {
 	if r.stopped {
 		return
 	}
+	// stop risk
 	r.stopped = true
 	r.log.Info(fmt.Sprintf(
 		"risk stopped risk=%d assessments=%d exits_requested=0",

@@ -13,7 +13,7 @@ import (
 type Executor interface {
 	Start() error
 	OnBBO(market.BBO)
-	Pass(uint64) bool
+	Run(uint64) bool
 	Stop(string) error
 	Terminal() bool
 	ExitReason() string
@@ -29,9 +29,10 @@ func Create(
 	signal signaler.Signal,
 	cfg config.Executor,
 ) (Executor, error) {
+	// select implementation
 	switch cfg.Kind {
 	case "observer":
-		return newObserver(log, cycleNumber, executorNumber, signal, cfg)
+		return createObserver(log, cycleNumber, executorNumber, signal, cfg)
 	default:
 		return nil, fmt.Errorf("unknown executor: %s", cfg.Kind)
 	}

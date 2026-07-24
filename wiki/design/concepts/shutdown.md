@@ -21,7 +21,8 @@ Purpose: Stop admission, close active work, release owned resources, and preserv
 
 ## Preconditions
 
-Shutdown may follow completion, end date, maximum cycles, Risk, user request, parent stop, start failure, or work failure.
+Shutdown may follow Reader exhaustion, maximum cycles, Risk, user request,
+parent stop, start failure, or work failure.
 
 Repeated valid stop calls MUST be safe.
 
@@ -103,7 +104,7 @@ Shutdown completes when every started direct child received stop, active cycles 
 
 ## Required Proof
 
-- End date closes an active BotCycle.
+- BtRunner shutdown after Reader exhaustion closes an active BotCycle.
 - ObserverExecutor preserves last timestamp and final price.
 - Stop methods are idempotent.
 - Start failures clean up started children.

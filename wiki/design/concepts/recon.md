@@ -63,7 +63,7 @@ User events and Simulator changes may mark Account truth dirty.
 
 Dirty state requests later recon. It MUST NOT perform recon immediately.
 
-A slower forced pass MUST reconcile every Account despite missing dirty hints.
+A slower forced Run MUST reconcile every Account despite missing dirty hints.
 
 Exact cadences remain Runner configuration, not Account or Ledger policy.
 

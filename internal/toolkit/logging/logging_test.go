@@ -11,7 +11,7 @@ import (
 
 func TestLoggerFormat(t *testing.T) {
 	var output bytes.Buffer
-	var log = New(&output)
+	var log = Create(&output)
 
 	log.Debug("debug")
 	log.Info("info")

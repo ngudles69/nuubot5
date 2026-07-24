@@ -19,27 +19,30 @@ Executor contract.
 ## Program Flow
 
 ```text
-ExecutorFactory(kind, log, cycle, executor, signal) -> Executor
-
-init
-  concrete = select kind
-  concrete.init(log, cycle, executor, signal)
+create
+  select implementation
+  validate config
+  create observer
 
 start
-  concrete.start()
+  start observer
 
-run(bbo)
-  concrete.ingest(bbo)
-
-run(now)
-  return concrete.run(now)
+run
+  record run
 
 stop
-  concrete.stop()
+  preserve stop reason
+  preserve end time
+  stop observer
+  calculate duration
+  report proof
 
 ---
 
 domain
+  OnBBO records entry and evaluates stop loss
+  Terminal reports completion
+  ExitReason reports the terminal reason
   observer long  -> exit at 1% below start price
   observer short -> exit at 1% above start price
 ```
@@ -47,4 +50,5 @@ domain
 ## Notes
 
 - Current configured Executor is Observer.
+- `OnBBO`, `Terminal`, and `ExitReason` remain domain helpers.
 - Observer proves control flow without Account, Ledger, Trade, Order, Fill, Simulator, or Venue.

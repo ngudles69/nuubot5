@@ -72,15 +72,19 @@ type Reader struct {
 
 // Open creates one streaming six-column OHLCV reader.
 func Open(source string, interval Interval, start, end time.Time) (*Reader, error) {
+	// resolve interval
 	var duration, err = interval.Duration()
 	if err != nil {
 		return nil, err
 	}
+	// validate range
 	if !start.Before(end) || end.Sub(start)%duration != 0 {
 		return nil, fmt.Errorf("invalid %s range: %s..%s", interval, start, end)
 	}
+	// resolve files
 	var path = filepath.Join(filepath.Dir(source), string(interval))
 	var files = monthFiles(path, interval, start, end)
+	// validate files
 	for _, filePath := range files {
 		var info os.FileInfo
 		info, err = os.Stat(filePath)
@@ -88,6 +92,7 @@ func Open(source string, interval Interval, start, end time.Time) (*Reader, erro
 			return nil, fmt.Errorf("OHLCV parquet not found: %s", filePath)
 		}
 	}
+	// create reader
 	return &Reader{
 		interval: interval,
 		duration: duration,
@@ -100,6 +105,7 @@ func Open(source string, interval Interval, start, end time.Time) (*Reader, erro
 
 // Load returns one complete validated OHLCV range.
 func Load(source string, interval Interval, start, end time.Time) (Data, error) {
+	// open reader
 	var data = Data{Interval: interval}
 	var reader, err = Open(source, interval, start, end)
 	if err != nil {
@@ -107,6 +113,7 @@ func Load(source string, interval Interval, start, end time.Time) (Data, error) 
 	}
 	defer reader.Close()
 
+	// load rows
 	for {
 		var row Row
 		var ok bool
@@ -124,6 +131,7 @@ func Load(source string, interval Interval, start, end time.Time) (Data, error) 
 		data.Close = append(data.Close, row.Close)
 		data.Volume = append(data.Volume, row.Volume)
 	}
+	// close reader
 	err = reader.Close()
 	if err != nil {
 		return Data{}, err
@@ -134,6 +142,7 @@ func Load(source string, interval Interval, start, end time.Time) (Data, error) 
 // Next returns the next validated OHLCV row.
 func (r *Reader) Next() (Row, bool, error) {
 	for {
+		// read batch
 		if r.nextRow == r.rows {
 			var err = r.readBatch()
 			if err != nil {
@@ -145,12 +154,14 @@ func (r *Reader) Next() (Row, bool, error) {
 			}
 		}
 
+		// filter range
 		var index = r.nextRow
 		r.nextRow++
 		var openUS = r.starts.Value(index)
 		if openUS < r.startUS || openUS >= r.endUS {
 			continue
 		}
+		// admit row
 		var row, err = r.admit(index)
 		if err != nil {
 			return Row{}, false, err
@@ -164,6 +175,7 @@ func (r *Reader) Close() error {
 	if r.closed {
 		return nil
 	}
+	// close reader
 	r.closed = true
 	return r.closeFile()
 }

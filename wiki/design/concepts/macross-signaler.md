@@ -72,18 +72,18 @@ Unknown intervals, equal intervals, or missing required OHLCV fail.
 ## Program Flow
 
 ```text
+createMacross
+  parse intervals
+  validate intervals
+
 Requirements
-  request signal timeframe warmup
-  request regime timeframe warmup
+  create requirements
 
 Calculate
-  find required Bars
-  calculate three EMA series
-  align latest closed regime EMA
-  scan signal OHLCV after warmup
-  detect crossover
-  apply regime filter
-  append Signal
+  find rows
+  calculate emas
+  align regime
+  calculate signals
 ```
 
 ## Required Proof

@@ -7,7 +7,6 @@ import (
 	"nuubot/internal/executor"
 	"nuubot/internal/market"
 	"nuubot/internal/signaler"
-	"nuubot/internal/toolkit/clock"
 	"nuubot/internal/toolkit/logging"
 )
 
@@ -18,7 +17,7 @@ type Control struct {
 	signal    signaler.Signal
 	executors []executor.Executor
 	ticks     uint64
-	passes    uint64
+	runs      uint64
 	startMS   uint64
 	endMS     uint64
 	running   bool
@@ -28,16 +27,28 @@ type Control struct {
 
 // Section 1 - Program Flow
 
-// New constructs one BotCycle.
-func New(log *logging.Logger, number int, signal signaler.Signal, configs []config.Executor) (*Control, error) {
-	var executors = make([]executor.Executor, 0, len(configs))
+// Init prepares one BotCycle and its configured Executors.
+func (c *Control) Init(
+	log *logging.Logger,
+	number int,
+	signal signaler.Signal,
+	configs []config.Executor,
+) error {
+	c.log = log
+	c.number = number
+	c.signal = signal
+
+	// create executors
+	c.executors = make([]executor.Executor, 0, len(configs))
 	for index, cfg := range configs {
 		var created, err = executor.Create(log, number, index+1, signal, cfg)
 		if err != nil {
-			return nil, fmt.Errorf("create executor %d: %w", index+1, err)
+			return fmt.Errorf("create executor %d: %w", index+1, err)
 		}
-		executors = append(executors, created)
+		c.executors = append(c.executors, created)
 	}
+
+	// initialize botcycle
 	log.Info(fmt.Sprintf(
 		"bot cycle initialized cycle=%d side=%s signal_ts_ms=%d available_ts_ms=%d",
 		number,
@@ -45,7 +56,7 @@ func New(log *logging.Logger, number int, signal signaler.Signal, configs []conf
 		signal.SignalMS,
 		signal.AvailableMS,
 	))
-	return &Control{log: log, number: number, signal: signal, executors: executors}, nil
+	return nil
 }
 
 // Start starts every configured Executor.
@@ -53,6 +64,7 @@ func (c *Control) Start() error {
 	if c.running || c.stopped {
 		return fmt.Errorf("bot cycle cannot start from current state")
 	}
+	// start executors
 	for _, executor := range c.executors {
 		var err = executor.Start()
 		if err != nil {
@@ -60,22 +72,28 @@ func (c *Control) Start() error {
 			return fmt.Errorf("start executor: %w", err)
 		}
 	}
+
+	// start botcycle
 	c.running = true
 	c.log.Info(fmt.Sprintf("bot cycle started cycle=%d", c.number))
 	return nil
 }
 
-// Pass runs one timer-driven Executor pass.
-func (c *Control) Pass(nowMS uint64) (bool, error) {
+// Run executes one timer-driven Executor operation.
+func (c *Control) Run(nowMS uint64) (bool, error) {
 	if !c.running {
-		return false, fmt.Errorf("bot cycle cannot pass from current state")
+		return false, fmt.Errorf("bot cycle cannot run from current state")
 	}
-	c.passes++
+	c.runs++
+
+	// run executors
 	for _, executor := range c.executors {
 		if !executor.Terminal() {
-			executor.Pass(nowMS)
+			executor.Run(nowMS)
 		}
 	}
+
+	// check completion
 	c.completed = true
 	for _, executor := range c.executors {
 		if !executor.Terminal() {
@@ -92,6 +110,8 @@ func (c *Control) Stop(reason string) (string, error) {
 		return c.exitReason(reason), nil
 	}
 	c.running = false
+
+	// stop executors
 	var firstErr error
 	for index := len(c.executors) - 1; index >= 0; index-- {
 		if err := c.executors[index].Stop(reason); err != nil && firstErr == nil {
@@ -99,18 +119,28 @@ func (c *Control) Stop(reason string) (string, error) {
 		}
 	}
 	c.stopped = true
+
+	// resolve exit reason
 	var exitReason = c.exitReason(reason)
+
+	// calculate duration
+	var durationMS uint64
+	if c.endMS >= c.startMS {
+		durationMS = c.endMS - c.startMS
+	}
+
+	// report proof
 	c.log.Info(fmt.Sprintf(
 		"bot cycle stopped cycle=%d side=%s start_ts_ms=%d end_ts_ms=%d "+
-			"duration_ms=%d executors=%d ticks_received=%d passes=%d stop_reason=%s",
+			"duration_ms=%d executors=%d ticks_received=%d runs=%d stop_reason=%s",
 		c.number,
 		c.signal.Side,
 		c.startMS,
 		c.endMS,
-		clock.Duration(c.startMS, c.endMS),
+		durationMS,
 		len(c.executors),
 		c.ticks,
-		c.passes,
+		c.runs,
 		exitReason,
 	))
 	return exitReason, firstErr
@@ -120,11 +150,14 @@ func (c *Control) Stop(reason string) (string, error) {
 
 // OnBBO distributes one BBO to active Executors.
 func (c *Control) OnBBO(bbo market.BBO) {
+	// record cycle time
 	if c.startMS == 0 {
 		c.startMS = bbo.TimestampMS
 	}
 	c.endMS = bbo.TimestampMS
 	c.ticks++
+
+	// ingest executor bbo
 	for _, executor := range c.executors {
 		if !executor.Terminal() {
 			executor.OnBBO(bbo)

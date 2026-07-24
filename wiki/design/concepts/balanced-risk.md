@@ -11,7 +11,7 @@ Purpose: Prove the configured Risk call path without requesting an exit.
 
 ## Scope
 
-BalancedRisk counts assessments and always declines a stop request.
+BalancedRisk counts Runtime runs and always declines a stop request.
 
 ## Owner and Children
 
@@ -35,11 +35,11 @@ BalancedRisk owns no child.
 
 ## Lifecycle
 
-Construct, assess repeatedly, then stop once.
+Create, run repeatedly, then stop once.
 
 ## Inputs and Outputs
 
-Input is one Runtime assessment call.
+Input is one Runtime Run call.
 
 Output is always `false`.
 
@@ -47,7 +47,7 @@ Output is always `false`.
 
 Exit requests MUST remain zero while this object is a stub.
 
-Assessment count MUST match Runtime pass calls reaching it.
+Assessment count MUST match Runtime Run calls reaching it.
 
 ## Concurrency
 
@@ -64,13 +64,14 @@ Current construction, assessment, and stop paths return no error.
 ## Program Flow
 
 ```text
-Assess
-  increment assessment count
-  return false
+createBalanced
+  create risk
+
+Run
+  record assessment
 
 Stop
-  ignore repeated stop
-  report assessment count
+  stop risk
 ```
 
 ## Required Proof

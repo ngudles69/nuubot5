@@ -77,13 +77,12 @@ Open, query, JSON, date, and validation failures return errors.
 
 ```text
 LoadBot
-  open SQLite read-only
-  query exact identity
-  decode Bot JSON
-  parse replay dates
-  parse optional Bot dates
-  validate required fields and ordering
-  return BotSpec with StartAt and EndAt
+  open database
+  query bot
+  decode bot
+  parse dates
+  validate bot
+  return bot
 ```
 
 ## Required Proof

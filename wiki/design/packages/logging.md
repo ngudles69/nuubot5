@@ -54,22 +54,23 @@ Logging owns destinations, append-only opening, timestamps, levels, record forma
 ## Program Flow
 
 ```text
-command
-  open server.log
-  parse identity
-  open identity log
-  replace server logger
-  run identified work lifecycle
-  construct and log one result with elapsed time
+create
+  create logger
 
-component
-  construct one complete message
-  log lifecycle and owned statistics
-  return failures without logging error values
+Open
+  create log directory
+  open log file
+  return logger
 
-boundary
-  log returned error once
+OpenBot
+  open bot log
+
+write
+  write record
 ```
+
+`Open`, `OpenBot`, and level methods remain domain helpers because their names
+state the exact logging operation.
 
 ## Required Proof
 

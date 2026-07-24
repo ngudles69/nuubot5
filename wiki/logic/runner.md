@@ -45,7 +45,8 @@ Runner.Start()
   start Clock
 
 Runner.Loop()
-  wait for feed events or Clock cadence
+  wait for feed events
+  supervise Clock errors
 
   on BBO
     update latest owned BBO state

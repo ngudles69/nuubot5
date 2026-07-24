@@ -23,34 +23,31 @@ OHLCV owns Parquet resolution, decoding, and validation.
 ```text
 Open(source, interval, start, end) -> Reader
 
-init
-  files = monthly files covering start..end
-
-run
-  stream start, open, high, low, close, and volume
-  validate each OHLCV row
-  return one row
-
-stop
-  verify the complete range
-  close reader and file
+  resolve interval
+  validate range
+  resolve files
+  validate files
+  create reader
 
 Load(source, interval, start, end) -> rows
 
-init
-  reader = Open(source, interval, start, end)
-
-run
-  append every streamed row
-
-stop
+  open reader
+  load rows
   close reader
-  return rows
+
+Next
+  read batch
+  filter range
+  admit row
+
+Close
+  close reader
 ```
 
 ## Notes
 
 - OHLCV owns no replay policy, strategy warmup, or trading lifecycle.
+- `Open`, `Load`, `Next`, and `Close` are precise streaming domain operations.
 - Bar closure is proven by the next row's start.
 - End timestamps are neither decoded nor stored.
 - Full Parquet row groups contain 122,880 rows; the final group may be shorter.

@@ -10,8 +10,8 @@
 
 ## Intent
 
-Signaler MUST load complete closed OHLCV bars, calculate indicators once, and
-release ordered Signals without lookahead.
+Signaler MUST select one calculator, load complete closed OHLCV bars, calculate
+indicators once, and release ordered Signals without lookahead.
 
 ## Ownership
 
@@ -29,13 +29,10 @@ implementations of the same boundary.
 ## Program Flow
 
 ```text
-signaler.New(config)
+Signaler.Init(config, source, start, end)
   select Macross or RSI calculator
-
-Signaler.Requirements()
-  return exact timeframe and warmup requirements
-
-Signaler.Prepare(rows)
+  resolve exact timeframe and warmup requirements
+  load required OHLCV
   calculate indicators wholesale
   generate all Backtest Signal candidates
   validate timestamp order
@@ -45,7 +42,7 @@ Signaler.Start()
   require prepared state
   admit release requests
 
-Signaler.Next(now)
+Signaler.Run(now)
   release next Signal only after now crosses the next-row start
   set availableMS to now
 

@@ -21,45 +21,44 @@ BtRunner owns Setup context, TickClock, TickReader, Runtime, and replay proof.
 ```text
 BtRunner
 
-init(log, sweep_id, bot_id)
-
 init
-  ctx      = nuubot_setup(log, sweep_id, bot_id)
-  clock    = TickClock(log)
-  clock.register_timer(ctx.config.btrunner.timer_interval, runtime_run)
-  ticks    = TickReader(log, ctx.bot, ctx.config.btrunner)
-  runtime  = Runtime(log, ctx)
-  proof    = ReplayProof(ctx.bot, ctx.config.btrunner)
+  initialize setup
+  set replay range
+  create clock
+  initialize clock
+  register runtime timer
+  initialize replay reader
+  initialize runtime
+  create proof
 
 start
-  runtime.start()
+  start clock
+  start runtime
 
 loop
-  for tick in ticks
-    runtime.ingest(tick)
-    proof.record(tick)
-
-    clock.advance(tick.time)
-    if runtime requested stop
-      break
+  read replay
+  ingest runtime bbo
+  record proof
+  advance clock
+  check stop request
+  verify replay
 
 runtime_run(time)
-  proof.record_pass()
-  remember runtime.run(time) stop request
-  propagate runtime error
-
-  proof.verify()
+  run runtime
+  remember stop request
 
 stop
-  clock.stop()
-  ticks.stop()
-  runtime.stop()
+  stop clock
+  stop replay reader
+  stop runtime
+  report proof
+  return stop errors
 
 ---
 
 domain
   ticks  = expected ticks
-  passes = expected passes
+  runs   = expected Runtime runs
   first  = expected first timestamp
   last   = expected last timestamp
 ```

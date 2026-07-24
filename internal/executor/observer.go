@@ -6,13 +6,12 @@ import (
 	"nuubot/internal/config"
 	"nuubot/internal/market"
 	"nuubot/internal/signaler"
-	"nuubot/internal/toolkit/clock"
 	"nuubot/internal/toolkit/logging"
 )
 
 type observerStats struct {
 	ticks         uint64
-	passes        uint64
+	runs          uint64
 	startMS       uint64
 	endMS         uint64
 	startPrice    float64
@@ -37,16 +36,18 @@ type observer struct {
 
 // Section 1 - Program Flow
 
-func newObserver(
+func createObserver(
 	log *logging.Logger,
 	cycleNumber int,
 	executorNumber int,
 	signal signaler.Signal,
 	cfg config.Executor,
 ) (*observer, error) {
+	// validate config
 	if cfg.StopLossPct <= 0 || cfg.StopLossPct >= 1 {
 		return nil, fmt.Errorf("observer stop_loss_pct must be between 0 and 1")
 	}
+	// create observer
 	log.Info(fmt.Sprintf(
 		"executor initialized cycle=%d executor=%d kind=observer side=%s "+
 			"signal_ts_ms=%d available_ts_ms=%d stop_loss_pct=%f",
@@ -67,6 +68,7 @@ func (e *observer) Start() error {
 	if e.started || e.stopped {
 		return fmt.Errorf("observer executor cannot start from current state")
 	}
+	// start observer
 	e.started = true
 	e.log.Info(fmt.Sprintf(
 		"executor started cycle=%d executor=%d kind=observer",
@@ -76,8 +78,9 @@ func (e *observer) Start() error {
 	return nil
 }
 
-func (e *observer) Pass(_ uint64) bool {
-	e.stats.passes++
+func (e *observer) Run(_ uint64) bool {
+	// record run
+	e.stats.runs++
 	return e.terminal
 }
 
@@ -85,23 +88,32 @@ func (e *observer) Stop(reason string) error {
 	if e.stopped {
 		return nil
 	}
+	// preserve stop reason
 	if e.stats.reason == "" {
 		e.stats.reason = reason
 	}
+	// preserve end time
 	if e.stats.endMS == 0 {
 		e.stats.endMS = e.stats.lastMS
 		if e.stats.endMS == 0 {
 			e.stats.endMS = e.signal.AvailableMS
 		}
 	}
+	// stop observer
 	e.started = false
 	e.terminal = true
 	e.stopped = true
+	// calculate duration
+	var durationMS uint64
+	if e.stats.endMS >= e.stats.startMS {
+		durationMS = e.stats.endMS - e.stats.startMS
+	}
+	// report proof
 	e.log.Info(fmt.Sprintf(
 		"executor stopped cycle=%d executor=%d side=%s signal_ts_ms=%d "+
 			"available_ts_ms=%d signal_price=%f stop_loss_pct=%f start_ts_ms=%d "+
 			"end_ts_ms=%d duration_ms=%d start_price=%f stop_loss_price=%f "+
-			"exit_price=%f final_price=%f ticks_received=%d passes=%d stop_reason=%s",
+			"exit_price=%f final_price=%f ticks_received=%d runs=%d stop_reason=%s",
 		e.cycleNumber,
 		e.executorNumber,
 		e.signal.Side,
@@ -111,13 +123,13 @@ func (e *observer) Stop(reason string) error {
 		e.stopLossPct,
 		e.stats.startMS,
 		e.stats.endMS,
-		clock.Duration(e.stats.startMS, e.stats.endMS),
+		durationMS,
 		e.stats.startPrice,
 		e.stats.stopLossPrice,
 		e.stats.exitPrice,
 		e.stats.lastPrice,
 		e.stats.ticks,
-		e.stats.passes,
+		e.stats.runs,
 		e.stats.reason,
 	))
 	return nil
@@ -129,8 +141,10 @@ func (e *observer) OnBBO(bbo market.BBO) {
 	if !e.started || e.terminal {
 		return
 	}
+	// record last bbo
 	e.stats.lastMS = bbo.TimestampMS
 	e.stats.lastPrice = bbo.Price
+	// record entry
 	if e.stats.startMS == 0 {
 		e.stats.startMS = bbo.TimestampMS
 		e.stats.startPrice = bbo.Price
@@ -140,6 +154,7 @@ func (e *observer) OnBBO(bbo market.BBO) {
 			e.stats.stopLossPrice = bbo.Price * (1 + e.stopLossPct)
 		}
 	}
+	// check stop loss
 	e.stats.ticks++
 	triggered := e.signal.Side == signaler.Long && bbo.Price <= e.stats.stopLossPrice ||
 		e.signal.Side == signaler.Short && bbo.Price >= e.stats.stopLossPrice

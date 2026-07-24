@@ -23,26 +23,31 @@ type Logger struct {
 
 // Section 1 - Program Flow
 
-// New returns the process logger.
-func New(output io.Writer) *Logger {
+// Create constructs one process logger.
+func Create(output io.Writer) *Logger {
+	// create logger
 	return &Logger{output: stdlog.New(output, "", 0)}
 }
 
 // Open returns an append-only file logger.
 func Open(name string) (*Logger, error) {
+	// create log directory
 	if err := os.MkdirAll(logDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create log directory %s: %w", logDir, err)
 	}
+	// open log file
 	path := filepath.Join(logDir, name)
 	output, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		return nil, fmt.Errorf("open log %s: %w", path, err)
 	}
-	return New(output), nil
+	// return logger
+	return Create(output), nil
 }
 
 // OpenBot opens one identity-bound Bot logger.
 func OpenBot(sweepID, botID uint64) (*Logger, error) {
+	// open bot log
 	return Open(fmt.Sprintf("bot_%d_%d.log", sweepID, botID))
 }
 
@@ -76,6 +81,7 @@ func (l *Logger) Critical(message string) {
 // Section 3 - Generic Helpers
 
 func (l *Logger) write(level, message string) {
+	// write record
 	l.output.Printf(
 		"%s [%5s] %s",
 		time.Now().Format(timestampFormat),
