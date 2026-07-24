@@ -1,15 +1,23 @@
 # Handoff
 
-Last updated: 2026-07-24 20:29:01 +08:00
+Last updated: 2026-07-25 00:10:31 +08:00
 
 ## Focus
 
-User code review of the implemented Simulator-first trading transaction flow.
+User review of structure suggestions v2 and the implemented Simulator-first trading transaction flow.
 
 ## Published baseline
 
-- Commit `a8be81e` is pushed on `main`.
-- Commit message: `Implement simulator trading flow`.
+- Branch `main` tracks `origin/main`.
+- Closeout commit message: `Standardize Go error handling style`.
+
+## Current closeout
+
+- `nuubot-btrunner` uses canonical `err` when error values do not coexist.
+- Coding style owns the canonical `err` rule.
+- `wiki/vscode.md` preserves the exact global Go error-highlighting entry.
+- `audits/07-25-suggestions_v2.md` is captured for user review.
+- The audit authorizes no implementation.
 
 ## Current state
 
@@ -85,16 +93,32 @@ Commit: `a8be81e`
 - Audit round one found material durability and recovery-boundary issues.
 - Accepted findings were fixed with focused failure and recovery tests.
 - Audit round two passed with no material finding or bloat.
+- Global VS Code settings parse after generalizing the `if err != nil` highlight.
+- Both return and logged-exit error bodies match the generalized rule.
+- Highlight text is now `rgba(144, 144, 144, 0.40)`.
+- Coding style now requires canonical `err` unless multiple error values coexist.
+- `nuubot-btrunner` uses `err` for OpenBot and Loop failures; `stopErr` remains for joined shutdown failure.
+- Focused pre-change and post-change command tests pass with `CGO_ENABLED=0` and `-tags noasm`.
+- All ten error-nil checks in `nuubot-btrunner` match the active VS Code highlight.
+- Highlighting covers canonical `err`, necessary `*Err` values, and same-line compound conditions.
+- Full Go tests and Go vet pass with `CGO_ENABLED=0` and `-tags noasm`.
+- The documented VS Code pattern, color, and font weight exactly match global settings.
+- Final replay passed 1/1 attempted run.
+- Final replay processed 7,948,800 ticks through 794,880 Runtime passes.
+- Final replay took 1,436 ms; process total and average were 2,860 ms.
+- Final replay suite took 3,128 ms.
+- Final replay log: `workspace/logs/nuubot5-rtest-s6-b9-1-20260724T160955Z.log`.
 - 1x log: `workspace/logs/nuubot5-trtest-s9-b13-1-20260724T120251Z.log`.
 - 2x log: `workspace/logs/nuubot5-trtest-s9-b13-2-20260724T120340Z.log`.
 - 10x log: `workspace/logs/nuubot5-trtest-s9-b13-10-20260724T120354Z.log`.
 
 ## Active work
 
-- User code review.
+- None.
 
 ## Pending user review
 
+- Structure suggestions v2
 - Account
 - Ledger
 - Trade
@@ -115,7 +139,7 @@ Commit: `a8be81e`
 
 ## Next action
 
-User selects one entity for code review.
+User reviews `audits/07-25-suggestions_v2.md` or selects one entity for code review.
 
 Go toolchain:
 

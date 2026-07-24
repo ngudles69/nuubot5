@@ -34,9 +34,10 @@ func main() {
 	}
 
 	// open bot log
-	var botLog, botLogErr = logging.OpenBot(sweepID, botID)
-	if botLogErr != nil {
-		log.Error(fmt.Sprintf("logging.OpenBot() failed: %v", botLogErr))
+	var botLog *logging.Logger
+	botLog, err = logging.OpenBot(sweepID, botID)
+	if err != nil {
+		log.Error(fmt.Sprintf("logging.OpenBot() failed: %v", err))
 		os.Exit(1)
 	}
 	log = botLog
@@ -60,12 +61,12 @@ func main() {
 	}
 
 	// loop btrunner
-	var loopErr = runner.Loop()
+	err = runner.Loop()
 
 	// stop btrunner
 	var stopErr = runner.Stop()
-	if loopErr != nil {
-		log.Error(fmt.Sprintf("btrunner.Loop() failed: %v", errors.Join(loopErr, stopErr)))
+	if err != nil {
+		log.Error(fmt.Sprintf("btrunner.Loop() failed: %v", errors.Join(err, stopErr)))
 		os.Exit(1)
 	}
 	if stopErr != nil {

@@ -228,6 +228,10 @@ Names MUST state intent, not mechanics.
 
 Use the shortest unmistakable name.
 
+`err` MUST be the canonical ordinary local error variable.
+
+Operation-specific error names MUST exist only when multiple error values coexist.
+
 `*logging.Logger` parameters MUST be named `log`.
 
 Paired operations MUST be symmetrical.
@@ -762,9 +766,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	var botLog, botLogErr = logging.OpenBot(sweepID, botID)
-	if botLogErr != nil {
-		log.Error(fmt.Sprintf("logging.OpenBot() failed: %v", botLogErr))
+	var botLog *logging.Logger
+	botLog, err = logging.OpenBot(sweepID, botID)
+	if err != nil {
+		log.Error(fmt.Sprintf("logging.OpenBot() failed: %v", err))
 		os.Exit(1)
 	}
 	log = botLog
@@ -781,10 +786,10 @@ func main() {
 		log.Error(fmt.Sprintf("btrunner.Start() failed: %v", err))
 		os.Exit(1)
 	}
-	var loopErr = runner.Loop()
+	err = runner.Loop()
 	var stopErr = runner.Stop()
-	if loopErr != nil {
-		log.Error(fmt.Sprintf("btrunner.Loop() failed: %v", errors.Join(loopErr, stopErr)))
+	if err != nil {
+		log.Error(fmt.Sprintf("btrunner.Loop() failed: %v", errors.Join(err, stopErr)))
 		os.Exit(1)
 	}
 	if stopErr != nil {
