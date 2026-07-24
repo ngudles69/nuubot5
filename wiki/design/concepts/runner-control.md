@@ -26,8 +26,8 @@ RunnerService owns the in-process Runner.
 - Reserve a Runner action before external effects.
 - Spawn one exact Bot generation.
 - Verify process identity and health.
-- Send start, pause, resume, and stop commands.
-- Bound command timeouts and restart attempts.
+- Send start and stop commands.
+- Bound command timeouts.
 - Terminate only an exact verified process identity.
 - Report command completion or failure through ProcessStore.
 
@@ -44,8 +44,8 @@ RunnerService owns the in-process Runner.
 
 - Commands target one Bot generation.
 - Unverified process identity is never terminated.
-- Restart policy is bounded.
 - Runner performs in-process transitions.
+- Direct Runner execution does not require RunnerControl.
 
 ## Required Proof
 
@@ -53,4 +53,9 @@ RunnerService owns the in-process Runner.
 - Unauthorized or stale control fails.
 - PID reuse cannot target another process.
 - Unresponsive control reaches bounded failure.
-- Restart exhaustion prevents further automatic starts.
+
+## Open Decisions
+
+- Reconnection to independently started Runner processes.
+- Automatic restart policy.
+- Any future pause or resume meaning.

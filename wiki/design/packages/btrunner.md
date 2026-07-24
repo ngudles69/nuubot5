@@ -92,3 +92,47 @@ BtRunner passes that value to ResultPublisher.
 ResultPublisher writes `persist_mode = none` evidence once.
 
 Any replay, ReplayReader stop, Runtime stop, result, or publication failure prevents success publication.
+
+## Approved Standalone Target
+
+Status: Approved target design. Not implemented.
+
+BtRunner remains one standalone historical execution program.
+
+It requires no Server, API, BotManager, SweepManager, live credential, or
+exchange WebSocket.
+
+It loads one stored Sweep and child Bot identity, admits one exact
+BotDefinition, and owns one Controller.
+
+## Approved Multi-Stream Target
+
+One exact BotSpec declares every required symbol, event type, and interval.
+
+Every market event carries symbol identity.
+
+BtRunner loads every required historical stream and fails admission when data
+or pinned Meta is missing.
+
+It merges streams deterministically and preserves closed-bar no-lookahead
+behavior.
+
+Equal-timestamp ordering must be explicit before implementation.
+
+Controller receives typed symbol-qualified values.
+
+It never loads files or merges streams.
+
+## Approved Result Target
+
+After replay proof and Controller shutdown, BtRunner receives:
+
+```text
+ControllerResult
+  BotCycleResults
+    ExecutorResults
+```
+
+BacktestResult adds replay, data, Meta, Config, code, and timing provenance.
+
+Failed cleanup or incomplete replay cannot publish a successful BacktestResult.

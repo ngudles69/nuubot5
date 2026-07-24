@@ -16,6 +16,72 @@ This page owns system layers, ownership, flows, concurrency, persistence, and de
 - Dependencies point from composition toward domain and adapters.
 - Nuubot4 process remains canonical unless the user approves a change.
 
+## Approved Target Bot Architecture
+
+Status: Approved design. Not implemented.
+
+One configured Bot selects one exact compiled BotSpec and stores its exact
+BotConfig TOML in the database.
+
+Start creates one immutable BotGeneration and admitted BotDefinition.
+
+```text
+Runner or BtRunner
+`-- Controller
+    |-- Signaler
+    |-- Risk
+    `-- zero or one active BotCycle
+        `-- coordinated Executors
+```
+
+Runner, BtRunner, and SweepRunner are standalone programs.
+
+Server may launch and supervise them, but execution never requires Server.
+
+Live cross-process Account ownership, claims, persistence, and WebSocket
+sharing remain TBD.
+
+Controller owns Signaler and Risk for its complete generation.
+
+They remain active across BotCycles and flat intervals.
+
+Signaler reports strategy state like a traffic light.
+
+Risk reports gates and exits like a second signal source.
+
+Neither component performs lifecycle or trading mutations.
+
+Controller alone arbitrates:
+
+- Strategy entry and exit signals.
+- Risk gates and exits.
+- Whether one BotCycle is active.
+- Account-symbol availability.
+- Capital, Meta, and market-data admission.
+- BotCycle and Controller Stop.
+
+One BotCycle is one exchange-style Bot campaign.
+
+Every Executor in that cycle starts as one unit and receives the same strategy Signal.
+
+Executors may monitor or place Orders independently according to their fixed BotSpec roles.
+
+Every Executor uses one distinct Account-symbol resource.
+
+The same Account-symbol cannot appear twice inside one Bot.
+
+An explicit exit condition starts BotCycle Stop.
+
+Flatness never triggers exit.
+
+BotCycle completes only after Stop and authoritative proof of zero active Orders
+and zero positions for every used Account-symbol.
+
+See [BotSpec](design/concepts/bot-spec.md),
+[Runtime and approved Controller hardcut](design/packages/runtime.md),
+[Signaler](design/packages/signaler.md), [Risk](design/packages/risk.md), and
+[BotCycle](design/packages/botcycle.md).
+
 ## Implemented BtRunner
 
 ```text
@@ -126,126 +192,84 @@ BtRunner loop
 
 Detailed behavior remains in [BtRunner](design/packages/btrunner.md) and [Replay](design/concepts/replay.md).
 
-## Approved Live Ownership
-
-This architecture is approved but unimplemented.
+## Approved Process Boundaries
 
 ```text
-Server
-|-- DataEngine
-|-- ProcessStore
-|-- BotManager
-|   `-- Runner
-|       |-- WallClock
-|       |-- subscriptions and local feed state
-|       `-- Runtime
-|           |-- RuntimeStore
-|           |-- Signaler
-|           |-- Risks
-|           `-- active BotCycle
-|               `-- Executors
-|                   `-- Accounts
-|                       |-- Venue
-|                       `-- Ledger
-|                           `-- Trades
-|                               `-- Orders
-|                                   `-- Fills
-|-- SweepManager
-`-- PocketBase
-    |-- HTTP web server
-    |-- API routes
-    |-- authentication and authorization
-    |-- administration dashboard
-    |-- realtime subscriptions
-    |-- Nuubot trading and reporting routes
-    |-- Nuubot web assets
-    `-- writable SQLite
+direct
+  Runner -> Controller
+  BtRunner -> Controller
+  SweepRunner -> bounded BtRunner workers
+
+optional Server
+  API -> BotManager -> process supervision -> Runner
+  API -> SweepManager -> process supervision -> SweepRunner
 ```
 
-Server owns shared process resources and service lifecycles.
+Server is the master PocketBase-style application process.
 
-BotManager owns active Runner lifecycles. SweepManager owns Sweep coordination.
+It owns WebServer, thin API, BotManager, SweepManager, Datastore, bootstrap
+checks, and process supervision.
 
-Server owns one embedded PocketBase application.
+API forwards requests.
 
-PocketBase owns the HTTP server, API assembly, authentication, administration,
-realtime subscriptions, migrations, SQLite connections, and physical write
-serialization.
+Managers own domain validation and choose their data sources.
 
-Nuubot owns the trading interface, operational dashboards, analytics, reports,
-and their application routes.
+BotManager never constructs Controller.
 
-DataEngine owns shared external data acquisition, validation, connection reuse, and multiplexing.
+SweepManager never expands permutations or imports BtRunner.
 
-Runner owns subscriptions, local feed state, WallClock, and one Runtime.
+SweepRunner owns expansion, cancellation, bounded workers, and aggregation.
 
-DataEngine MUST NOT call Runtime. Runner routes subscribed events through Runtime.
+BtRunner owns one child Bot replay.
 
-Runtime owns RuntimeStore. RuntimeStore persists Runtime and BotCycle state only.
+Server failure does not automatically stop healthy standalone execution.
 
-Runtime owns decisions but does not own Accounts.
+Shared exchange WebSockets, monitoring, safety switches, process reconnection,
+and live Account claims remain TBD.
 
-BotCycle owns Executors. Each Executor owns its Accounts.
+## Target Live Flow
 
-Each Account owns one Venue and one Ledger.
-
-Ledger owns Trades. Each Trade owns Orders. Each Order owns Fills.
-
-Venue owns external or simulated execution truth. Ledger owns local evidence.
-
-Simulator implements Venue behavior and stores venue-shaped truth only.
-
-## Approved Live Flow
-
-### BBO
+Status: Transport ownership remains TBD.
 
 ```text
-Venue feed
-  -> DataEngine
-  -> Runner subscription and local state
-  -> Runtime
+validated Venue event
+  -> standalone Runner local feed state
+  -> Controller
   -> BotCycle
   -> Executors
 ```
 
-BBO events support responsive stop-loss and trailing-stop decisions.
+Runner must obtain required live inputs without requiring Server.
 
-Runtime evaluates decisions during its configured synchronous Run.
-
-### User Events and Reconciliation
+A future Server-owned shared feed may serve supervised Runners only if direct
+Runner execution remains complete.
 
 ```text
-user event
-  -> DataEngine
-  -> Runner
-  -> Runtime
-  -> BotCycle
-  -> Executor
-  -> Account marks itself recon-dirty
-
 reconciliation cadence
-  -> Runtime
+  -> Controller
   -> BotCycle
   -> Executor
   -> Account reconciles Venue into Ledger
-  -> AccountSnapshot returns upward
+  -> immutable AccountSnapshot returns upward
 ```
 
 Dirty state clears only after successful reconciliation.
 
-Runtime receives snapshots. It MUST NOT reach into Account, Ledger, Trade, Order, or Fill state.
+Controller receives values. It never reaches into Account, Ledger, Trade,
+Order, or Fill state.
 
 ## Concurrency
 
 Current BtRunner execution is synchronous.
 
-Future DataEngine readers may use owned goroutines for external connections.
+Future live transport readers may use owned goroutines for external
+connections.
 
 Every goroutine MUST have one owner, stop condition, context, and error path.
 
-Runner serializes external events and clock events into Runtime calls.
+Runner serializes external events and clock events into Controller calls.
 
-Runtime policy remains synchronous.
+Controller policy remains synchronous.
 
 This is not an HFT design. Bounded polling and clear ownership take priority.
 
@@ -255,7 +279,7 @@ Parquet files, database rows, and venue messages are untrusted inputs.
 
 Boundary packages validate shape, identity, timestamps, prices, quantities, and sequence before returning trusted Go values.
 
-Runtime MUST NOT decode Parquet, query Sweep storage, or parse venue messages.
+Controller MUST NOT decode Parquet, query Sweep storage, or parse venue messages.
 
 Each concrete Signaler loads validated OHLCV through the `ohlcv` package.
 
@@ -265,10 +289,10 @@ Venue normalizes external outcomes. Account reconciles them into Ledger evidence
 
 Current BtRunner reads Bot configuration from SQLite and market data from Parquet.
 
-Approved live persistence separates:
+Earlier live persistence planning separates:
 
 - ProcessStore for process and manager state.
-- RuntimeStore for Runtime, BotCycle, and executor records.
+- RuntimeStore for Controller, BotCycle, and Executor records.
 - Account persistence for Ledger, Trade, Order, and Fill evidence.
 - Simulator persistence for venue-shaped simulated state.
 
@@ -288,20 +312,22 @@ ResultPublisher atomically creates its final database only after success.
 
 Before teardown, Account evidence moves upward as immutable owned values.
 
-Runtime retains these values, not descendant pointers.
+Controller retains these values, not descendant pointers.
 
-ResultPublisher writes `none` evidence only after successful Runtime shutdown.
+ResultPublisher writes `none` evidence only after successful Controller shutdown.
 
 The existing SQLite Sweep database remains the read-only backtesting datastore.
 
-One Server-owned PocketBase application owns the writable SQLite database for
-live, simulator, and paper operation.
+One Server-owned PocketBase application owns the Server writable SQLite
+database.
 
 PocketBase queues writes through one write connection. SQLite WAL permits
 concurrent reads while a write transaction runs.
 
-Runners and Bots use Server-owned store operations. They MUST NOT open the
-PocketBase database directly.
+Runner, BtRunner, and SweepRunner must remain independently executable while
+Server is stopped.
+
+Their exact saved-Config reads and status writes remain TBD.
 
 Nuubot owns domain transactions, conditional transitions, generations,
 idempotency, and unique trading identities.

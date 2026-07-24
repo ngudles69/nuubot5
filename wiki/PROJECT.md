@@ -4,9 +4,11 @@
 
 Nuubot5 tests whether simple, idiomatic Go can support a fast and stable trading system.
 
-Current proof covers historical replay, signals, BotCycles, observer execution, and a risk stub.
+Current proof covers historical replay, signals, BotCycles, ObserverExecutor,
+Simulator-backed TradeExecutor, Account reconciliation, Ledger evidence,
+result publication, and a Risk stub.
 
-Live trading, accounting, persistence, simulation, and server behavior remain approved but unimplemented.
+Live trading and Server behavior remain unimplemented.
 
 ## Language
 
@@ -47,6 +49,10 @@ Do not modify a reference repository without explicit user authority.
 - TickClock-driven Runtime passes.
 - Macross and RSI signalers.
 - ObserverExecutor stop-loss behavior.
+- Simulator-backed TradeExecutor.
+- Account, Ledger, Trade, Order, and Fill reconciliation.
+- Simulator venue-shaped execution.
+- Per-Bot result publication.
 - BalancedRisk stub.
 - Reader-exhaustion shutdown through BtRunner.
 - Exact replay and semantic completion checks.
@@ -55,17 +61,22 @@ Do not modify a reference repository without explicit user authority.
 
 - `nuubot-server`, `nuubot-cli`, and `nuubot-runner` command shells reserve
   canonical executable names and print `Under Construction.`.
-- Live Runner, DataEngine, and live events.
+- Live Runner and live event handling.
 - Server, API, web server, BotManager, and SweepManager.
-- Account, Ledger, Trade, Order, Fill, Venue, and Simulator.
-- Execution, reconciliation, recovery, and CLOID handling.
-- RuntimeStore, ProcessStore, RunnerControl, and ResultPublisher.
+- Standalone SweepRunner.
+- Live Venue execution, recovery, and CLOID handling.
+- ProcessStore and RunnerControl.
 - PocketBase-backed HTTP, API, authentication, administration, realtime, and
   SQLite persistence.
+- Exact BotSpec, stored TOML BotConfig, Controller hardcut, and approved Result
+  hierarchy.
 
-Approved design does not authorize implementation, dependencies, transport, or schema choices.
+Only the explicitly approved implementation sequence authorizes target work.
 
 The three command shells do not prove their named systems are implemented.
+
+DataEngine and RuntimeStore remain candidates. Their ownership and final scope
+are unresolved.
 
 ## Success Contract
 
@@ -114,8 +125,7 @@ This evidence selects `-tags noasm`. It does not identify the dependency fault.
 
 SQLite is approved for backtesting.
 
-PocketBase-owned SQLite is approved for future live, simulator, and paper
-operation.
+PocketBase-owned SQLite is approved for future Server persistence.
 
 One embedded PocketBase application in `nuubot-server` owns the writable
 database, web server, API, authentication, administration, and realtime.
@@ -123,9 +133,11 @@ database, web server, API, authentication, administration, and realtime.
 Nuubot owns the trading interface, operational dashboards, analytics, and
 reports.
 
-Runners and Bots MUST NOT open the PocketBase database directly.
+Runner, BtRunner, and SweepRunner must remain independently executable while
+Server is stopped.
 
-Physical schemas, migrations, and result publication remain unresolved.
+Standalone saved-Config reads, status writes, physical schemas, and migrations
+remain unresolved.
 
 Writable output MUST remain inside this repository or an explicitly approved datastore.
 

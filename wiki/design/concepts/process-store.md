@@ -2,7 +2,8 @@
 
 Status: Approved — unimplemented.
 Covers: No implemented source.
-Purpose: Persist standalone process identity, command reservation, health, and bounded restart evidence.
+Purpose: Persist supervised process identity, command reservation, and health
+evidence.
 
 ## Canonical Sources
 
@@ -24,8 +25,7 @@ ProcessStore owns no operating-system process and no Runner.
 - Reserve one start or control action atomically.
 - Record process identity and generation.
 - Record health observations and command completion.
-- Expose restart eligibility from durable evidence.
-- Mark dead, exhausted, failed, or terminal processes.
+- Mark observed process state.
 - Reject stale generations and duplicate actions.
 
 ## Does Not
@@ -41,11 +41,15 @@ ProcessStore owns no operating-system process and no Runner.
 - Process identity includes enough evidence to reject PID reuse.
 - One generation owns one active command.
 - Command completion matches its reservation.
-- Restart counters are durable and bounded.
 
 ## Required Proof
 
 - Concurrent starts reserve one winner.
 - Stale generations cannot complete current commands.
 - PID reuse fails identity checks.
-- Restart exhaustion remains durable.
+
+## Open Decisions
+
+- Server reconnection to independently started processes.
+- Automatic restart and recovery policy.
+- Standalone process status publication while Server is stopped.

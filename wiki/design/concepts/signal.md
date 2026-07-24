@@ -107,3 +107,61 @@ Replay performs no JSON decoding in its hot loop.
 - Packages are ordered by increasing availability time.
 - Package time never exceeds query time.
 - Signaler never tracks Executor consumption.
+
+## Approved Target Meaning
+
+Status: Approved target design. Not implemented.
+
+Strategy Signal remains an immutable, timestamped strategy fact.
+
+It behaves like a traffic-light indication.
+
+Controller alone interprets it.
+
+Target actions are:
+
+```text
+NoAction
+StartCycle
+StopCycle
+```
+
+`NoAction` starts nothing and does not stop an existing BotCycle.
+
+`StartCycle` starts one complete BotCycle only when Controller is idle and every
+admission gate passes.
+
+`StopCycle` requests exit of the active BotCycle.
+
+Signaler cannot stop Controller.
+
+Controller may ignore `StartCycle` because of Risk, Account, Meta, capital, or
+stop-state gates.
+
+Every Executor receives the same Signal.
+
+The Signal never selects an Executor subset.
+
+Symbol, side, Account, capital, and Order sizing belong to each fixed Executor
+definition.
+
+The latest strategy action remains current until replaced.
+
+While one BotCycle runs, further `StartCycle` actions do nothing.
+
+After completion, Controller checks the current action on the next control
+event.
+
+If it remains `StartCycle` and Risk permits, Controller may start another
+BotCycle.
+
+Controller never restarts a BotCycle in the same event or timestamp.
+
+There is no Signal queue and no fresh crossover requirement.
+
+Risk uses a separate typed signal contract.
+
+Risk and strategy signals remain distinct because their inputs, meanings,
+evaluation order, and fail-closed behavior differ.
+
+See [BotSpec](bot-spec.md).

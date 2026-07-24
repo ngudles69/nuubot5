@@ -11,41 +11,46 @@ Purpose: Run one stored live, testnet, paper, or simulator Bot.
 
 ## Scope
 
-Runner owns one Bot's live inputs, local feed state, clock, Runtime, supervision, and terminal evidence.
+Runner is one standalone process.
+
+It owns one Bot's live inputs, local feed state, clock, Controller, supervision,
+and result evidence.
 
 ## Owner and Children
 
-BotManager owns Runner.
+The command owns Runner.
+
+BotManager may launch and supervise the same standalone program.
 
 Runner directly owns:
 
 - one WallClock;
-- one Runtime;
-- DataEngine subscriptions;
+- one Controller;
+- required process-local live inputs;
 - local BBO, bar, and user-event state; and
 - Runner-owned background work.
 
 ## Responsibilities
 
 - Load and validate one stored Bot.
-- Build Runtime from admitted configuration.
-- Request required DataEngine subscriptions.
-- Bootstrap required bars before opening Runtime admission.
-- Deliver validated bars and BBO values to Runtime.
+- Build Controller from admitted configuration.
+- Obtain required live subscriptions without requiring Server.
+- Bootstrap required bars before opening Controller admission.
+- Deliver validated bars and BBO values to Controller.
 - Mark the matching Account recon-dirty from user events.
 - Trigger fast BBO checks and slower reconciliation requests.
-- Supervise its clock, subscriptions, Runtime, and completion.
-- Stop new input before Runtime teardown.
-- Publish lifecycle and terminal status through RuntimeStore.
+- Supervise its clock, subscriptions, Controller, and completion.
+- Stop new input before Controller teardown.
+- Publish its own lifecycle and result evidence.
 
 ## Does Not
 
-- Share mutable Runtime state with DataEngine.
+- Share mutable Controller state with feed transport.
 - Decode venue WebSocket messages.
 - Implement signal, risk, execution, or reconciliation policy.
 - Own another Runner.
 - Manage Sweeps.
-- Expose Runtime descendants to Server or BotManager.
+- Expose Controller descendants to Server or BotManager.
 
 ## Lifecycle
 
@@ -53,11 +58,12 @@ Runner directly owns:
 
 `Init` loads its Bot and prepares direct children.
 
-`Start` establishes initial truth, starts Runtime, subscribes inputs, then starts WallClock.
+`Start` establishes initial truth, starts Controller, subscribes inputs, then starts WallClock.
 
 `Loop` supervises until stop, completion, or child failure.
 
-`Stop` closes time and event admission, releases subscriptions, stops Runtime, and records terminal evidence.
+`Stop` closes time and event admission, releases subscriptions, stops
+Controller, and records result evidence.
 
 ## Program Flow
 
@@ -65,41 +71,49 @@ Runner directly owns:
 Init
   load stored Bot
   create WallClock
-  create Runtime
-  obtain Runtime data requirements
+  create Controller
+  obtain Controller data requirements
   prepare local feed state
 
 Start
   bootstrap Bars
-  start Runtime
-  subscribe DataEngine
+  start Controller
+  subscribe live inputs
   register Clock timers
   start WallClock
   mark running
 
 Loop
   wait for feed events
-  supervise WallClock, subscriptions, Runtime, and stop request
+  supervise WallClock, subscriptions, Controller, and stop request
 
 Stop
   stop Clock admission
   cancel Runner work
-  unsubscribe DataEngine
-  stop Runtime
-  persist terminal status
+  release live subscriptions
+  stop Controller
+  persist result status
 ```
 
 ## Invariants
 
-- One Runner owns one Runtime.
-- Runtime admission opens only after initial truth exists.
+- One Runner owns one Controller.
+- Controller admission opens only after initial truth exists.
 - Feed work cannot execute trading policy.
 - Every background task has one owner, stop condition, and error path.
 
 ## Required Proof
 
-- Initial truth completes before Runtime admission.
+- Initial truth completes before Controller admission.
 - BBO and user events reach the correct Bot only.
 - User events mark state dirty without reconciling immediately.
 - Child failure reaches the Runner boundary.
 - Stop remains idempotent after successful Start.
+- Direct execution works while Server is stopped.
+
+## Open Decisions
+
+- Live cross-process Account-symbol claims.
+- Standalone status writes.
+- Shared versus process-local exchange WebSockets.
+- Server reconnection to independently started Runner processes.

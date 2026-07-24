@@ -131,3 +131,130 @@ That value contains ordered `account.Result` values captured during Executor shu
 BotCycle returns no Account, Ledger, Simulator, or Executor pointer.
 
 See [Trading State Tranche](../concepts/trading-state.md).
+
+## Approved Target Meaning
+
+Status: Approved target design. Not implemented.
+
+A BotCycle is one exchange-style Bot campaign.
+
+One accepted strategy Signal starts the complete BotCycle.
+
+BotCycle owns one coordinated Executor unit.
+
+Every configured Executor:
+
+- Initializes before any Venue mutation.
+- Starts with the BotCycle.
+- Receives the same immutable strategy Signal.
+- Runs its own configured market and Order logic.
+- Stops with the BotCycle.
+
+No Executor starts independently.
+
+No Executor responds to a separate strategy Signal.
+
+An Executor may remain running while it only monitors.
+
+Starting an Executor does not require placing an Order.
+
+Examples include:
+
+- Grid plus hedge.
+- Grid plus grid.
+- DCA plus hedge.
+- BTC trade plus ETH hedge.
+
+## Approved Exit Model
+
+Flat Account state does not trigger BotCycle completion.
+
+An explicit exit condition triggers BotCycle Stop.
+
+Exit sources may include:
+
+- Signaler regime change.
+- Risk cycle exit.
+- Executor price bounds.
+- Executor strategy objective.
+- User Stop.
+- Runner or replay boundary.
+- Fatal component failure.
+
+The detecting component returns an exit decision.
+
+It never stops siblings directly.
+
+Controller accepts the decision and starts BotCycle Stop.
+
+## Approved Stop and Completion
+
+```text
+accept exit decision
+enter stopping
+reject new strategy and Order actions
+request every Executor stop
+cancel remaining Orders through their owners
+close remaining positions through their owners
+reconcile every used Account-symbol
+prove zero active Orders
+prove zero position
+finish every Executor stop
+complete BotCycle
+```
+
+Flatness is a terminal proof, not an exit trigger.
+
+A BotCycle may monitor while flat for its entire active duration.
+
+A BotCycle may exit before placing any Order.
+
+BotCycle cannot complete successfully until authoritative reconciliation proves:
+
+- Zero active Orders for every used Account-symbol.
+- Zero position for every used Account-symbol.
+
+Cleanup failure produces unsuccessful terminal evidence.
+
+Signaler and Risk are Controller children.
+
+BotCycle Stop never stops or resets them.
+
+They remain active across BotCycles.
+
+Normal Executor exit conditions stop only the BotCycle.
+
+A fatal Executor error stops every Executor and ends the Controller generation
+after cleanup.
+
+No automatic restart follows a fatal Executor error.
+
+## Approved Result Evidence
+
+BotCycle Result records:
+
+- Bot and generation identity.
+- Cycle identity.
+- Exit source.
+- Exit reason.
+- Exit timestamp.
+- Final reconciliation timestamp.
+- Final flatness proof.
+- Cleanup success or failure.
+
+Result hierarchy is:
+
+```text
+ControllerResult
+  BotCycleResults
+    ExecutorResults
+```
+
+Every result is an immutable value.
+
+It preserves Bot, generation, cycle, and Executor identity.
+
+Account and Ledger evidence remains attributable to its exact Executor
+identity.
+
+Live cross-process Account ownership remains TBD.

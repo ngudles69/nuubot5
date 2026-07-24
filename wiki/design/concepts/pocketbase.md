@@ -34,16 +34,19 @@ Server owns one PocketBase application.
 
 That PocketBase application owns the writable SQLite database.
 
-Runners and Bots call Server-owned store operations.
+Runner, BtRunner, and SweepRunner remain independently executable while Server
+is stopped.
 
-Runners and Bots MUST NOT open the PocketBase database directly.
+The exact standalone read and status-publication boundary remains TBD.
+
+Controller never receives a PocketBase or database handle.
 
 The existing BtRunner Sweep database remains separate, read-only, and immutable.
 
 ## Write Flow
 
 ```text
-Bot or Runner
+Server Manager
   -> Server-owned store operation
   -> PocketBase transaction
   -> serialized SQLite write
@@ -124,5 +127,7 @@ Multiple PocketBase processes MUST NOT share one writable database.
 - Duplicate CLOIDs and venue events fail.
 - Stale Bot generations cannot mutate current state.
 - Failed multi-record operations roll back completely.
-- Runners have no direct writable database path.
+- Standalone process persistence follows the later approved boundary.
 - HTTP, API, authentication, administration, and realtime start and stop with Server.
+
+The persistence proof remains pending the standalone process decision.

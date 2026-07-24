@@ -215,7 +215,9 @@ Neither child detects Runner, Sweep, paper, or live mode.
 
 For `none`, ResultPublisher owns the final per-Bot SQLite path.
 
-Live Runner later uses Server-owned store operations.
+Standalone live Runner persistence remains TBD.
+
+Runner cannot require Server availability.
 
 Account never opens the Server-owned PocketBase database directly.
 

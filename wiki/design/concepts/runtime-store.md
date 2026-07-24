@@ -1,8 +1,9 @@
 # RuntimeStore
 
-Status: Approved — unimplemented.
+Status: Candidate only. Ownership and scope TBD.
 Covers: No implemented source.
-Purpose: Persist durable Bot, Runtime, BotCycle, signal, telemetry, and recovery evidence.
+Purpose: Retain the earlier RuntimeStore candidate without approving recovery,
+telemetry persistence, or standalone datastore ownership.
 
 ## Canonical Sources
 
@@ -11,43 +12,51 @@ Purpose: Persist durable Bot, Runtime, BotCycle, signal, telemetry, and recovery
 
 ## Scope
 
-RuntimeStore owns durable state transitions required by one live or simulated Runtime path.
+Standalone Runner persistence remains unresolved.
+
+Recovery and telemetry persistence remain deferred.
 
 ## Owner and Children
 
-Runner owns one RuntimeStore handle.
+Ownership is not approved.
 
-Runtime and Runner call narrow store operations. They do not own persistence mechanics.
+If retained, Runner and Controller may call narrow store operations.
 
 ## Responsibilities
 
-- Load one stored Bot and admitted configuration.
+Possible responsibilities requiring later approval:
+
 - Persist lifecycle transitions with expected prior state.
-- Record Signals and BotCycle identity.
+- Record Signal and BotCycle evidence.
 - Persist terminal BotCycle and Bot outcomes.
-- Write and read operator telemetry.
-- Return recovery state needed before admission.
 - Reject stale or contradictory transitions.
 
 ## Does Not
 
-- Decide Runtime policy.
+- Decide Controller policy.
 - Own process identity or operating-system liveness.
 - Reconcile Accounts.
 - Store secrets.
 - Expose datastore rows as mutable domain state.
 - Define database schema in this page.
+- Approve recovery or telemetry persistence.
 
 ## Invariants
 
 - Durable transitions are conditional and monotonic.
-- Recovery reads one coherent stored state.
-- Runtime errors cannot silently become successful terminal state.
+- Controller errors cannot silently become successful terminal state.
 - Store failures propagate to their lifecycle owner.
 
 ## Required Proof
 
 - Invalid prior states reject transitions.
 - Terminal writes are idempotent or reject duplicates clearly.
-- Recovery state recreates the same Bot identity and active cycle.
-- Telemetry cannot overwrite lifecycle truth.
+- Standalone Runner remains functional while Server is stopped.
+- Any later telemetry cannot overwrite lifecycle truth.
+
+## Open Decisions
+
+- Whether RuntimeStore exists.
+- Standalone Runner datastore ownership and writes.
+- Recovery state and policy.
+- Telemetry schema, cadence, and persistence.

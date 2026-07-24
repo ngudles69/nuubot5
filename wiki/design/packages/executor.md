@@ -194,3 +194,31 @@ TradeExecutor fails initialization when persisted Trades exist.
 Runner-owned Bot recovery remains pending.
 
 This prevents one Executor from trading before BotCycle admission completes.
+
+## Approved Capital and Resource Target
+
+Status: Approved target design. Not implemented.
+
+Each Executor receives one distinct Account-symbol resource and one admitted
+capital amount.
+
+Two Executors inside one Bot cannot use the same:
+
+```text
+venue
+network
+physical_account_id
+symbol
+```
+
+Direction does not change that rule.
+
+Each exact Executor Config owns its Order-sizing rule.
+
+The Executor enforces that planned Orders remain inside its admitted capital.
+
+A physical-Account percentage resolves once during Bot admission.
+
+Executor never recalculates it from changing Account equity.
+
+Live cross-process resource claim ownership remains TBD.

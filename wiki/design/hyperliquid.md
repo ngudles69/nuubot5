@@ -71,7 +71,9 @@ Account uses Hyperliquid through the common Venue boundary.
 
 Meta uses the Hyperliquid information client for raw exchange metadata.
 
-DataEngine uses the Hyperliquid WebSocket transport for live market and user events.
+The selected live transport owner uses the Hyperliquid WebSocket boundary.
+
+Shared versus process-local WebSocket ownership remains TBD.
 
 ## In
 

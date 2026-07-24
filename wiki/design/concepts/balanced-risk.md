@@ -84,3 +84,13 @@ Stop
 ## Open Decisions
 
 The actual balanced-risk rule is undefined and MUST NOT be inferred from the name.
+
+BalancedRisk is current proof scaffolding only.
+
+It MUST NOT be presented as active protection.
+
+The approved target lets each exact BotSpec construct one real persistent Risk
+module containing its supported gates and exit rules.
+
+BalancedRisk remains documented as a stub until an approved implementation
+hardcuts it from active defaults.

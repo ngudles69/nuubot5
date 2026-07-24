@@ -1,8 +1,9 @@
 # DataEngine
 
-Status: Approved — unimplemented.
+Status: Candidate only. Ownership TBD.
 Covers: No implemented source.
-Purpose: Acquire shared live market and user events once, validate them, and multiplex them to subscribed Runners.
+Purpose: Record the earlier shared live-event candidate while final transport
+ownership remains TBD.
 
 ## Canonical Sources
 
@@ -11,15 +12,21 @@ Purpose: Acquire shared live market and user events once, validate them, and mul
 
 ## Scope
 
-DataEngine owns shared WebSocket connections, subscription reference counts, message admission, reconnection, and typed event distribution.
+Shared live exchange connectivity remains TBD.
+
+If DataEngine is retained, it may own shared WebSocket connections,
+subscription reference counts, message admission, reconnection, and typed event
+distribution for Server-supervised Runners.
+
+It cannot become a required dependency of standalone Runner.
 
 ## Owner and Children
 
-Server owns DataEngine.
+Possible Server ownership remains unapproved.
 
-DataEngine owns one stream per admitted network and venue boundary.
+Standalone Runner must be able to own the live transport required for its Bot.
 
-Runner owns each Bot subscription and its local feed state.
+Public, private, venue, network, and Account sharing boundaries remain TBD.
 
 ## Responsibilities
 
@@ -71,10 +78,11 @@ upstream message
 - Reconnect restores only active subscriptions.
 - Subscription cleanup is idempotent.
 
-## Required Proof
+## Required Proof Before Approval
 
 - Shared BBO subscription creates one upstream requirement.
 - Invalid messages are rejected and counted.
 - Reconnect restores active subscriptions once.
 - Unsubscribe removes delivery without affecting remaining subscribers.
 - User events remain isolated by admitted account identity.
+- Standalone Runner remains fully functional while Server is stopped.

@@ -11,27 +11,30 @@ Purpose: Own operator-facing Bot configuration and lifecycle commands.
 
 ## Scope
 
-BotManager validates Bot requests, persists admitted Bot configuration, and coordinates Runner lifecycle through approved process boundaries.
+BotManager validates Server-side Bot requests, persists admitted Bot
+configuration, and coordinates standalone Runner processes.
 
 ## Owner and Children
 
 Server owns BotManager.
 
-BotManager owns active Runner handles when Runners share the Server process.
+RunnerControl owns process commands.
 
-RunnerControl owns commands when Runners use standalone processes.
+Runner owns Controller and every execution-local child.
 
 ## Responsibilities
 
 - Create, clone, read, list, update, archive, and delete stored Bots.
 - Validate complete Bot configuration before persistence.
-- Start, pause, resume, and stop one Bot through its lifecycle owner.
-- Return stable status and telemetry views.
+- Start and stop one Server-supervised Runner through RunnerControl.
+- Return stable status and available result views.
 - Reject invalid state transitions.
+- Retrieve static BotConfig templates from the exact BotSpec catalogue.
 
 ## Does Not
 
-- Call Runtime directly.
+- Construct or call Controller directly.
+- Import Runner internals.
 - Reconcile Accounts.
 - Manage Sweep Bots.
 - Decode live events.
@@ -44,6 +47,7 @@ RunnerControl owns commands when Runners use standalone processes.
 - One lifecycle owner controls one active Bot.
 - Stored configuration remains the restart source.
 - Commands are reserved and completed once.
+- Direct Runner execution remains valid without BotManager or Server.
 
 ## Required Proof
 
@@ -51,3 +55,10 @@ RunnerControl owns commands when Runners use standalone processes.
 - Duplicate start cannot create two active Runners.
 - Commands reach only the selected Bot.
 - Status reflects durable and live truth without exposing internals.
+- Direct Runner can complete without Server availability.
+
+## Open Decisions
+
+- Cross-process duplicate-start and Account-symbol claims.
+- Reconnection to independently started Runner processes.
+- Standalone Runner status publication while Server is stopped.

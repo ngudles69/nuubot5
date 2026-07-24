@@ -150,3 +150,124 @@ Live and testnet Account names resolve against the credentials catalog.
 Account validates only the selected credential before live Venue initialization.
 
 Config and Setup never log secret fields.
+
+## Approved Target Split
+
+Status: Approved target design. Not implemented.
+
+The current mixed Config receives a hardcut replacement.
+
+Target configuration ownership is:
+
+| Value | Owns |
+|---|---|
+| AppConfig | Server address, storage paths, logging, and operational infrastructure |
+| BotConfig | One exact BotSpec's supported trading parameters |
+| ReplayInput | Historical data source, symbols, dates, and replay controls |
+| Credentials | Secret values resolved only through non-secret Account references |
+
+AppConfig cannot change Bot trading behavior.
+
+`NUUBOT_CONFIG` may select AppConfig only.
+
+Replay cadence affecting Results belongs to ReplayInput.
+
+Network and Account selection belong to exact BotConfig fields.
+
+## Approved BotConfig Source
+
+TOML is a generic user form.
+
+Each exact BotSpec owns one TOML template and decoder.
+
+After validation, the database stores:
+
+```text
+bot_spec_id
+config_toml
+config_hash
+```
+
+The database value is authoritative after configuration.
+
+Controller never reads the imported TOML file.
+
+BotGeneration stores one immutable copy of the exact TOML and hash.
+
+The running process decodes only that saved copy.
+
+JSON is not a second persisted BotConfig representation.
+
+See [BotSpec](../concepts/bot-spec.md).
+
+## Approved Validation
+
+The exact BotSpec decoder:
+
+- Requires every required field.
+- Validates every recognized field's type and value.
+- Allows additional fields and sections.
+- Preserves additional fields in the stored TOML.
+- Ignores unrecognized fields.
+- Rejects duplicate TOML keys.
+
+An ignored field never gains meaning under the same BotSpecID.
+
+Supporting it later requires another exact BotSpecID and Config.
+
+There is no fallback, migration, alias, or compatibility decoder.
+
+Config contains credential references only.
+
+It never contains private credentials.
+
+## Approved Component Selection
+
+BotConfig does not select arbitrary Signaler, Risk, or Executor kinds.
+
+The exact BotSpec selects the complete Controller structure.
+
+Config supplies supported parameters such as:
+
+- Symbols.
+- Sides.
+- Grid levels.
+- Hedge triggers.
+- Indicator periods.
+- Approved filter choices.
+- Risk thresholds.
+- Account references.
+
+Unsupported component combinations require another BotSpec.
+
+## Approved Capital and Sizing
+
+Each Executor's Config declares capital for its Account-symbol resource.
+
+The Executor owns its Order-sizing rule.
+
+Supported exact BotSpecs may use fixed quantity, fixed quote amount, percentage
+of assigned capital, or percentage of physical Account.
+
+A physical-Account percentage resolves once during admission.
+
+The admitted fixed amount never changes because another Bot changes Account
+equity.
+
+Bot capital is the sum of admitted Executor capital in one reporting currency.
+
+Order plans exceeding assigned capital fail admission.
+
+Capital is not physical Account equity.
+
+Cross-process capital reservation remains TBD.
+
+## Approved Static Template
+
+Each exact BotSpec owns one static canonical commented TOML template.
+
+The template includes the exact BotSpecID, field units, valid options, safe
+defaults, and credential references only.
+
+No reflection generator, schema-driven custom form, or dynamic template system
+is approved.

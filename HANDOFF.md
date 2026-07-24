@@ -1,10 +1,11 @@
 # Handoff
 
-Last updated: 2026-07-25 00:10:31 +08:00
+Last updated: 2026-07-25 03:32:04 +08:00
 
 ## Focus
 
-User review of structure suggestions v2 and the implemented Simulator-first trading transaction flow.
+Reconcile the complete approved target design, audit it adversarially, commit
+and push the design checkpoint, then implement and prove the backtest path.
 
 ## Published baseline
 
@@ -111,14 +112,54 @@ Commit: `a8be81e`
 - 1x log: `workspace/logs/nuubot5-trtest-s9-b13-1-20260724T120251Z.log`.
 - 2x log: `workspace/logs/nuubot5-trtest-s9-b13-2-20260724T120340Z.log`.
 - 10x log: `workspace/logs/nuubot5-trtest-s9-b13-10-20260724T120354Z.log`.
+- Pre-documentation baseline was clean and synchronized at `cd553dc`.
+- `git push` confirmed `Everything up-to-date` before documentation changed.
+- Changed Markdown local-link validation passes across all 30 files.
+- Documentation diff and whitespace checks pass.
+- Documentation audit round one found four stale-page contradictions.
+- Round-one fixes made live transport owner-neutral, made RuntimeStore a
+  candidate, aligned PocketBase ownership, and corrected the proof scope.
+- Documentation audit round two passed across all 30 changed Markdown files.
+- The reviewer found no remaining material contradiction, missing proof, or
+  documentation bloat.
 
 ## Active work
 
-- None.
+- Documentation reconciliation is active.
+- Documentation reconciliation and its adversarial audit are complete.
+- Maximum three documentation audit and fix rounds.
+- No code changes begin before documentation passes and the design checkpoint
+  is committed and pushed.
+
+## Approved target design
+
+- BotSpec owns one complete Controller architecture and exact TOML schema.
+- BotSpecID is opaque. No version, fallback, alias, or compatibility path exists.
+- Database TOML is authoritative after configuration.
+- Controller owns persistent Signaler and Risk across BotCycles.
+- Signaler reports strategy state. Risk reports gates and exits. Controller acts.
+- One BotCycle is one coordinated exchange-style Bot campaign.
+- Explicit exit triggers Stop. Reconciled flatness permits successful completion.
+- Main live gates cover active Bot claims, clean Venue state, capital, Meta, and symbols.
+- Controller supports exactly one active BotCycle.
+- Signal actions are NoAction, StartCycle, and StopCycle.
+- Risk decisions are Allow, BlockCycleStart, StopCycle, and StopController.
+- Each Executor owns configured capital and Order sizing.
+- Every Executor uses one distinct Account-symbol resource.
+- Runner, BtRunner, and SweepRunner remain standalone programs.
+- Server is an optional master application and process-control host.
+- BotManager launches standalone Runner. SweepManager launches standalone
+  SweepRunner.
+- SweepRunner owns expansion and bounded BtRunner workers.
+- Sweeps are reusable, have no terminal identity, and never recover partial
+  execution.
+- Static commented TOML belongs to the exact BotSpec.
+- Current implementation remains unchanged.
 
 ## Pending user review
 
 - Structure suggestions v2
+- Approved target design documentation
 - Account
 - Ledger
 - Trade
@@ -131,15 +172,19 @@ Commit: `a8be81e`
 
 ## Pending user approval
 
-- None.
+- None for the authorized documentation, implementation, audit, and proof
+  sequence.
 
 ## Blockers
 
-- None.
+- Live cross-process Account claims, standalone status writes, exchange
+  WebSocket sharing, and Server reconnection remain TBD.
+- They do not block the authorized standalone backtest implementation.
 
 ## Next action
 
-User reviews `audits/07-25-suggestions_v2.md` or selects one entity for code review.
+Commit and push the verified design checkpoint, then begin the approved
+backtest architecture hardcut.
 
 Go toolchain:
 

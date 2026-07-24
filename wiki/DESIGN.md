@@ -125,15 +125,38 @@ Nuubot admits only required, audited code. It does not import or preserve either
 
 Package pages state their implemented and pending boundaries.
 
+## Approved Target Design
+
+These contracts are approved but not implemented.
+
+| Target | Owner |
+|---|---|
+| Exact complete BotSpec and stored TOML BotConfig | [BotSpec](design/concepts/bot-spec.md) |
+| Runtime-to-Controller hardcut and decision ownership | [Runtime](design/packages/runtime.md) |
+| Persistent traffic-light strategy source | [Signaler](design/packages/signaler.md) |
+| Persistent Risk gates and exit source | [Risk](design/packages/risk.md) |
+| Coordinated exchange-style campaign and flat-stop proof | [BotCycle](design/packages/botcycle.md) |
+| AppConfig, BotConfig, ReplayInput, and Credentials split | [Config](design/packages/config.md) |
+| Typed saved-Config and fail-closed Meta admission | [Setup](design/packages/setup.md) |
+| Stored TOML and active Account-symbol claims | [Datastore](design/packages/datastore.md) |
+| Standalone Runner, BtRunner, and SweepRunner execution | [Runner](design/concepts/runner.md) |
+| Thin Server API and Manager-to-process boundaries | [Server](design/concepts/server.md) |
+| Reusable Sweep definition and standalone execution | [SweepManager](design/concepts/sweep-manager.md) |
+| ControllerResult, BotCycleResult, and ExecutorResult hierarchy | [BotCycle](design/packages/botcycle.md) |
+
+Current implementation sections remain authoritative until each approved
+hardcut is implemented and proven.
+
 ## Concepts
 
 | Concept | Purpose |
 |---|---|
 | [AccountSnapshot](design/concepts/account-snapshot.md) | Immutable account state. |
 | [BalancedRisk](design/concepts/balanced-risk.md) | Current balanced risk implementation. |
-| [BotManager](design/concepts/bot-manager.md) | Active Runner lifecycle ownership. |
+| [BotSpec](design/concepts/bot-spec.md) | Exact complete Bot design, TOML Config, and admission contract. |
+| [BotManager](design/concepts/bot-manager.md) | Server-side Bot requests and standalone Runner process control. |
 | [CLOID](design/concepts/cloid.md) | Deterministic client-order identity. |
-| [DataEngine](design/concepts/data-engine.md) | Shared market-data acquisition. |
+| [DataEngine](design/concepts/data-engine.md) | Earlier shared-feed candidate with ownership TBD. |
 | [Execution](design/concepts/execution.md) | Persist, submit, normalize, and reconcile flow. |
 | [Filesystem](design/concepts/filesystem.md) | Mutable workspace layout and deployment mount. |
 | [Hyperliquid](design/hyperliquid.md) | Internal Hyperliquid protocol boundary. |
@@ -150,14 +173,14 @@ Package pages state their implemented and pending boundaries.
 | [Replay](design/concepts/replay.md) | End-to-end historical replay flow. |
 | [Result publisher](design/concepts/result-publisher.md) | Terminal replay publishing. |
 | [RSI signaler](design/concepts/rsi-signaler.md) | RSI implementation. |
-| [Runner](design/concepts/runner.md) | Live Bot supervision. |
+| [Runner](design/concepts/runner.md) | Standalone live Bot supervision. |
 | [RunnerControl](design/concepts/runner-control.md) | Runner lifecycle commands. |
 | [Runtime store](design/concepts/runtime-store.md) | Runtime persistence boundary. |
-| [Server](design/concepts/server.md) | Shared service composition. |
+| [Server](design/concepts/server.md) | Optional master application host and process supervision. |
 | [Shutdown](design/concepts/shutdown.md) | Ordered resource release. |
 | [Signal](design/concepts/signal.md) | Immutable strategy decision. |
 | [Simulator parity](design/concepts/simulator-parity.md) | Exchange behavior and response parity boundary. |
-| [SweepManager](design/concepts/sweep-manager.md) | Sweep-level coordination. |
+| [SweepManager](design/concepts/sweep-manager.md) | Server-side Sweep requests and standalone SweepRunner control. |
 | [Toolkit](design/concepts/toolkit.md) | Portable package rules. |
 | [TradeExecutor](design/concepts/trade-executor.md) | First Account-owning Executor design. |
 | [Trading schema](design/concepts/trading-schema.md) | Per-Bot SQLite trading evidence DDL. |

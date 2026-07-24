@@ -97,10 +97,13 @@ Only `.db` is completed evidence.
 
 Failed runs retain no recoverable partial state and are rerun.
 
-PocketBase remains an unresolved consideration. Its adoption may change the
-main datastore engine, schema, filename, and access path.
+PocketBase-owned SQLite is approved for optional Server persistence.
 
-No design may assume PocketBase until the user approves it.
+Runner, BtRunner, and SweepRunner remain independently executable while Server
+is stopped.
+
+Standalone saved-Config reads, status writes, physical schemas, migrations,
+and database access paths remain unresolved.
 
 ## Logs
 
@@ -122,7 +125,7 @@ Shared market data may resolve outside this repository through
 
 ## Does Not
 
-- Select PocketBase or another main datastore engine.
+- Define PocketBase schemas or standalone access paths.
 - Define database schemas or migrations.
 - Move the current datastore into the target database layout.
 - Define Docker image or container paths.

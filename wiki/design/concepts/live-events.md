@@ -1,8 +1,9 @@
 # Live Event Process
 
-Status: Approved — unimplemented.
+Status: Candidate only. Transport ownership TBD.
 Covers: No implemented source.
-Purpose: Move admitted live BBO, bar, and user events into one Runner without moving trading policy into asynchronous work.
+Purpose: Record the owner-neutral live event flow without moving trading policy
+into asynchronous work.
 
 ## Canonical Sources
 
@@ -10,43 +11,43 @@ Purpose: Move admitted live BBO, bar, and user events into one Runner without mo
 
 ## Participants
 
-- DataEngine acquires, validates, and multiplexes external events.
+- The selected transport owner acquires and validates external events.
 - Runner owns subscriptions and local feed state.
-- Runtime consumes synchronous event and timer calls.
+- Controller consumes synchronous event and timer calls.
 - Account solely owns reconciliation-dirty state.
 
 ## Ordered Flow
 
 ```text
 BBO event
-  validate and publish typed BBO through DataEngine
+  validate and publish typed BBO through the selected transport
   update Runner-local BBO state
-  ask Runtime to evaluate responsive exits on fast Clock timer
+  ask Controller to evaluate responsive exits on fast Clock timer
 
 user event
-  validate account identity through DataEngine
+  validate account identity through the selected transport
   mark matching Account recon-dirty
-  ask Runtime to reconcile dirty Accounts on next recon timer
+  ask Controller to reconcile dirty Accounts on next recon timer
 
 bar event
-  validate completed Bar through DataEngine
+  validate completed Bar through the selected transport
   update Runner-local Bar state
-  admit Bar through Runtime Signaler boundary
+  admit Bar through Controller Signaler boundary
 ```
 
 ## Decisions
 
-DataEngine decides admission and subscriber routing.
+The selected transport owner decides message admission and routing.
 
 Runner decides which owned local state receives an event.
 
-Runtime decides stop-loss, Risk, recon, BotCycle, and execution actions.
+Controller decides stop-loss, Risk, recon, BotCycle, and execution actions.
 
 ## Failure Handling
 
 - Invalid events are rejected before local mutation.
 - Subscription failure reaches Runner.
-- Runtime failure reaches Runner supervision.
+- Controller failure reaches Runner supervision.
 - Dirty state clears only after successful reconciliation.
 
 WebSocket delivery is never required for final correctness.
@@ -72,3 +73,9 @@ This reduces Venue queries without making WebSocket delivery authoritative.
 - Recon waits for the Bot timer.
 - Failed recon preserves dirty state.
 - Event ordering and loss evidence remain observable.
+- Standalone Runner works while Server is stopped.
+
+## Open Decisions
+
+- Shared versus process-local exchange WebSockets.
+- Final transport owner and subscription-sharing boundary.

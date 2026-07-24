@@ -1,8 +1,9 @@
 # Recovery Process
 
-Status: Approved — unimplemented.
+Status: Candidate only. Not approved.
 Covers: No implemented source.
-Purpose: Rebuild durable Bot state, reconcile external truth, and reopen admission safely after interruption.
+Purpose: Retain the earlier live recovery candidate while standalone process
+ownership remains TBD.
 
 ## Canonical Sources
 
@@ -11,6 +12,13 @@ Purpose: Rebuild durable Bot state, reconcile external truth, and reopen admissi
 - Nuubot3: `D:/rust/nuubot3/nuubot/server/process.py`
 
 ## Participants
+
+This complete flow is not approved.
+
+Runner must remain independently executable while Server is stopped.
+
+Server reconnection, automatic restart, live Account claims, and standalone
+status persistence must be resolved before recovery design resumes.
 
 - Server identifies recoverable processes.
 - ProcessStore owns process and restart evidence.
