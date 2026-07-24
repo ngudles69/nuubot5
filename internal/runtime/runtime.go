@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/shopspring/decimal"
+
 	"nuubot/internal/botcycle"
 	"nuubot/internal/config"
 	"nuubot/internal/market"
@@ -25,6 +27,11 @@ type stats struct {
 	stopLossExits       uint64
 }
 
+// Result contains one immutable terminal Runtime result.
+type Result struct {
+	Cycles []botcycle.Result
+}
+
 // Runtime owns synchronous Bot decisions and its direct children.
 type Runtime struct {
 	log          *logging.Logger
@@ -33,6 +40,9 @@ type Runtime struct {
 	signaler     signaler.Signaler
 	risks        []risk.Risk
 	cycle        *botcycle.Control
+	cycleInputs  botcycle.Inputs
+	results      []botcycle.Result
+	lastBBO      market.BBO
 	stats        stats
 	lastSignalMS uint64
 	stopReason   string
@@ -47,6 +57,11 @@ func (r *Runtime) Init(log *logging.Logger, ctx setup.Context, end time.Time) er
 	r.log = log
 	r.config = ctx.Config.Runtime
 	r.symbol = ctx.Bot.Symbol
+	r.cycleInputs = botcycle.Inputs{
+		Meta:        ctx.Meta,
+		MinNotional: decimal.NewFromInt(int64(ctx.Config.Hyperliquid.MinOrderNotionalUSDC)),
+		ResultPath:  ctx.ResultPath,
+	}
 
 	// create signaler
 	var err error
@@ -96,6 +111,19 @@ func (r *Runtime) Run(nowMS uint64) (bool, error) {
 	}
 	r.stats.runs++
 
+	// check stop request
+	if r.stopReason != "" {
+		return true, nil
+	}
+
+	// reconcile botcycle
+	if r.cycle != nil {
+		var _, err = r.cycle.Reconcile(nowMS, false)
+		if err != nil {
+			return false, fmt.Errorf("reconcile bot cycle: %w", err)
+		}
+	}
+
 	// assess risk stops
 	for _, activeRisk := range r.risks {
 		if activeRisk.AssessStop() {
@@ -106,6 +134,14 @@ func (r *Runtime) Run(nowMS uint64) (bool, error) {
 	// check stop request
 	if r.stopReason != "" {
 		return true, nil
+	}
+
+	// deliver recon event
+	if r.cycle != nil {
+		var err = r.cycle.OnRecon(nowMS)
+		if err != nil {
+			return false, fmt.Errorf("deliver bot cycle recon: %w", err)
+		}
 	}
 
 	// check botcycle
@@ -222,6 +258,9 @@ func (r *Runtime) IngestBBO(bbo market.BBO) error {
 		return fmt.Errorf("runtime cannot ingest bbo from current state")
 	}
 
+	// record latest bbo
+	r.lastBBO = bbo
+
 	// ingest botcycle bbo
 	if r.cycle != nil {
 		var err = r.cycle.IngestBBO(bbo)
@@ -239,11 +278,13 @@ func (r *Runtime) IngestBBO(bbo market.BBO) error {
 func (r *Runtime) openCycle(signal signaler.Package) error {
 	// initialize botcycle
 	var cycle botcycle.Control
+	r.cycleInputs.LatestBBO = r.lastBBO
 	var err = cycle.Init(
 		r.log,
 		int(r.stats.cyclesStarted+r.stats.cyclesRejected+1),
 		r.signaler,
 		signal,
+		r.cycleInputs,
 		r.config.Executors,
 	)
 	if err != nil {
@@ -264,11 +305,25 @@ func (r *Runtime) closeCycle(reason string) error {
 	if err != nil {
 		return fmt.Errorf("stop bot cycle: %w", err)
 	}
+	r.results = append(r.results, cycle.Result())
 	r.stats.cyclesClosed++
 	if exitReason == "stop_loss" {
 		r.stats.stopLossExits++
 	}
 	return nil
+}
+
+// Result returns one independently owned terminal Runtime result.
+func (r *Runtime) Result() Result {
+	var result Result
+	for _, cycle := range r.results {
+		var copied = botcycle.Result{CycleNumber: cycle.CycleNumber}
+		for _, current := range cycle.Accounts {
+			copied.Accounts = append(copied.Accounts, current.Clone())
+		}
+		result.Cycles = append(result.Cycles, copied)
+	}
+	return result
 }
 
 func (r *Runtime) requestStop(reason string) {

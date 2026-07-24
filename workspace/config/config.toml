@@ -23,7 +23,7 @@ restart_interval_seconds = 600
 
 [paths]
 shared_data = "D:/workspace/data"
-sweep_database = "workspace/datastore/nuubot5_sweeps.db"
+database = "workspace/db/nuubot.db"
 
 [btrunner]
 timer_interval_ms = 10000
@@ -43,7 +43,7 @@ volume_period = 20
 
 [[runtime.executors]]
 kind = "observer"
-stop_loss_pct = 0.01
+stop_loss_pct = "0.01"
 
 [[runtime.risks]]
 kind = "balanced"

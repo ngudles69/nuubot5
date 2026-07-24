@@ -1,6 +1,6 @@
 # Executor Package
 
-Status: Implemented for current BBO paths. Proposed trading capabilities.
+Status: Implemented for ObserverExecutor and Simulator-backed TradeExecutor.
 Covers: `internal/executor/*.go`
 Purpose: Create initialized execution policies with explicit event capabilities.
 
@@ -47,7 +47,7 @@ Executor initialization receives:
 - Triggering Signal package.
 - Concrete Executor configuration.
 
-The proposed TradeExecutor context also receives:
+The TradeExecutor context also receives:
 
 - Latest admitted BBO.
 - Read-only credentials catalog.
@@ -78,11 +78,7 @@ BotCycle dispatches only supported capabilities.
 
 Unsupported events need no no-op methods.
 
-Recon and user-event handlers remain approved but unimplemented.
-
-Their event types and active paths do not exist yet.
-
-The next trading tranche proposes:
+The trading path adds:
 
 ```go
 type AccountReconciler interface {
@@ -183,7 +179,7 @@ Neither path performs the other's work.
 
 [ObserverExecutor](../concepts/observer-executor.md) is the current starting template.
 
-[TradeExecutor](../concepts/trade-executor.md) is the proposed Account-owning template.
+[TradeExecutor](../concepts/trade-executor.md) is the Account-owning template.
 
 ## Trading Constraint
 
@@ -192,5 +188,9 @@ Neither path performs the other's work.
 It must not submit Venue mutations.
 
 TradeExecutor submits only after the first successful recon event.
+
+TradeExecutor fails initialization when persisted Trades exist.
+
+Runner-owned Bot recovery remains pending.
 
 This prevents one Executor from trading before BotCycle admission completes.

@@ -121,7 +121,7 @@ Detailed validation of new shared configuration fields is deferred.
 
 Logging owns its directory and filenames. They are not configuration.
 
-## Proposed Trading Fields
+## Trading Fields
 
 TradeExecutor configuration adds:
 

@@ -1,7 +1,7 @@
 # Reconciliation
 
-Status: Approved — unimplemented. Refined by trading-state assessment.
-Covers: No implemented source.
+Status: Implemented for Simulator-backed Accounts.
+Covers: `internal/runtime`, `internal/botcycle`, `internal/executor`, `internal/account`, and `internal/ledger`
 Purpose: Create one coherent post-venue Account state before Risk or Executor decisions.
 
 ## Scope
@@ -105,7 +105,7 @@ Submission acknowledgements and Simulator mutations also mark their Account dirt
 
 A slower forced Run MUST reconcile every Account despite missing dirty hints.
 
-Exact cadences remain Runner configuration, not Account or Ledger policy.
+BtRunner uses its configured Runtime timer cadence.
 
 The first initialized Account starts dirty.
 
@@ -164,10 +164,4 @@ D:\rust\nuutrader6\src\nuubot\hcbots\account.py
 
 Nuubot3 lets Runtime iterate shared Accounts. Nuubot5 preserves the Nuubot4 Executor-owned traversal.
 
-## Recommendation
-
-Retain dirty and forced cadence behavior, but approve exact timer values with the live Runner design.
-
-Use one Account first.
-
-Do not generalize shared or multi-Account ownership in this tranche.
+Live Venue reconciliation and WebSocket dirty hints remain pending.

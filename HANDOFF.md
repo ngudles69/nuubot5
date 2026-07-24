@@ -1,118 +1,94 @@
 # Handoff
 
-Last updated: 2026-07-24 18:12:25 +08:00
+Last updated: 2026-07-24 20:04:39 +08:00
 
 ## Focus
 
-Complete the Hyperliquid clearinghouse slice and implementation-ready trading-state design.
+Simulator-first trading transaction flow is implemented and proven.
 
-## Current status
+## Published baseline
 
-- Published baseline remains commit `2b230ef`.
-- Current worktree contains the trading-state assessment and Hyperliquid clearinghouse slice.
-- `internal/hyperliquid` implements bounded testnet clearinghouse-state reads.
-- Private wire fields retain official Hyperliquid names.
-- Exported values use readable names and exact `decimal.Decimal` values.
-- `crossMaintenanceMarginUsed` maps to `MaintenanceMargin`.
-- `marginSummary.totalMarginUsed` maps to `Margin.MarginUsed`.
-- `cmd/parity-probe` and `internal/parity` are implemented.
-- `internal/parity/info` owns `/info` probes.
-- Implemented command shape:
-  `parity-probe <testnet|simnet> <account> <operation> [arguments...]`.
-- Implemented operation: testnet `clearinghouse-state`.
-- Simulator remains under `internal/simulator`.
-- Simnet probing waits for real Simulator clearinghouse behavior.
-- No fake Simulator adapter exists.
-- `persist_mode` is `none` or `max`.
-- Account passes one configured persistence mode to Ledger and Simulator.
-- `none` keeps both in memory until successful result publication.
-- `max` persists every accepted Ledger mutation and Simulator state change.
-- `none` opens no result database during Account execution.
-- ResultPublisher atomically publishes the final database only after success.
-- Hyperliquid history omission never deletes local Ledger evidence.
-- WebSocket `userEvents` mark Account dirty only.
-- Account solely owns reconciliation-dirty state.
-- Normal recon skips clean Accounts. Forced recon still queries every Account.
-- Only successful recon commits canonical lifecycle, position, and balance truth.
-- Permanent design:
-  [Hyperliquid Parity Probe](wiki/design/hyperliquid/parity.md).
-- Chief-of-staff review and tranche state remains in [DESIGN](wiki/DESIGN.md).
+- Commit `465f829` is pushed on `main`.
+- Current tranche is uncommitted.
 
-## Active agents
+## Current state
 
-- Root only.
+- Shared database is `workspace/db/nuubot.db`.
+- Shared database contains nine Sweeps, thirteen Bots, and mainnet Meta.
+- Meta contains 232 perpetual symbols.
+- Setup refreshes mainnet Meta after 24 hours.
+- Testnet never supplies Meta.
+- Sweep 9 and Bot 13 own the TradeExecutor proof.
+- Per-Bot results use `workspace/db/sweeps/sweep_9/bot_13.db`.
+- Setup, BtRunner, Runtime, and BotCycle retain their user-vetted structures.
 
-## Blockers
+## Implemented
 
-- None.
-
-## Files changed
-
-- `.gitignore`: admits source `internal/config/credentials.go`.
-- `internal/config/credentials.go`: existing credentials loader is now trackable.
-- `internal/hyperliquid/**`: REST transport, raw payload, decoding, decimals, and tests.
-- `internal/parity/**`: permanent harness, `/info` probe, evidence writer, and tests.
-- `cmd/parity-probe/main.go`: thin executable boundary.
-- `workspace/config/config.toml`: request timeout raised from 2 to 10 seconds.
-- `wiki/design/hyperliquid/**`: REST, parity, and captured JSON evidence.
-- Trading-state package and concept pages remain modified from the active assessment.
-- `wiki/DESIGN.md` catalogs all 24 internal package pages.
+- CLOID uses the Nuubot4 128-bit layout.
+- Account owns Simulator, Ledger, CLOID creation, normalization, and recon state.
+- Ledger owns Trade, Order, Fill, and account snapshots.
+- Simulator owns bracket matching, OCO, fees, PnL, and durable child state.
+- TradeExecutor owns one Account and one bracket Trade.
+- ResultPublisher writes completed memory-mode results through a partial database.
+- `none` persists only after successful completion.
+- `max` persists every accepted state change.
+- `max` reloads Ledger and Simulator child state only.
+- Full Bot resume remains pending Runner-owned orchestration cursors.
+- TradeExecutor fatally rejects persisted Trades until Runner recovery exists.
+- Simulator publishes memory only after successful maximum persistence.
+- Account repairs absent created or submitted Simulator Orders during recon.
+- BtRunner publishes completion only after ReplayReader and Runtime stop successfully.
+- Runtime performs recon before Executor decisions.
 
 ## Proof
 
-- Full tests passed for all 29 Go packages with `CGO_ENABLED=0` and `-tags noasm`.
-- Full `go vet -tags noasm ./...` passed.
-- `go mod tidy` is clean.
-- All 10 changed Go files pass `gofmt`.
-- All 36 changed Markdown files pass local-link checks.
-- `git diff --check` passed with line-ending warnings only.
-- Final adversarial re-audit passed with no material finding.
-- Malformed HTTP payload proof preserves raw bytes before decoding failure.
-- DDL applied twice and rejected cross-Ledger Order, Fill, and CLOID ancestry.
-- Approved testnet accounts `tgrid` and `thedge` returned HTTP 200.
-- `tgrid`: equity `172.232247`, positions `0`, duration `165 ms`.
-- `thedge`: equity `549.237687`, positions `0`, duration `150 ms`.
-- Go and `async_hyperliquid` field paths match for both accounts.
-- Values match exactly after excluding request-time field `time`.
-- Evidence:
-  `wiki/design/hyperliquid/json/info/clearinghouse-state/20260724-clearinghouse-baseline/testnet`.
+- Full Go tests pass with `CGO_ENABLED=0` and `-tags noasm`.
+- Go vet, module tidy, formatting, diff, and wiki-link checks pass.
+- TradeExecutor stability passed 13/13 attempted runs.
+- Replay processed 7,948,800 ticks and 794,880 Runtime passes.
+- Result contains 50 closed Trades, 151 Orders, and 100 Fills.
+- Result contains 50 Simulator states at schema version 2.
+- Shared and result database integrity checks pass.
+- Result foreign-key checks pass.
+- No partial result database remains.
+- Final 1x replay took 2,696 ms; process took 4,526 ms.
+- Final 2x averaged 2,481 ms replay and 3,011 ms process.
+- Final 10x averaged 2,505 ms replay and 3,021 ms process.
+- 10x suite took 34,052 ms.
+- Audit round one found material durability and recovery-boundary issues.
+- Accepted findings were fixed with focused failure and recovery tests.
+- Audit round two passed with no material finding or bloat.
+- 1x log: `workspace/logs/nuubot5-trtest-s9-b13-1-20260724T120251Z.log`.
+- 2x log: `workspace/logs/nuubot5-trtest-s9-b13-2-20260724T120340Z.log`.
+- 10x log: `workspace/logs/nuubot5-trtest-s9-b13-10-20260724T120354Z.log`.
 
-## Proof pending
+## Active work
 
-- Simulator parity, because Simulator is not implemented.
-- Non-empty testnet position capture.
-- Exchange mutations, signing, WebSocket, Account, Ledger, and recon implementation.
+- None.
 
-## Decisions
+## Pending user review
 
-- `cmd/parity-probe/main.go` owns only the process boundary.
-- `internal/parity` owns permanent probe orchestration.
-- Endpoint probes are grouped by real Hyperliquid endpoint.
-- Meta and clearinghouse operations belong under `internal/parity/info`.
-- Future exchange operations belong under `internal/parity/exchange`.
-- HTTP and WebSocket operations retain protocol vocabulary.
-- Empty lifecycle phases remain omitted.
-- Raw payloads and normalized state remain separate evidence.
-- Any returned raw payload is written before decoding.
-- HTTP mutation responses remain acknowledgement evidence until recon.
-- Exchange history is bounded. Missing rows never prove local evidence invalid.
-- Account filters Fill history from an inclusive cursor and bounded time range.
-- A capped or unproven history range blocks cursor advancement.
-- ResultPublisher writes `none` evidence only after successful completion.
-- Terminal evidence flows by owned value from Ledger and Simulator to ResultPublisher.
-- TradeExecutor captures results after shutdown recon and before Account teardown.
-- BotCycle collects cached results only after Executors stop.
-- Result values alias no mutable child state.
-- `parity-probe` has the sole operator exception to write tracked wiki evidence.
-- Credentials, API keys, and signing material never enter evidence.
+- Account
+- Ledger
+- Trade
+- Order
+- Fill
+- Simulator
+- TradeExecutor
+- Meta
+- ResultPublisher
 
 ## Pending user approval
 
 - Commit and push the completed tranche.
 
+## Blockers
+
+- None.
+
 ## Next action
 
-Await user authority to commit and push or begin the trading implementation tranche.
+Wait for user authority to commit and push.
 
 Go toolchain:
 

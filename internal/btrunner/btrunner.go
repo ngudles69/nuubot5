@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"nuubot/internal/replay"
+	"nuubot/internal/resultpublisher"
 	"nuubot/internal/runtime"
 	"nuubot/internal/setup"
 	"nuubot/internal/toolkit/clock"
@@ -212,14 +213,28 @@ func (r *BtRunner) Stop() error {
 		runtimeErr = fmt.Errorf("stop runtime: %w", runtimeErr)
 	}
 
+	// publish completed result
+	var publishErr error
+	if readerErr == nil && runtimeErr == nil && r.stats.replayCompleted {
+		publishErr = resultpublisher.Publish(r.runtime.Result())
+		if publishErr != nil {
+			publishErr = fmt.Errorf("publish result: %w", publishErr)
+		}
+	}
+
 	// report proof
+	var result = "failed"
+	if readerErr == nil && runtimeErr == nil && publishErr == nil &&
+		r.stats.replayCompleted {
+		result = "complete"
+	}
 	var memory stdruntime.MemStats
 	stdruntime.ReadMemStats(&memory)
 	r.log.Info(fmt.Sprintf(
 		"btrunner stopped loader=parquet ticks_served=%d ticks_expected=%d "+
 			"runs_triggered=%d runs_expected=%d first_ts_ms=%d last_ts_ms=%d "+
 			"replay_completed=%t replay_ms=%d heap_mb=%f total_alloc_mb=%f "+
-			"gc_runs=%d gc_pause_ms=%f result=complete",
+			"gc_runs=%d gc_pause_ms=%f result=%s",
 		r.stats.ticksServed,
 		r.stats.ticksExpected,
 		r.stats.runsTriggered,
@@ -232,6 +247,7 @@ func (r *BtRunner) Stop() error {
 		float64(memory.TotalAlloc)/(1<<20),
 		memory.NumGC,
 		float64(memory.PauseTotalNs)/1e6,
+		result,
 	))
 
 	// return stop errors
@@ -240,6 +256,9 @@ func (r *BtRunner) Stop() error {
 	}
 	if readerErr != nil {
 		return readerErr
+	}
+	if publishErr != nil {
+		return publishErr
 	}
 	if !r.stats.replayCompleted {
 		return fmt.Errorf("btrunner replay did not complete")

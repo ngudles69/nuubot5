@@ -1,7 +1,7 @@
 # CLOID
 
-Status: Approved — unimplemented.
-Covers: No implemented source.
+Status: Implemented and used by Account.
+Covers: `internal/cloid/*.go`
 Purpose: Encode and decode one fixed 128-bit Hyperliquid client Order identity.
 
 ## Scope
@@ -10,7 +10,7 @@ CLOID is a stateless utility.
 
 Account owns CLOID creation for domain Orders.
 
-Nuubot4 exports and tests the codec. Its current Runtime path does not call it.
+Account creates every submitted Simulator CLOID.
 
 ## Layout
 
@@ -88,6 +88,4 @@ D:\rust\nuubot3\wiki\account\account.md
 
 Nuutrader6 contains a different CLOID layout. Nuubot5 MUST use the Nuubot4 layout unless the user explicitly replaces it.
 
-## Recommendation
-
-Port Nuubot4's codec directly into safe, standard Go. Do not add compatibility or runtime wiring before Account needs it.
+The implementation uses safe standard Go with no compatibility decoder.

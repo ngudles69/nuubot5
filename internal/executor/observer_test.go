@@ -22,7 +22,7 @@ func TestObserverHandlesBBOAndRecordsStopLoss(t *testing.T) {
 		CycleNumber:    1,
 		ExecutorNumber: 1,
 		Signal:         signal,
-		Config:         config.Executor{Kind: "observer", StopLossPct: 0.01},
+		Config:         config.Executor{Kind: "observer", StopLossPct: "0.01"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -66,7 +66,7 @@ func TestObserverRejectsSignalWithoutOneEntry(t *testing.T) {
 		CycleNumber:    1,
 		ExecutorNumber: 1,
 		Signal:         testSignal(t, false, false),
-		Config:         config.Executor{Kind: "observer", StopLossPct: 0.01},
+		Config:         config.Executor{Kind: "observer", StopLossPct: "0.01"},
 	})
 	if !errors.Is(err, ErrRejected) {
 		t.Fatalf("actual error %v, expected admission rejection", err)

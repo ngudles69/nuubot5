@@ -1,7 +1,7 @@
 # Simulator Parity
 
-Status: Proposed assessment.
-Covers: No implemented source.
+Status: Internal behavior implemented. Frozen-output and testnet parity remain pending.
+Covers: `internal/simulator/*.go` and `internal/account/*.go`
 Purpose: Separate Hyperliquid behavior, SDK-visible responses, and Nuubot domain evidence.
 
 ## Verdict
@@ -14,7 +14,7 @@ Nuutrader6 supplies the proven exchange behavior.
 
 `async_hyperliquid` supplies the client-visible response contract used by Nuutrader6.
 
-Nuubot5 rewrites both contracts in Go.
+Nuubot5 implements the current Simulator and domain contracts in Go.
 
 ## Three Contracts
 
@@ -138,9 +138,9 @@ Simulator-only diagnostics remain outside protocol responses.
 
 Ledger stores normalized domain evidence and optional source evidence.
 
-## Proven Evidence
+## Current Evidence
 
-Resting long and short bracket responses have frozen testnet and Simulator parity.
+Historical references contain resting long and short bracket parity evidence.
 
 Both return `resting`, `waitingForFill`, and `waitingForFill`.
 
@@ -150,7 +150,7 @@ Those responses return `filled`, `waitingForTrigger`, and `waitingForTrigger`.
 
 Nuutrader6 implements parent activation, trigger matching, reduce-only protection, and OCO sibling cancellation.
 
-The strict post-trigger fixtures are Simulator-only evidence.
+Go tests prove immediate entry, TP, SL, OCO, reduce-only, and final flattening behavior.
 
 Fresh Hyperliquid testnet proof remains required for post-trigger history and sibling cancellation.
 
@@ -169,7 +169,7 @@ D:\rust\nuutrader3-web\research\fixtures\hype\phase-13-simnet-primitive-suite\20
 ## Proof Ladder
 
 1. Lock Go protocol types to frozen response fixtures.
-2. Run deterministic Simulator bracket tests.
+2. Deterministic Simulator bracket tests. Complete.
 3. Compare Simulator and frozen testnet response structures.
 4. Compare domain reconciliation from both evidence sources.
 5. Run controlled Hyperliquid testnet bracket parity.

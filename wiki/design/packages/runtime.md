@@ -1,6 +1,6 @@
 # Runtime Package
 
-Status: Implemented. Proposed trading control-order extension.
+Status: Implemented with reconciliation-first trading control.
 Covers: `internal/runtime/runtime.go`
 Purpose: Run one configured Bot and own its direct control children.
 
@@ -64,8 +64,11 @@ Start
   start runtime
 
 Run
+  check stop request
+  reconcile botcycle
   assess risk stops
   check stop request
+  deliver recon event
   check botcycle
   check max cycles
   read signal
@@ -120,7 +123,7 @@ Runtime stop closes any remaining cycle gracefully.
 
 Reaching `max_cycles` stops Runtime after the final cycle closes.
 
-## Proposed Trading Control Order
+## Trading Control Order
 
 Runtime stores the latest admitted BBO.
 
@@ -131,6 +134,7 @@ Run
   check stop request
   reconcile botcycle
   assess risk
+  check stop request
   deliver recon event
   check botcycle
   check max cycles

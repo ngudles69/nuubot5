@@ -1,7 +1,7 @@
 # Simulator Package
 
-Status: Reserved. Proposed next-tranche design.
-Covers: `internal/simulator/doc.go`
+Status: Implemented for the first Simulator trading tranche. External parity remains pending.
+Covers: `internal/simulator/*.go`
 Purpose: Provide Hyperliquid-shaped simulated Venue truth for Account reconciliation.
 
 ## Canonical Sources
@@ -14,7 +14,7 @@ Purpose: Provide Hyperliquid-shaped simulated Venue truth for Account reconcilia
 
 ## Ownership
 
-Account owns one Simulator through its Venue boundary.
+Account owns one concrete Simulator.
 
 Simulator owns simulated Orders, Fills, positions, counters, and transient BBO state.
 
@@ -22,7 +22,7 @@ Simulator owns no Ledger, Trade, Order, or Fill domain object.
 
 ## Lifecycle
 
-Simulator is one concrete Venue implementation.
+Simulator is one concrete implementation. No one-product Venue interface exists.
 
 `Init` validates identity, policy, persistence mode, and optional persisted state.
 
@@ -38,28 +38,34 @@ Init
   validate Simulator identity
   validate Simulator policy
   validate persistence mode
-  load Simulator state when configured
   initialize Simulator
+  open Simulator state when configured
+  load Simulator state when configured
+  admit Simulator lifecycle
 
 PlaceOrders
   validate Venue requests
-  allocate Venue identities
-  store simulated Orders
-  execute explicit market-like Orders
-  persist changed state when configured
+  stage recoverable Simulator mutation
+  allocate staged Venue identities
+  execute staged market-like Orders
+  persist staged state when configured
+  commit staged state
   return admitted SDK-shaped submit response
 
 CancelOrders
-  cancel simulated Orders
-  persist changed state when configured
+  stage recoverable Simulator mutation
+  cancel staged simulated Orders
+  persist staged state when configured
+  commit staged state
   return admitted SDK-shaped cancel response
 
 IngestBBO
   validate BBO identity
   warm transient market state
-  match eligible Orders
-  record simulated outcomes
-  persist changed state when configured
+  stage recoverable Simulator mutation
+  match staged eligible Orders
+  persist staged state when configured
+  commit staged state
   report changed truth
 
 Result
@@ -71,7 +77,7 @@ Stop
   stop Simulator
 ```
 
-Each indented action becomes one exact source comment during implementation.
+Source action comments follow this flow.
 
 ## Parity Layers
 
@@ -90,9 +96,9 @@ Simulator returns the same admitted shapes as the Hyperliquid adapter.
 | User Fills | Hyperliquid Fill rows |
 | Account state | Hyperliquid clearinghouse state |
 
-Parity covers field names, meanings, ordering, decimal text, and status values.
+Internal response meanings and ordered statuses follow the admitted reference.
 
-Parity does not require Python class or async parity.
+Recorded external JSON parity remains pending.
 
 The official API controls exchange semantics.
 
@@ -196,7 +202,11 @@ Account passes store operations only for `max`.
 
 Simulator never detects Runner, Sweep, paper, or live mode.
 
-After loading persisted state, Account forces recon before decisions.
+For `max`, durable SQLite success precedes publication of changed in-memory state.
+
+Persistence failure leaves both memory and recoverable state at the prior version.
+
+After loading persisted state, Account requires a fresh BBO before a marked snapshot.
 
 ## Terminal Result
 

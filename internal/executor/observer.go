@@ -2,6 +2,7 @@ package executor
 
 import (
 	"fmt"
+	"strconv"
 
 	"nuubot/internal/market"
 	"nuubot/internal/signaler"
@@ -47,11 +48,12 @@ func (e *observer) OnInit(ctx Context) error {
 	e.cycleNumber = ctx.CycleNumber
 	e.executorNumber = ctx.ExecutorNumber
 	e.signal = ctx.Signal
-	e.stopLossPct = ctx.Config.StopLossPct
+	var err error
+	e.stopLossPct, err = strconv.ParseFloat(ctx.Config.StopLossPct, 64)
 	e.status = Starting
 
 	// validate config
-	if e.stopLossPct <= 0 || e.stopLossPct >= 1 {
+	if err != nil || e.stopLossPct <= 0 || e.stopLossPct >= 1 {
 		e.status = Error
 		return fmt.Errorf("observer stop_loss_pct must be between 0 and 1")
 	}

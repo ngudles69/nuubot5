@@ -1,7 +1,7 @@
 # Trade Package
 
-Status: Reserved. Proposed next-tranche design.
-Covers: `internal/trade/doc.go`
+Status: Implemented for Simulator trading evidence.
+Covers: `internal/trade/*.go`
 Purpose: Represent one trading intent and derive its state and PnL from owned Orders and Fills.
 
 ## Canonical Sources

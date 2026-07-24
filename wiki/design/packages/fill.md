@@ -1,7 +1,7 @@
 # Fill Package
 
-Status: Reserved. Proposed next-tranche design.
-Covers: `internal/fill/doc.go`
+Status: Implemented.
+Covers: `internal/fill/*.go`
 Purpose: Preserve one actual Venue or Simulator execution as domain evidence.
 
 ## Canonical Sources

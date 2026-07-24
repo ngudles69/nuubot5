@@ -15,6 +15,8 @@ Purpose: Return one fully admitted context before BtRunner composition.
 Config and credentials own their decoding. Datastore retains its current
 short-lived read-only Bot-loading behavior.
 
+One configured shared database owns Sweeps, Bots, and mainnet Meta.
+
 ## Program Flow
 
 ```text
@@ -24,6 +26,7 @@ Setup
   load credentials
   prepare datastore
   validate ticks path
+  admit mainnet Meta
   return setup
 ```
 
@@ -36,10 +39,10 @@ Setup
 - Credentials receive TOML decoding only. Account validation is deferred.
 - Account validates only its selected live credential during initialization.
 - Simulator receives no private credential.
-- Source marks the future Meta-admission location after current datastore admission.
-- Meta will read dataset freshness through Datastore.
+- Meta reads freshness from the configured shared database.
 - Meta younger than 24 hours will continue without an exchange request.
 - Empty or stale Meta will refresh before Setup continues.
-- Meta implementation waits for NuubotDB and Datastore ownership.
+- Meta always refreshes from mainnet.
+- Tests needing different Meta manually update their local SQLite database.
 - Shared WebSocket ownership remains TBD. Setup starts no background work.
-- Datastore redesign is deferred. Setup uses the existing `LoadBot` path.
+- Setup uses the existing short-lived `LoadBot` path.

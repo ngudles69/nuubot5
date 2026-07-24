@@ -55,6 +55,7 @@ config.toml
 credentials.json5
 !internal/config/credentials.go
 !workspace/config/config.toml
+!workspace/config/tradeexecutor.toml
 workspace/config/credentials.json5
 workspace/config/credentials.toml
 workspace/config/telegram.json5

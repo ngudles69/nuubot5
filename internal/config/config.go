@@ -2,11 +2,12 @@ package config
 
 import (
 	"fmt"
-	"math"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/BurntSushi/toml"
+	"github.com/shopspring/decimal"
 )
 
 type Config struct {
@@ -47,8 +48,8 @@ type Process struct {
 }
 
 type Paths struct {
-	SharedData    string `toml:"shared_data"`
-	SweepDatabase string `toml:"sweep_database"`
+	SharedData string `toml:"shared_data"`
+	Database   string `toml:"database"`
 }
 
 type BtRunner struct {
@@ -74,8 +75,16 @@ type Signaler struct {
 }
 
 type Executor struct {
-	Kind        string  `toml:"kind"`
-	StopLossPct float64 `toml:"stop_loss_pct"`
+	Kind                 string `toml:"kind"`
+	StopLossPct          string `toml:"stop_loss_pct"`
+	AccountName          string `toml:"account_name"`
+	Network              string `toml:"network"`
+	OrderNotionalUSDC    string `toml:"order_notional_usdc"`
+	TakeProfitPct        string `toml:"take_profit_pct"`
+	SimulatorEquityUSDC  string `toml:"simulator_equity_usdc"`
+	SimulatorFeePct      string `toml:"simulator_fee_pct"`
+	SimulatorSlippagePct string `toml:"simulator_slippage_pct"`
+	PersistMode          string `toml:"persist_mode"`
 }
 
 type Risk struct {
@@ -97,8 +106,12 @@ func Load(path string) (Config, error) {
 		return cfg, fmt.Errorf("unknown config fields: %v", undecoded)
 	}
 	// validate paths
-	if cfg.Paths.SharedData == "" || cfg.Paths.SweepDatabase == "" {
+	if cfg.Paths.SharedData == "" || cfg.Paths.Database == "" {
 		return cfg, fmt.Errorf("configured paths must not be empty")
+	}
+	// validate network
+	if cfg.Network.Default != "mainnet" && cfg.Network.Default != "testnet" {
+		return cfg, fmt.Errorf("network.default must be mainnet or testnet")
 	}
 	// validate cadence
 	if cfg.BtRunner.TimerIntervalMS == 0 {
@@ -124,14 +137,51 @@ func validateRuntime(cfg Runtime) error {
 		cfg.Signaler.RSIPeriod <= 0 || cfg.Signaler.RegimeEMA <= 0 || cfg.Signaler.VolumePeriod <= 0 {
 		return fmt.Errorf("invalid signaler periods")
 	}
+	var tradeExecutors int
 	for _, executor := range cfg.Executors {
-		if executor.Kind != "observer" {
+		switch executor.Kind {
+		case "observer":
+			var stopLoss, err = strconv.ParseFloat(executor.StopLossPct, 64)
+			if err != nil || stopLoss <= 0 || stopLoss >= 1 {
+				return fmt.Errorf("observer stop_loss_pct must be between 0 and 1")
+			}
+		case "trade":
+			tradeExecutors++
+			if executor.AccountName == "" || executor.Network != "simnet" ||
+				(executor.PersistMode != "none" && executor.PersistMode != "max") {
+				return fmt.Errorf("invalid trade executor identity or persistence")
+			}
+			var notional, err = positiveDecimal(executor.OrderNotionalUSDC)
+			if err != nil {
+				return fmt.Errorf("invalid trade executor order_notional_usdc: %w", err)
+			}
+			var equity decimal.Decimal
+			equity, err = positiveDecimal(executor.SimulatorEquityUSDC)
+			if err != nil || equity.LessThan(notional) {
+				return fmt.Errorf("invalid trade executor simulator_equity_usdc")
+			}
+			for name, value := range map[string]string{
+				"take_profit_pct":        executor.TakeProfitPct,
+				"stop_loss_pct":          executor.StopLossPct,
+				"simulator_fee_pct":      executor.SimulatorFeePct,
+				"simulator_slippage_pct": executor.SimulatorSlippagePct,
+			} {
+				var parsed decimal.Decimal
+				parsed, err = decimal.NewFromString(value)
+				if err != nil || parsed.IsNegative() {
+					return fmt.Errorf("invalid trade executor %s", name)
+				}
+				if (name == "take_profit_pct" || name == "stop_loss_pct") &&
+					(!parsed.IsPositive() || parsed.GreaterThanOrEqual(decimal.NewFromInt(1))) {
+					return fmt.Errorf("trade executor %s must be between 0 and 1", name)
+				}
+			}
+		default:
 			return fmt.Errorf("unknown executor: %s", executor.Kind)
 		}
-		if math.IsNaN(executor.StopLossPct) || math.IsInf(executor.StopLossPct, 0) ||
-			executor.StopLossPct <= 0 || executor.StopLossPct >= 1 {
-			return fmt.Errorf("observer stop_loss_pct must be between 0 and 1")
-		}
+	}
+	if tradeExecutors > 1 {
+		return fmt.Errorf("runtime supports one trade executor")
 	}
 	for _, risk := range cfg.Risks {
 		if risk.Kind != "balanced" {
@@ -142,6 +192,14 @@ func validateRuntime(cfg Runtime) error {
 }
 
 // Section 3 - Generic Helpers
+
+func positiveDecimal(value string) (decimal.Decimal, error) {
+	var parsed, err = decimal.NewFromString(value)
+	if err != nil || !parsed.IsPositive() {
+		return decimal.Zero, fmt.Errorf("expected positive decimal")
+	}
+	return parsed, nil
+}
 
 // Rooted resolves one configured path beneath root.
 func Rooted(root, path string) string {

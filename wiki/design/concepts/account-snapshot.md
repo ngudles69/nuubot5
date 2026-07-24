@@ -1,7 +1,7 @@
 # AccountSnapshot
 
-Status: Approved — unimplemented.
-Covers: No implemented source.
+Status: Implemented.
+Covers: `internal/account/account.go`
 Purpose: Carry one Account's coherent post-recon state into Runtime and Risk without exposing mutable Account ownership.
 
 ## Canonical Sources
@@ -61,7 +61,7 @@ Output is one immutable-by-contract value for Runtime and Risk.
 - One Risk evaluation MUST use snapshots from one completed recon barrier.
 - Snapshot values MUST contain no Account pointers or mutable child collections.
 
-## Proposed Initial Fields
+## Fields
 
 | Field | Meaning |
 |---|---|
@@ -117,9 +117,5 @@ Runtime MUST NOT retain or own Accounts.
 - Successful recon produces the expected snapshot.
 - Failed recon produces no snapshot.
 - Runtime and Risk receive values without Account references.
-
-## Open Decisions
-
-Approve the initial field table with the trading-state tranche.
 
 Nuubot3's Runtime-owned Account list is rejected.

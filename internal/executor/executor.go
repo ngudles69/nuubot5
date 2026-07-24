@@ -4,8 +4,12 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/shopspring/decimal"
+
+	"nuubot/internal/account"
 	"nuubot/internal/config"
 	"nuubot/internal/market"
+	"nuubot/internal/meta"
 	"nuubot/internal/signaler"
 	"nuubot/internal/toolkit/logging"
 )
@@ -34,6 +38,10 @@ type Context struct {
 	Signaler       signaler.Signaler
 	Signal         signaler.Package
 	Config         config.Executor
+	LatestBBO      market.BBO
+	Meta           meta.Instrument
+	MinNotional    decimal.Decimal
+	ResultPath     string
 }
 
 // Executor defines the required lifecycle for one execution policy.
@@ -54,6 +62,21 @@ type BBOIngestHandler interface {
 	IngestBBO(market.BBO) error
 }
 
+// AccountReconciler refreshes one Executor's Account truth.
+type AccountReconciler interface {
+	Reconcile(uint64, bool) (account.Snapshot, bool, error)
+}
+
+// ReconHandler consumes one accepted reconciliation barrier.
+type ReconHandler interface {
+	OnRecon(uint64) error
+}
+
+// AccountResultProvider returns cached terminal Account evidence.
+type AccountResultProvider interface {
+	AccountResult() (account.Result, error)
+}
+
 // Section 1 - Program Flow
 
 // Create selects and initializes the configured Executor.
@@ -63,6 +86,8 @@ func Create(ctx Context) (Executor, error) {
 	switch ctx.Config.Kind {
 	case "observer":
 		selected = &observer{status: Configured}
+	case "trade":
+		selected = &tradeExecutor{status: Configured}
 	default:
 		return nil, fmt.Errorf("unknown executor: %s", ctx.Config.Kind)
 	}

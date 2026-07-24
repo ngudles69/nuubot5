@@ -21,7 +21,8 @@ func TestBotCycleDispatchesObserverBBO(t *testing.T) {
 		1,
 		nil,
 		signal,
-		[]config.Executor{{Kind: "observer", StopLossPct: 0.01}},
+		Inputs{},
+		[]config.Executor{{Kind: "observer", StopLossPct: "0.01"}},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -62,7 +63,8 @@ func TestBotCycleReturnsAdmissionRejection(t *testing.T) {
 		1,
 		nil,
 		signal,
-		[]config.Executor{{Kind: "observer", StopLossPct: 0.01}},
+		Inputs{},
+		[]config.Executor{{Kind: "observer", StopLossPct: "0.01"}},
 	)
 	if !errors.Is(err, ErrRejected) {
 		t.Fatalf("actual error %v, expected admission rejection", err)

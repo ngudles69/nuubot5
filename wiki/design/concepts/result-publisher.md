@@ -1,7 +1,7 @@
 # ResultPublisher
 
-Status: Approved — unimplemented.
-Covers: No implemented source.
+Status: Implemented for per-Bot SQLite result databases.
+Covers: `internal/resultpublisher/*.go`
 Purpose: Publish exactly one terminal backtest result from approved Runtime evidence.
 
 ## Canonical Sources
@@ -24,10 +24,9 @@ ResultPublisher owns no Runtime descendant.
 ## Responsibilities
 
 - Accept one terminal Runtime result snapshot.
-- Validate identity, completion, and required evidence.
+- Select memory-only Account results using one result path.
 - Persist supplied Ledger and Simulator evidence when `persist_mode = none`.
-- Persist the Bot result once.
-- Update the owning Sweep result boundary through an approved store.
+- Replace the completed per-Bot result database.
 - Return publication failure to BtRunner.
 
 ## Does Not
@@ -40,14 +39,11 @@ ResultPublisher owns no Runtime descendant.
 
 ## Invariants
 
-- One BtRunner publishes at most one terminal result.
-- Result identity matches Sweep and Bot identity.
+- One BtRunner publishes one terminal file.
 - Publication follows Runtime shutdown and replay verification.
 - Runtime result values alias no stopped child state.
-- Simulator-backed Account results require Simulator evidence.
-- Hyperliquid Account results reject unexpected Simulator evidence.
 - Failed Runtime execution publishes no partial Ledger or Simulator evidence.
-- A failed publication leaves no completed result database or catalog success.
+- A failed publication does not replace the prior completed database.
 - Publication failure makes BtRunner fail.
 
 ## Atomic Publication
@@ -56,18 +52,17 @@ For `none`, Account opens no result database.
 
 ResultPublisher creates a temporary database beside the final path after success.
 
-It writes all evidence in one transaction, closes the database, then atomically renames it.
+It writes all evidence into that hidden file, closes every database handle, then atomically renames it.
 
 Only the final filename is completed evidence.
-
-Catalog success follows the rename.
 
 Failure removes or leaves only an ignored temporary file.
 
 ## Required Proof
 
-- Duplicate publication is rejected or idempotent.
+- Repeated publication replaces the prior completed file.
 - Incomplete replay cannot publish success.
 - Snapshot identity mismatch fails.
-- Sweep aggregate sees the same terminal Bot result.
-- Failed publication leaves no final database or completed catalog row.
+- Failed publication leaves the prior completed database unchanged.
+
+Shared Sweep catalog updates remain pending.

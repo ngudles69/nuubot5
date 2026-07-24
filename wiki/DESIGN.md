@@ -38,24 +38,24 @@ nuubot-btrunner                    DONE           2026-07-24 12:55:22 +08:00
 The user owns these checklist states: `DONE`, `PARTIAL`, `NOT REVIEWED`, and
 `TO CODE`. `PARTIAL` remains open. `NOT REVIEWED` has no review timestamp.
 
-## To Code
+## Implementation and Review
 
 | Component | State | Last reviewed | Note |
 |---|---|---|---|
 | WallClock | DONE | 2026-07-24 17:42:58 +08:00 | Implemented and proven. |
 | Runner | TO CODE | — | |
 | Select the SDK | DONE | 2026-07-24 17:42:58 +08:00 | Rewrite the required official API inside Nuubot. |
-| Simulator parity | TO CODE | — | |
-| Account | TO CODE | — | |
-| Ledger | TO CODE | — | |
-| Trade | TO CODE | — | |
-| Order | TO CODE | — | |
-| Fill | TO CODE | — | |
-| Simulator | TO CODE | — | |
-| TradeExecutor | TO CODE | — | Simulator-first vertical slice. |
+| Simulator parity | PARTIAL | — | Internal behavior implemented; external parity pending. |
+| Account | NOT REVIEWED | — | Implemented for Simulator. |
+| Ledger | NOT REVIEWED | — | Implemented with `none` and `max`. |
+| Trade | NOT REVIEWED | — | Implemented. |
+| Order | NOT REVIEWED | — | Implemented. |
+| Fill | NOT REVIEWED | — | Implemented. |
+| Simulator | NOT REVIEWED | — | Implemented for BtRunner. |
+| TradeExecutor | NOT REVIEWED | — | Simulator-first vertical slice implemented. |
 | PocketBase | TO CODE | — | Approved design; implementation deferred. |
-| Meta | TO CODE | — | |
-| Setup | TO CODE | — | |
+| Meta | NOT REVIEWED | — | Mainnet perpetual Meta implemented. |
+| Setup | PARTIAL | 2026-07-24 | Shared database and mainnet Meta added after user review. |
 | Hyperliquid SDK selection | DONE | 2026-07-24 17:42:58 +08:00 | No external SDK adoption. |
 
 This is the user's coding checklist. It does not replace package implementation
@@ -97,32 +97,33 @@ Nuubot admits only required, audited code. It does not import or preserve either
 
 | Package | Status | Purpose |
 |---|---|---|
-| [account](design/packages/account.md) | Reserved | Coordinate venue requests and ledger evidence. |
+| [account](design/packages/account.md) | Implemented | Coordinate venue requests and ledger evidence. |
 | [botcycle](design/packages/botcycle.md) | Implemented | Coordinate Executors for one admitted entry Signal. |
 | [btrunner](design/packages/btrunner.md) | Implemented | Execute one complete historical replay. |
 | [config](design/packages/config.md) | Implemented | Decode and validate immutable settings. |
 | [datastore](design/packages/datastore.md) | Implemented | Load one validated BotSpec. |
 | [executor](design/packages/executor.md) | Implemented | Own execution policy boundaries. |
-| [fill](design/packages/fill.md) | Reserved | Preserve immutable execution facts. |
+| [fill](design/packages/fill.md) | Implemented | Preserve immutable execution facts. |
 | [hyperliquid](design/packages/hyperliquid.md) | Implemented | Own Hyperliquid protocol transport and translations. |
-| [ledger](design/packages/ledger.md) | Reserved | Own trade, order, and fill evidence. |
+| [ledger](design/packages/ledger.md) | Implemented | Own trade, order, and fill evidence. |
 | [market](design/packages/market.md) | Implemented | Carry validated market events. |
-| [meta](design/packages/meta.md) | Reserved | Own market instrument metadata. |
-| [order](design/packages/order.md) | Reserved | Own submitted order state and fills. |
+| [meta](design/packages/meta.md) | Implemented | Own mainnet perpetual instrument metadata. |
+| [order](design/packages/order.md) | Implemented | Own submitted order state and fills. |
 | [ohlcv](design/packages/ohlcv.md) | Implemented | Load validated OHLCV ranges. |
 | [parity](design/packages/parity.md) | Implemented | Admit and run permanent parity probes. |
 | [parity/info](design/packages/info.md) | Implemented | Capture `/info` payloads and translations. |
 | [replay](design/packages/replay.md) | Implemented | Stream validated historical market data. |
+| [resultpublisher](design/packages/resultpublisher.md) | Implemented | Publish terminal per-Bot SQLite evidence. |
 | [risk](design/packages/risk.md) | Implemented | Assess configured risk policy. |
 | [runtime](design/packages/runtime.md) | Implemented | Own signals, risks, cycles, and stop decisions. |
 | [setup](design/packages/setup.md) | Implemented | Prepare one validated BtRunner context. |
 | [signaler](design/packages/signaler.md) | Implemented | Calculate and serve ordered Signal packages. |
-| [simulator](design/packages/simulator.md) | Reserved | Provide venue-shaped simulated execution. |
-| [trade](design/packages/trade.md) | Reserved | Own strategy-level orders and evidence. |
+| [simulator](design/packages/simulator.md) | Implemented | Provide venue-shaped simulated execution. |
+| [trade](design/packages/trade.md) | Implemented | Own strategy-level orders and evidence. |
 | [toolkit/clock](design/packages/clock.md) | Implemented | Provide deterministic clock mechanics. |
 | [toolkit/logging](design/packages/logging.md) | Implemented | Write exact-format append-only file logs. |
 
-Reserved packages contain only an approved package declaration.
+Package pages state their implemented and pending boundaries.
 
 ## Concepts
 

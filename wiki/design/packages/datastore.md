@@ -70,7 +70,7 @@ Each call owns its local connection.
 
 ## Persistence
 
-The SQLite database is read-only and immutable for backtesting.
+`LoadBot` opens the shared SQLite database read-only and immutable.
 
 ## Approved Target
 
@@ -79,7 +79,7 @@ The canonical mutable layout is defined by
 
 ```text
 workspace/db/
-|-- <main datastore files>
+|-- nuubot.db
 `-- sweeps/
     `-- sweep_<sweep_id>/
         `-- bot_<bot_id>.db
@@ -87,6 +87,8 @@ workspace/db/
 
 Main datastore expectations:
 
+- `paths.database` names the shared database.
+- The shared database contains Sweep, Bot, and Meta tables.
 - Live tables may share one main datastore.
 - Sweep definitions and Bot configuration remain centrally discoverable.
 - Sweep and Bot status updates stay small.
@@ -106,7 +108,7 @@ Per-Bot Sweep result expectations:
 - Completed result databases become read-only evidence.
 - Sweep aggregation reads completed databases after Bot termination.
 
-The proposed TradeExecutor result tables are defined by
+TradeExecutor result tables are defined by
 [Trading Schema](../concepts/trading-schema.md).
 
 One coordinator may serialize shared Sweep-catalog updates. The design must not
@@ -145,8 +147,7 @@ LoadBot
 
 ## Open Decisions
 
-- Main datastore engine and filename.
-- Main schemas, migrations, and transaction boundaries.
+- Remaining main schemas, migrations, and transaction boundaries.
 - Sweep catalog and terminal-summary schema.
 - Live datastore access and write serialization.
 - Per-Bot result schema and aggregation contract.

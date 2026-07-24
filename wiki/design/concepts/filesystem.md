@@ -30,9 +30,10 @@ immutable. The exact container mount path is unresolved.
 workspace/
 |-- config/
 |   |-- config.toml
+|   |-- tradeexecutor.toml
 |   `-- credentials.toml
 |-- db/
-|   |-- <main datastore files>
+|   |-- nuubot.db
 |   `-- sweeps/
 |       `-- sweep_<sweep_id>/
 |           `-- bot_<bot_id>.db
@@ -46,7 +47,7 @@ workspace/
 |---|---|---|
 | `workspace/config/config.toml` | Shared non-secret application configuration. | Tracked |
 | `workspace/config/credentials.toml` | Local credentials and secrets. | Ignored |
-| `workspace/db/` | Main live and Sweep-catalog datastore files. | Ignored |
+| `workspace/db/nuubot.db` | Shared Sweep, Bot, Meta, and future main tables. | Ignored |
 | `workspace/db/sweeps/` | Per-Bot Sweep result SQLite databases. | Ignored |
 | `workspace/logs/` | Runtime, Server, Bot, and test-run logs. | Ignored |
 | `workspace/data/` | Market and other runtime data files. | Ignored |
@@ -61,10 +62,10 @@ enter source, shared configuration, wiki pages, logs, tests, or prompts.
 
 ## Databases
 
-Main datastore files live directly under `workspace/db/`.
+The configured shared datastore is `workspace/db/nuubot.db`.
 
-The main datastore may hold live data, Sweep definitions, Bot status, relative
-result paths, and small terminal summaries.
+It holds Sweep definitions, Bot configuration, mainnet Meta, and later small
+shared records.
 
 Live operation may use one shared database because its expected write pressure
 is bounded.
@@ -114,19 +115,10 @@ Market data and other runtime datasets belong under `workspace/data/`.
 
 Exact source, symbol, timeframe, and retention subdirectories remain unresolved.
 
-## Current Drift
+## Current External Data
 
-Setup loads `workspace/config/config.toml` and
-`workspace/config/credentials.toml`.
-
-Current BtRunner reads `workspace/datastore/nuubot5_sweeps.db`.
-
-Current shared market data may resolve outside this repository.
-
-Logging already writes under `workspace/logs/`.
-
-These facts describe current implementation. They do not override the approved
-target layout.
+Shared market data may resolve outside this repository through
+`paths.shared_data`.
 
 ## Does Not
 

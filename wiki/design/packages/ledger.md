@@ -1,7 +1,7 @@
 # Ledger Package
 
-Status: Reserved. Proposed next-tranche design.
-Covers: `internal/ledger/doc.go`
+Status: Implemented for memory, maximum persistence, reload, and final publication.
+Covers: `internal/ledger/*.go`
 Purpose: Hold one Account's coherent local Trades, Orders, Fills, and reconciliation cursor.
 
 ## Canonical Sources
@@ -43,10 +43,10 @@ Trade, Order, and Fill remain domain objects without lifecycle phases.
 Init
   bind Ledger inputs
   validate persistence mode
+  initialize Ledger
   open Ledger identity when configured
   load Ledger evidence when configured
   index active evidence
-  initialize Ledger
 
 CreateTrade
   stage Trade and initial Orders
@@ -68,9 +68,6 @@ Recon
   index active local Orders
   match incoming Venue evidence
   validate complete recon batch
-  apply Fills
-  apply Order states
-  refresh affected Trades
   persist affected trees and cursor when configured
   publish recon result
 
@@ -97,7 +94,9 @@ Ledger never adopts an unknown Order into a Trade.
 
 Every matched identity is confirmed before mutation.
 
-Equal-time contradictory evidence fails.
+Valid forward transitions may share one Venue timestamp.
+
+Conflicting terminal transitions still fail.
 
 Older evidence is ignored.
 
@@ -131,13 +130,15 @@ Each outcome carries the existing Order identity and preserves request order.
 
 Account expands one payload-wide Venue error before calling Ledger.
 
-Ledger records item errors as acknowledgement evidence.
+Ledger records explicit item errors as terminal `rejected` evidence.
 
-Every complete acknowledgement moves its Order to submitted.
+Known local Simulator submission failures become terminal `error` evidence.
 
 Account then marks itself recon-dirty.
 
-Only reconciliation confirms rejected, open, filled, canceled, or expired state.
+Successful acknowledgements move their Orders to submitted.
+
+Reconciliation confirms open, filled, canceled, or expired state.
 
 Only reconciliation creates canonical Fill objects and final filled Order state.
 
@@ -183,7 +184,9 @@ Sweep runs select `none`.
 
 A failed Sweep run has no recovery checkpoint. Its coordinator reruns it.
 
-Restartable runs select `max`.
+Durable child-state reload selects `max`.
+
+Full Bot resume remains pending Runner-owned orchestration cursors.
 
 ## Terminal Result
 
@@ -207,8 +210,9 @@ Every slice and map is newly owned. No value aliases mutable Ledger state.
 
 - Trade and initial Orders persist atomically.
 - Ordered submission outcomes persist atomically.
-- One payload-wide error records one acknowledgement error per requested Order.
-- HTTP acknowledgement alone makes no Order terminal.
+- One known Simulator failure records one terminal error per requested Order.
+- Explicit item rejection becomes terminal without creating a Fill.
+- Successful HTTP acknowledgement alone makes no Order terminal.
 - Immediate-fill acknowledgement creates no Fill before reconciliation.
 - Contradictory recon batches mutate nothing.
 - Duplicate recon is idempotent.

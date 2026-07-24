@@ -1,6 +1,6 @@
 # BotCycle Package
 
-Status: Implemented. Proposed trading reconciliation extension.
+Status: Implemented with optional Account reconciliation and result collection.
 Covers: `internal/botcycle/botcycle.go`
 Purpose: Own Executors for one admitted entry Signal.
 
@@ -42,6 +42,15 @@ Stop
   resolve exit reason
   calculate duration
   report proof
+
+Reconcile
+  reconcile capable Executor Accounts
+
+OnRecon
+  deliver accepted recon event
+
+Result
+  return immutable BotCycle result
 
 IngestBBO
   ingest executor bbo
@@ -87,7 +96,7 @@ Runtime closes a completed cycle during its next timed `Run`.
 
 Runtime clears `r.cycle` before stopping the old cycle.
 
-## Proposed Trading Extension
+## Trading Extension
 
 BotCycle remains the capability dispatcher.
 

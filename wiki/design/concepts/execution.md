@@ -1,7 +1,7 @@
 # Execution
 
-Status: Approved — unimplemented. Refined by trading-state assessment.
-Covers: No implemented source.
+Status: Implemented for TradeExecutor with Simulator.
+Covers: `internal/executor/trade.go`, `internal/account`, `internal/ledger`, and domain packages
 Purpose: Turn one Executor decision into validated domain evidence and Venue actions without breaking ownership.
 
 ## Scope
@@ -67,9 +67,11 @@ Malformed, incomplete, duplicated, or unknown results MUST preserve recoverable 
 
 Mixed success and rejection MUST preserve each validated result.
 
-Item errors remain provisional acknowledgement evidence.
+Explicit item errors are terminal rejection evidence.
 
-Every complete acknowledgement remains submitted until recon.
+Successful acknowledgements remain submitted until recon.
+
+Known local Simulator submission failure makes every created Order terminal `error`.
 
 Immediate Fills MUST still enter canonical domain truth through recon.
 
@@ -117,14 +119,10 @@ D:\rust\nuutrader6\src\nuubot\hcbots\account.py
 D:\rust\nuutrader6\src\nuubot\hcbots\exchange.py
 ```
 
-## Conflict
+## Boundary
 
-Nuubot4 currently uses ObserverExecutor without real Account execution. This page defines approved future behavior, not implemented parity.
+The implemented slice is [TradeExecutor](trade-executor.md) with Simulator.
 
-## Recommendation
-
-Implement one real Executor's minimum execution slice before generalizing the Account or Venue surface.
-
-The selected slice is [TradeExecutor](trade-executor.md) with Simulator.
+Live and testnet mutations remain blocked.
 
 The physical result design is [Trading Schema](trading-schema.md).

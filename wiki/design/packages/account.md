@@ -1,7 +1,7 @@
 # Account Package
 
-Status: Reserved. Proposed next-tranche design.
-Covers: `internal/account/doc.go`
+Status: Implemented for Simulator-backed Accounts.
+Covers: `internal/account/*.go`
 Purpose: Give one Executor a trading boundary backed by one Venue and one local Ledger.
 
 ## Canonical Sources
@@ -16,7 +16,7 @@ TradeExecutor owns one Account.
 
 Account owns one selected Venue and one Ledger.
 
-The first BtRunner implementation selects Simulator only.
+The current BtRunner implementation selects Simulator only.
 
 Account hides Venue selection and response translation from Executor.
 
@@ -62,6 +62,7 @@ PlaceOrders
   create CLOIDs
   commit created Trade and Orders
   submit Venue batch
+  terminalize known Simulator submission failure
   validate submit response
   commit submit outcomes
   mark Account dirty
@@ -113,13 +114,13 @@ Account persists `created` intent before Venue I/O.
 
 Every request receives one explicit success or rejection.
 
-One payload-wide Venue error maps to every ordered request.
+One known Simulator submission failure maps every local Order to `error`.
 
 Malformed or incomplete responses leave recoverable `created` evidence.
 
-Item errors remain acknowledgement evidence until reconciliation.
+An explicit item error maps its Order to `rejected`.
 
-Every complete acknowledgement remains submitted until reconciliation.
+Successful acknowledgements remain submitted until reconciliation.
 
 Account never retries uncertain mutation outcomes automatically.
 
@@ -204,6 +205,12 @@ Account receives `persist_mode` and passes it to Ledger and Simulator.
 
 `max` persists every accepted Ledger mutation and every Simulator state change.
 
+`max` currently proves durable Ledger and Simulator child-state reload.
+
+Full Bot resume requires Runner, replay, Runtime, Signaler, and TradeExecutor cursor ownership.
+
+TradeExecutor rejects persisted Trades until that recovery path exists.
+
 Neither child detects Runner, Sweep, paper, or live mode.
 
 For `none`, ResultPublisher owns the final per-Bot SQLite path.
@@ -247,6 +254,8 @@ The terminal result travels upward without Account, Ledger, or Simulator pointer
 - Invalid batches create no rows.
 - Unknown submit outcomes retain `created` Orders.
 - Mixed submit results preserve each item.
+- Known Simulator failure terminalizes every created Order.
+- Missing created or submitted Simulator Orders repair to `error` during recon.
 - Failed recon changes no domain state or cursor.
 - Simulator BBO changes only mark dirty.
 - Stop releases Venue before Ledger.

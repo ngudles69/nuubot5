@@ -4,9 +4,13 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/shopspring/decimal"
+
+	"nuubot/internal/account"
 	"nuubot/internal/config"
 	"nuubot/internal/executor"
 	"nuubot/internal/market"
+	"nuubot/internal/meta"
 	"nuubot/internal/signaler"
 	"nuubot/internal/toolkit/logging"
 )
@@ -14,12 +18,27 @@ import (
 // ErrRejected identifies a BotCycle admission rejection.
 var ErrRejected = errors.New("bot cycle rejected")
 
+// Inputs contains approved Executor inputs owned above BotCycle.
+type Inputs struct {
+	LatestBBO   market.BBO
+	Meta        meta.Instrument
+	MinNotional decimal.Decimal
+	ResultPath  string
+}
+
+// Result contains one immutable terminal BotCycle result.
+type Result struct {
+	CycleNumber int
+	Accounts    []account.Result
+}
+
 // Control owns one active BotCycle and its Executors.
 type Control struct {
 	log       *logging.Logger
 	number    int
 	signal    signaler.Package
 	executors []executor.Executor
+	result    Result
 	ticks     uint64
 	runs      uint64
 	startMS   uint64
@@ -37,6 +56,7 @@ func (c *Control) Init(
 	number int,
 	signals signaler.Signaler,
 	signal signaler.Package,
+	inputs Inputs,
 	configs []config.Executor,
 ) error {
 	c.log = log
@@ -53,6 +73,10 @@ func (c *Control) Init(
 			Signaler:       signals,
 			Signal:         signal,
 			Config:         cfg,
+			LatestBBO:      inputs.LatestBBO,
+			Meta:           inputs.Meta,
+			MinNotional:    inputs.MinNotional,
+			ResultPath:     inputs.ResultPath,
 		})
 		if err != nil {
 			var reason = "init_error"
@@ -117,6 +141,23 @@ func (c *Control) Stop(reason string) (string, error) {
 
 	// stop executors
 	var firstErr = c.stopExecutors(reason)
+
+	// collect cached Account results
+	for index, activeExecutor := range c.executors {
+		var provider, supported = activeExecutor.(executor.AccountResultProvider)
+		if !supported {
+			continue
+		}
+		var result, err = provider.AccountResult()
+		if err != nil && firstErr == nil {
+			firstErr = fmt.Errorf("collect executor %d Account result: %w", index+1, err)
+			continue
+		}
+		if err == nil {
+			c.result.Accounts = append(c.result.Accounts, result.Clone())
+		}
+	}
+	c.result.CycleNumber = c.number
 	c.completed = true
 	c.stopped = true
 
@@ -146,6 +187,56 @@ func (c *Control) Stop(reason string) (string, error) {
 }
 
 // Section 2 - Domain Helpers
+
+// Reconcile refreshes every capable Executor Account as one barrier.
+func (c *Control) Reconcile(
+	nowMS uint64,
+	forced bool,
+) ([]account.Snapshot, error) {
+	var snapshots []account.Snapshot
+	for index, activeExecutor := range c.executors {
+		if activeExecutor.Status() != executor.Running {
+			continue
+		}
+		var reconciler, supported = activeExecutor.(executor.AccountReconciler)
+		if !supported {
+			continue
+		}
+		var snapshot, _, err = reconciler.Reconcile(nowMS, forced)
+		if err != nil {
+			return nil, fmt.Errorf("reconcile executor %d Account: %w", index+1, err)
+		}
+		snapshots = append(snapshots, snapshot)
+	}
+	return snapshots, nil
+}
+
+// OnRecon delivers one accepted reconciliation barrier.
+func (c *Control) OnRecon(nowMS uint64) error {
+	for index, activeExecutor := range c.executors {
+		if activeExecutor.Status() != executor.Running {
+			continue
+		}
+		var handler, supported = activeExecutor.(executor.ReconHandler)
+		if !supported {
+			continue
+		}
+		var err = handler.OnRecon(nowMS)
+		if err != nil {
+			return fmt.Errorf("run executor %d recon handler: %w", index+1, err)
+		}
+	}
+	return nil
+}
+
+// Result returns one independently owned terminal BotCycle result.
+func (c *Control) Result() Result {
+	var result = Result{CycleNumber: c.result.CycleNumber}
+	for _, current := range c.result.Accounts {
+		result.Accounts = append(result.Accounts, current.Clone())
+	}
+	return result
+}
 
 // IngestBBO routes one BBO through supported Simulator handlers.
 func (c *Control) IngestBBO(bbo market.BBO) error {

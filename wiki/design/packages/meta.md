@@ -1,7 +1,7 @@
 # Meta Package
 
-Status: Reserved.
-Covers: `internal/meta/doc.go`
+Status: Implemented for mainnet perpetual Meta. Spot Meta is pending.
+Covers: `internal/meta/*.go`
 Purpose: Own Hyperliquid symbol reference metadata and normalized trading constraints.
 
 ## Canonical Sources
@@ -10,9 +10,11 @@ Purpose: Own Hyperliquid symbol reference metadata and normalized trading constr
 
 ## Scope
 
-Meta is the reference table for Hyperliquid perpetual and spot symbols.
+Meta is the reference table for Hyperliquid symbols.
 
-The table belongs inside NuubotDB.
+The current implementation admits mainnet perpetual symbols only.
+
+Tables live in the configured shared Nuubot database.
 
 Meta changes rarely. Symbols may still be added, retired, delisted, or have
 their exchange constraints changed.
@@ -28,7 +30,7 @@ Meta uses NuubotDB and the [internal Hyperliquid information client](../hyperliq
 
 ## Responsibilities
 
-- Fetch the complete Hyperliquid perpetual and spot Meta datasets.
+- Fetch the complete Hyperliquid mainnet perpetual Meta dataset.
 - Validate exchange response shapes before persistence.
 - Normalize every admitted symbol.
 - Preserve network, kind, symbol, asset ID, exchange index, leverage, and status.
@@ -41,17 +43,21 @@ Meta uses NuubotDB and the [internal Hyperliquid information client](../hyperliq
 
 ## Identity
 
-Meta identity is at least:
+Stored Meta identity is:
 
 ```text
 network + kind + symbol
 ```
 
-Mainnet and testnet rows must not overwrite each other.
+Runtime and Account network settings never select the Meta source.
+
+Meta always refreshes from mainnet.
+
+Tests needing changed Meta edit their local SQLite fixture manually.
 
 ## Setup Freshness Contract
 
-Every Setup caller checks Meta freshness.
+Every Setup caller checks mainnet Meta freshness.
 
 Meta refreshes when its dataset is empty or its last successful refresh is at
 least 24 hours old.
@@ -64,26 +70,20 @@ on individual row update timestamps.
 
 Only a successful complete refresh advances the dataset refresh timestamp.
 
-Concurrent Setup callers must not perform duplicate refreshes for the same
-network. The exact refresh-claim mechanism depends on the NuubotDB design.
+The SQLite immediate writer transaction serializes concurrent refresh admission.
 
 ## Program Flow
 
 ```text
 EnsureFresh
-  read network dataset state
-  return when data is present and younger than 24 hours
-  fetch perpetual Meta
-  fetch spot Meta
-  validate responses
-  normalize symbols
-  upsert symbols
-  mark missing symbols retired
-  record successful refresh time
-
-LoadSymbol
-  query network, kind, and symbol
-  return normalized Meta
+  validate Meta request
+  open shared database
+  prepare Meta tables
+  claim network refresh
+  read dataset freshness
+  refresh stale dataset
+  load admitted symbol
+  commit Meta admission
 ```
 
 ## Minimum Order Notional
@@ -130,10 +130,8 @@ Nuubot5 adds caller-driven refresh after 24 hours.
 - Invalid venue responses fail validation.
 - Normalized identifiers and precision match venue truth.
 - Stored metadata reloads without information loss.
-- Mainnet and testnet rows remain distinct.
+- Setup requests mainnet regardless of Runtime network.
 - Missing symbols become retired only after a successful full refresh.
 - Final rounded order notional respects the configured USDC 11 floor.
 
-## Open Decision
-
-Decide whether Setup fails or uses existing stale Meta when a refresh fails.
+Refresh failure fails Setup. Stale Meta is not silently admitted.

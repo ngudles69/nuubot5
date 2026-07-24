@@ -1,6 +1,6 @@
 # BtRunner Package
 
-Status: Implemented. Proposed result-publication extension.
+Status: Implemented with terminal result publication.
 Covers: `internal/btrunner/btrunner.go`
 Purpose: Run one bounded historical Bot replay and prove exact completion.
 
@@ -12,7 +12,7 @@ Purpose: Run one bounded historical Bot replay and prove exact completion.
 
 BtRunner owns Setup context, TickClock, TickReader, Runtime, and replay proof.
 
-The proposed trading extension also gives BtRunner one ResultPublisher.
+The trading extension gives BtRunner one ResultPublisher.
 
 - Serve every admitted tick to Runtime.
 - Register and own the Runtime timer callback.
@@ -53,6 +53,7 @@ stop
   stop clock
   stop replay reader
   stop runtime
+  publish completed result
   report proof
   return stop errors
 
@@ -80,7 +81,7 @@ domain
 - Failures return to the command boundary and are logged once.
 - Canonical builds and tests use `-tags noasm`.
 
-## Proposed Result Publication
+## Result Publication
 
 After replay verification, BtRunner stops Runtime.
 
@@ -90,4 +91,4 @@ BtRunner passes that value to ResultPublisher.
 
 ResultPublisher writes `persist_mode = none` evidence once.
 
-Any replay, Runtime stop, result, or publication failure prevents success publication.
+Any replay, ReplayReader stop, Runtime stop, result, or publication failure prevents success publication.

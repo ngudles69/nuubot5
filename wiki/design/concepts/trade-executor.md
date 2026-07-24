@@ -1,7 +1,7 @@
 # TradeExecutor
 
-Status: Proposed assessment.
-Covers: No implemented source.
+Status: Implemented for BtRunner with Simulator.
+Covers: `internal/executor/trade.go`
 Purpose: Define the first Account-owning Executor and complete simulated bracket-trade path.
 
 ## Scope
@@ -59,6 +59,8 @@ Account applies Meta rounding and the configured USDC 11 minimum.
 
 `OnInit` performs no Venue mutation.
 
+`OnInit` fails when persisted Trades exist because full Runner recovery is pending.
+
 The Account starts reconciliation-dirty.
 
 The first successful recon event submits the bracket.
@@ -101,6 +103,7 @@ OnInit
   admit trigger Signal
   admit current BBO
   initialize Account
+  reject persisted Trades
   initialize TradeExecutor
 
 IngestBBO
@@ -118,6 +121,7 @@ OnRecon
   check owned Trade completion
 
 OnStop
+  reconcile current Account truth
   cancel active Orders
   close open exposure
   reconcile final Venue truth
