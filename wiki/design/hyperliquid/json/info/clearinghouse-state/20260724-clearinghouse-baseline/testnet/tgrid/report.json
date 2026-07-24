@@ -1,0 +1,10 @@
+{
+  "network": "testnet",
+  "account": "tgrid",
+  "operation": "clearinghouse-state",
+  "captured_at": "2026-07-24T09:31:46.6636Z",
+  "status_code": 200,
+  "duration_ms": 165,
+  "raw_payload": "raw.json",
+  "normalized": "normalized.json"
+}

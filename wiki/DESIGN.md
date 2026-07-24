@@ -42,9 +42,9 @@ The user owns these checklist states: `DONE`, `PARTIAL`, `NOT REVIEWED`, and
 
 | Component | State | Last reviewed | Note |
 |---|---|---|---|
-| WallClock | TO CODE | — | |
+| WallClock | DONE | 2026-07-24 17:42:58 +08:00 | Implemented and proven. |
 | Runner | TO CODE | — | |
-| Select the SDK | TO CODE | — | |
+| Select the SDK | DONE | 2026-07-24 17:42:58 +08:00 | Rewrite the required official API inside Nuubot. |
 | Simulator parity | TO CODE | — | |
 | Account | TO CODE | — | |
 | Ledger | TO CODE | — | |
@@ -52,10 +52,11 @@ The user owns these checklist states: `DONE`, `PARTIAL`, `NOT REVIEWED`, and
 | Order | TO CODE | — | |
 | Fill | TO CODE | — | |
 | Simulator | TO CODE | — | |
-| PocketBase | TO CODE | — | New consideration; do not add yet. |
+| TradeExecutor | TO CODE | — | Simulator-first vertical slice. |
+| PocketBase | TO CODE | — | Approved design; implementation deferred. |
 | Meta | TO CODE | — | |
 | Setup | TO CODE | — | |
-| Hyperliquid SDK selection | TO CODE | — | |
+| Hyperliquid SDK selection | DONE | 2026-07-24 17:42:58 +08:00 | No external SDK adoption. |
 
 This is the user's coding checklist. It does not replace package implementation
 status.
@@ -72,7 +73,7 @@ status.
 | How | Rewrite from the official API. Consult audited reference code only when useful. |
 | In | Transport, signing, protocol types, validation, and Venue mapping. |
 | Out | Trading policy, domain ownership, Meta persistence, Simulator, and reconciliation decisions. |
-| Status | Design approved. Implementation pending. |
+| Status | Clearinghouse-state and parity probe implemented. Exchange, signing, and WebSocket remain pending. |
 
 Nuubot independently rewrites its Hyperliquid boundary from the
 [official Hyperliquid API documentation](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api).
@@ -82,7 +83,13 @@ secondary implementation reference.
 
 Python `async_hyperliquid` is the third known-working reference.
 
-Nuubot targets Hyperliquid API correctness, not parity with either reference library.
+Nuubot targets official Hyperliquid semantics.
+
+Nuutrader6 supplies proven matching behavior.
+
+Selected client-visible responses target `async_hyperliquid` 0.4.8 output parity.
+
+Nuubot does not target either reference library's implementation structure.
 
 Nuubot admits only required, audited code. It does not import or preserve either reference library.
 
@@ -97,11 +104,14 @@ Nuubot admits only required, audited code. It does not import or preserve either
 | [datastore](design/packages/datastore.md) | Implemented | Load one validated BotSpec. |
 | [executor](design/packages/executor.md) | Implemented | Own execution policy boundaries. |
 | [fill](design/packages/fill.md) | Reserved | Preserve immutable execution facts. |
+| [hyperliquid](design/packages/hyperliquid.md) | Implemented | Own Hyperliquid protocol transport and translations. |
 | [ledger](design/packages/ledger.md) | Reserved | Own trade, order, and fill evidence. |
 | [market](design/packages/market.md) | Implemented | Carry validated market events. |
 | [meta](design/packages/meta.md) | Reserved | Own market instrument metadata. |
 | [order](design/packages/order.md) | Reserved | Own submitted order state and fills. |
 | [ohlcv](design/packages/ohlcv.md) | Implemented | Load validated OHLCV ranges. |
+| [parity](design/packages/parity.md) | Implemented | Admit and run permanent parity probes. |
+| [parity/info](design/packages/info.md) | Implemented | Capture `/info` payloads and translations. |
 | [replay](design/packages/replay.md) | Implemented | Stream validated historical market data. |
 | [risk](design/packages/risk.md) | Implemented | Assess configured risk policy. |
 | [runtime](design/packages/runtime.md) | Implemented | Own signals, risks, cycles, and stop decisions. |
@@ -126,6 +136,7 @@ Reserved packages contain only an approved package declaration.
 | [Execution](design/concepts/execution.md) | Persist, submit, normalize, and reconcile flow. |
 | [Filesystem](design/concepts/filesystem.md) | Mutable workspace layout and deployment mount. |
 | [Hyperliquid](design/hyperliquid.md) | Internal Hyperliquid protocol boundary. |
+| [Hyperliquid parity probe](design/hyperliquid/parity.md) | Permanent testnet and Simulator API-drift harness. |
 | [IngestBBO](design/concepts/ingestbbo.md) | Simulator-only BBO matching input. |
 | [Live events](design/concepts/live-events.md) | Live event routing. |
 | [Macross signaler](design/concepts/macross-signaler.md) | EMA crossover implementation. |
@@ -144,8 +155,12 @@ Reserved packages contain only an approved package declaration.
 | [Server](design/concepts/server.md) | Shared service composition. |
 | [Shutdown](design/concepts/shutdown.md) | Ordered resource release. |
 | [Signal](design/concepts/signal.md) | Immutable strategy decision. |
+| [Simulator parity](design/concepts/simulator-parity.md) | Exchange behavior and response parity boundary. |
 | [SweepManager](design/concepts/sweep-manager.md) | Sweep-level coordination. |
 | [Toolkit](design/concepts/toolkit.md) | Portable package rules. |
+| [TradeExecutor](design/concepts/trade-executor.md) | First Account-owning Executor design. |
+| [Trading schema](design/concepts/trading-schema.md) | Per-Bot SQLite trading evidence DDL. |
+| [Trading state tranche](design/concepts/trading-state.md) | Next-tranche assessment and implementation order. |
 | [Venue](design/concepts/venue.md) | Normalized execution truth. |
 | [WallClock](design/concepts/wall-clock.md) | Live cadence behavior. |
 

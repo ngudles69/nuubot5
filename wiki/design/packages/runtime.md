@@ -1,6 +1,6 @@
 # Runtime Package
 
-Status: Implemented.
+Status: Implemented. Proposed trading control-order extension.
 Covers: `internal/runtime/runtime.go`
 Purpose: Run one configured Bot and own its direct control children.
 
@@ -74,7 +74,7 @@ Run
 
 Stop
   request stop
-  stop botcycle
+  capture and stop botcycle
   stop risks
   stop signaler
   stop runtime
@@ -85,6 +85,13 @@ IngestBBO
 
 openCycle
   initialize botcycle
+
+closeCycle
+  stop botcycle and collect result
+  retain immutable result values
+
+Result
+  return immutable runtime result
 ```
 
 ## BBO Flow
@@ -112,3 +119,40 @@ Reader exhaustion ends input.
 Runtime stop closes any remaining cycle gracefully.
 
 Reaching `max_cycles` stops Runtime after the final cycle closes.
+
+## Proposed Trading Control Order
+
+Runtime stores the latest admitted BBO.
+
+It passes that value into new Executor initialization.
+
+```text
+Run
+  check stop request
+  reconcile botcycle
+  assess risk
+  deliver recon event
+  check botcycle
+  check max cycles
+  read signal
+  consume signal
+  open botcycle
+```
+
+Reconciliation precedes Risk and Executor decisions.
+
+Failed reconciliation prevents both.
+
+During control passes, Runtime receives AccountSnapshot values only.
+
+It never owns or reaches into Account state.
+
+During closure, Runtime receives immutable BotCycle result values.
+
+It retains no Account, Ledger, Simulator, Executor, or BotCycle pointer.
+
+Each `closeCycle` appends the returned `botcycle.Result`.
+
+After Stop, `Runtime.Result` returns one immutable `runtime.Result` containing every closed cycle.
+
+See [Trading State Tranche](../concepts/trading-state.md).

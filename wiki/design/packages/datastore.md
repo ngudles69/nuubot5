@@ -99,16 +99,26 @@ Per-Bot Sweep result expectations:
 - Each `(sweep_id, bot_id)` owns one SQLite result database.
 - Each worker writes only its owned result database.
 - Workers never share a result database writer.
+- Workers retain detailed Sweep state in memory during execution.
+- One successful run exports its result database after completion.
+- Final export uses one transaction and an atomic temporary-file rename.
+- Failed runs retain no recovery checkpoint and are rerun.
 - Completed result databases become read-only evidence.
 - Sweep aggregation reads completed databases after Bot termination.
+
+The proposed TradeExecutor result tables are defined by
+[Trading Schema](../concepts/trading-schema.md).
 
 One coordinator may serialize shared Sweep-catalog updates. The design must not
 rely on SQLite WAL to make high-volume shared writes safe.
 
-PocketBase remains an unresolved consideration. Adopting it may change the main
-datastore engine, schema, filename, migrations, and access path.
+PocketBase is approved for future live, paper, and Simulator server persistence.
 
-Datastore must not assume PocketBase until the user approves that decision.
+Server owns that PocketBase application and its writable SQLite database.
+
+Runners never open the PocketBase database directly.
+
+The per-Bot Sweep result DDL remains independent from the future PocketBase migration.
 
 ## Errors
 
@@ -135,7 +145,6 @@ LoadBot
 
 ## Open Decisions
 
-- PocketBase adoption.
 - Main datastore engine and filename.
 - Main schemas, migrations, and transaction boundaries.
 - Sweep catalog and terminal-summary schema.

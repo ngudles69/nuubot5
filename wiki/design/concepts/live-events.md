@@ -13,7 +13,7 @@ Purpose: Move admitted live BBO, bar, and user events into one Runner without mo
 - DataEngine acquires, validates, and multiplexes external events.
 - Runner owns subscriptions and local feed state.
 - Runtime consumes synchronous event and timer calls.
-- Account and Ledger own dirty state.
+- Account solely owns reconciliation-dirty state.
 
 ## Ordered Flow
 
@@ -25,7 +25,7 @@ BBO event
 
 user event
   validate account identity through DataEngine
-  mark matching Account and Ledger dirty
+  mark matching Account recon-dirty
   ask Runtime to reconcile dirty Accounts on next recon timer
 
 bar event
@@ -49,12 +49,21 @@ Runtime decides stop-loss, Risk, recon, BotCycle, and execution actions.
 - Runtime failure reaches Runner supervision.
 - Dirty state clears only after successful reconciliation.
 
+WebSocket delivery is never required for final correctness.
+
+Missing, duplicated, delayed, or reordered events are repaired by forced reconciliation.
+
+When no user event arrives, the normal recon pass skips the clean Account.
+
+This reduces Venue queries without making WebSocket delivery authoritative.
+
 ## Does Not
 
 - Reconcile immediately inside a user-event reader.
 - Place orders inside a BBO reader.
 - Let feed goroutines call Executor policy.
 - Treat dirty hints as authoritative exchange truth.
+- Commit Order or Fill truth from WebSocket delivery.
 
 ## Required Proof
 

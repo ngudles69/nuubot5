@@ -22,7 +22,7 @@ Setup loads configuration and credentials. Components receive the admitted Conte
 ## Responsibilities
 
 - Decode TOML.
-- Reject unknown fields.
+- Reject unknown shared Config fields.
 - Validate required paths and positive limits.
 - Validate admitted Signaler, Executor, and Risk kinds.
 - Resolve repository-relative paths.
@@ -54,7 +54,9 @@ Outputs are `config.Config` and `config.Credentials`.
 
 ## State and Invariants
 
-Unknown TOML fields MUST fail.
+Unknown shared Config TOML fields MUST fail.
+
+Credentials unknown-field rejection remains deferred with detailed validation.
 
 BtRunner interval and Runtime maximum cycles MUST be positive.
 
@@ -108,7 +110,7 @@ LoadCredentials
 - Current `workspace/config/config.toml` loads twice with equal results.
 - Credentials load twice with equal results.
 - Malformed credentials TOML fails.
-- Unknown fields fail.
+- Unknown shared Config fields fail.
 - Invalid lifecycle limits, kinds, periods, and percentages fail.
 
 ## Open Decisions
@@ -118,3 +120,33 @@ Detailed credential validation is deferred.
 Detailed validation of new shared configuration fields is deferred.
 
 Logging owns its directory and filenames. They are not configuration.
+
+## Proposed Trading Fields
+
+TradeExecutor configuration adds:
+
+```text
+account_name
+network
+order_notional_usdc
+take_profit_pct
+stop_loss_pct
+simulator_equity_usdc
+simulator_fee_pct
+simulator_slippage_pct
+persist_mode
+```
+
+Financial configuration uses canonical decimal text.
+
+BtRunner accepts only `network = "simnet"` for TradeExecutor.
+
+`persist_mode` accepts `none` or `max`.
+
+Account passes the selected mode to Ledger and Simulator.
+
+Live and testnet Account names resolve against the credentials catalog.
+
+Account validates only the selected credential before live Venue initialization.
+
+Config and Setup never log secret fields.

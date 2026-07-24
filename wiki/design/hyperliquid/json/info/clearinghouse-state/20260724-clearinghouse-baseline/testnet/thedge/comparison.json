@@ -1,0 +1,15 @@
+{
+  "result": "match",
+  "compared": [
+    "raw.json",
+    "async-hyperliquid.json"
+  ],
+  "ignored_fields": [
+    "time"
+  ],
+  "field_paths_match": true,
+  "values_match_excluding_ignored": true,
+  "go_time_ms": 1784885506744,
+  "async_hyperliquid_time_ms": 1784885550841,
+  "capture_gap_ms": 44097
+}

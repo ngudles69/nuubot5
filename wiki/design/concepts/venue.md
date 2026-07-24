@@ -1,6 +1,6 @@
 # Venue
 
-Status: Approved — unimplemented.
+Status: Approved — unimplemented. Refined by trading-state assessment.
 Covers: No implemented source.
 Purpose: Define the common Account-facing batch, cancellation, and query contract for live and simulated execution truth.
 
@@ -25,7 +25,37 @@ Venue MUST support:
 - query exact Order status;
 - query transient account state.
 
-The exact Go method signatures belong to the Account implementation plan.
+The first Go contract is Account-owned and minimal:
+
+```go
+type Venue interface {
+    Init(context.Context) error
+    PlaceOrders(context.Context, []hyperliquid.OrderRequest) (hyperliquid.SubmitResponse, error)
+    CancelOrders(context.Context, []hyperliquid.CancelRequest) (hyperliquid.CancelResponse, error)
+    IngestBBO(market.BBO) (bool, error)
+    OpenOrders(context.Context) ([]hyperliquid.Order, error)
+    Fills(context.Context, uint64, uint64) ([]hyperliquid.Fill, error)
+    OrderStatus(context.Context, string) (hyperliquid.OrderStatus, error)
+    AccountState(context.Context) (hyperliquid.AccountState, error)
+    Stop() error
+}
+```
+
+Method names may adjust during coding to preserve exact project style.
+
+The operation set may not expand without a current Account caller.
+
+## Protocol Types
+
+`internal/hyperliquid` owns admitted Hyperliquid request and response types.
+
+Simulator constructs those protocol values without importing transport or signing.
+
+Account translates protocol values into domain evidence.
+
+No `internal/venue` package is required for this first Hyperliquid-only slice.
+
+A second approved Venue may justify normalized shared protocol values later.
 
 ## IngestBBO
 
@@ -38,7 +68,7 @@ Venue.IngestBBO
   Simulator
     match eligible existing Orders
     record simulated Venue outcomes
-    report whether Account state became dirty
+    report whether Venue truth changed
 ```
 
 Venue ingestion does not mutate Ledger or run Executor policy. Reconciliation
@@ -127,3 +157,7 @@ Nuubot4 left `Venue` versus `Exchange` unresolved. Nuubot5 uses `Venue` for this
 ## Recommendation
 
 Keep the interface consumer-owned. Add methods only when Account has a current caller.
+
+Use Simulator as the first implementation.
+
+Add live Hyperliquid only after Simulator and Account proof pass.

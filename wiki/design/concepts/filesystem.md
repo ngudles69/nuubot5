@@ -12,6 +12,15 @@ Source, binaries, tests, and wiki pages remain outside it. Runtime code must not
 write configuration, databases, logs, data, results, or temporary state outside
 `workspace/`.
 
+One operator-tool exception exists.
+
+`parity-probe` may create permanent, tracked API evidence under
+`wiki/design/hyperliquid/json`.
+
+It validates path segments, refuses overwrite, and writes no credentials.
+
+This exception does not apply to Server, Runner, BtRunner, Runtime, or Simulator.
+
 `workspace/` is the future Docker mount. The application image remains
 immutable. The exact container mount path is unresolved.
 
@@ -74,6 +83,18 @@ coordinator may serialize small catalog and terminal-summary updates.
 
 Completed result databases become read-only evidence. Sweep aggregation reads
 them after their owning Bots finish.
+
+Sweep workers keep detailed Ledger and Simulator state in memory while running.
+
+Only successful runs export their per-Bot result database.
+
+ResultPublisher builds `bot_<bot_id>.db.partial` beside the final path.
+
+One successful committed export closes and atomically renames it to `.db`.
+
+Only `.db` is completed evidence.
+
+Failed runs retain no recoverable partial state and are rerun.
 
 PocketBase remains an unresolved consideration. Its adoption may change the
 main datastore engine, schema, filename, and access path.

@@ -1,66 +1,253 @@
 # Account Package
 
-Status: Reserved.
+Status: Reserved. Proposed next-tranche design.
 Covers: `internal/account/doc.go`
 Purpose: Give one Executor a trading boundary backed by one Venue and one local Ledger.
 
-## Canonical Source
+## Canonical Sources
 
+- `D:/rust/nuubot3/nuubot/account/account.py`
 - `D:/rust/nuubot3/wiki/account/account.md`
 - `D:/rust/nuutrader6/src/nuubot/hcbots/account.py`
 
-## Scope & Responsibilities
+## Ownership
 
-Account owns one Venue connection and one Ledger for one configured account.
+TradeExecutor owns one Account.
 
-- Submit and cancel requests through Venue.
-- Route Simulator-only BBO ingestion through the selected Venue.
-- Reconcile Venue responses into Ledger.
-- Hide live, testnet, and simulated Venue differences from Executor.
+Account owns one selected Venue and one Ledger.
+
+The first BtRunner implementation selects Simulator only.
+
+Account hides Venue selection and response translation from Executor.
+
+## Construction
+
+Account is one concrete component.
+
+It does not need a factory.
+
+TradeExecutor owns one Account value and calls `Init`.
+
+`Init` validates identity before opening Ledger or Venue state.
+
+Account publishes neither child after partial initialization failure.
+
+## Inputs
+
+| Input | Purpose |
+|---|---|
+| Logger | Report Account terminal statistics |
+| Cycle and Executor numbers | Create stable result identity |
+| Account config | Select network, name, capital, fees, and persistence |
+| Selected credentials | Initialize a future live or testnet Venue |
+| Current Clock | Preserve deterministic operation timestamps |
+| Store operations | Required only when `persist_mode = max` |
+
+Simulator initialization receives no private credential.
 
 ## Program Flow
 
 ```text
-Account(log, ctx, config)
+Init
+  bind Account inputs
+  validate Account identity
+  validate persistence mode
+  initialize Ledger with persistence mode
+  initialize Venue with persistence mode
+  initialize Account
 
-init
-  venue  = Venue(config)
-  ledger = Ledger(log, ctx, config)
+PlaceOrders
+  validate complete order batch
+  resolve Trade ownership
+  create CLOIDs
+  commit created Trade and Orders
+  submit Venue batch
+  validate submit response
+  commit submit outcomes
+  mark Account dirty
 
-start
-  venue.start()
-  ledger.start()
-
-run(request)
-  response = venue.submit(request)
-  ledger.run(response)
-  return response
-
-run(recon)
-  response = venue.fetch()
-  snapshot = ledger.run(response)
-  return snapshot
+CancelOrders
+  validate owned active Orders
+  cancel Venue batch
+  validate cancel response
+  mark Account dirty
 
 IngestBBO
-  call Venue.IngestBBO
-  mark Account dirty when Simulator state changes
+  ingest Venue BBO
+  mark Account dirty when Venue changes
 
-stop
-  ledger.stop()
-  venue.stop()
+Recon
+  claim dirty state
+  read open Venue Orders
+  read bounded Venue Fills
+  read missing active Order statuses
+  read Venue account state
+  validate complete Venue evidence
+  reconcile Ledger
+  publish Account snapshot
 
----
+Result
+  get immutable Ledger result
+  get immutable Simulator result
+  return immutable Account result
 
-domain
-  Executor owns Account
-  Account owns Venue and Ledger
-  Venue is external truth
-  Ledger is reconciled local truth
+Stop
+  stop Venue
+  stop Ledger
+  stop Account
 ```
 
-## Notes
+Each indented action becomes one exact source comment during implementation.
 
-- Account does not calculate Trade PnL or mutate Ledger-owned children directly.
-- [`IngestBBO`](../concepts/ingestbbo.md) never mutates Ledger state directly.
-- Live Venue ingestion is a no-op. Simulator ingestion may match existing Orders.
-- Simulated outcomes reach Ledger and Executor only through reconciliation.
+## Submit Contract
+
+Account validates the complete batch before mutation.
+
+One new entry batch creates one Trade.
+
+TP, SL, exit, close, cleanup, and stop Orders attach to an existing Trade.
+
+One entry, TP, and SL bracket creates three Orders under one Trade.
+
+Account persists `created` intent before Venue I/O.
+
+Every request receives one explicit success or rejection.
+
+One payload-wide Venue error maps to every ordered request.
+
+Malformed or incomplete responses leave recoverable `created` evidence.
+
+Item errors remain acknowledgement evidence until reconciliation.
+
+Every complete acknowledgement remains submitted until reconciliation.
+
+Account never retries uncertain mutation outcomes automatically.
+
+Immediate Fills still enter Ledger through reconciliation.
+
+HTTP mutation responses are acknowledgement evidence, not final lifecycle truth.
+
+## Reconciliation
+
+Account queries Venue in this order:
+
+1. Open Orders.
+2. Fills from the inclusive Ledger cursor.
+3. Exact status for missing active local Orders.
+4. Transient account state.
+
+Account validates untrusted Venue shapes once.
+
+Ledger receives normalized concrete values.
+
+Account filters history by the smallest useful time range.
+
+A cap-sized response remains incomplete until Account narrows or continues the range.
+
+Missing history rows never authorize deleting local Ledger evidence.
+
+Reconciliation repairs drift from missing or delayed HTTP and WebSocket evidence.
+
+Normal reconciliation returns the latest snapshot without querying a clean Account.
+
+Forced reconciliation queries Venue even when Account is clean.
+
+Failed reconciliation restores dirty state.
+
+It advances no cursor or success timestamp.
+
+## Dirty State
+
+Account solely owns its reconciliation-dirty flag.
+
+Initialization, user events, submissions, and changed Simulator truth mark it dirty.
+
+Normal recon skips a clean Account.
+
+Forced recon ignores the flag.
+
+Successful recon clears it. Failed recon restores it.
+
+Venue and Ledger own no dirty flag.
+
+## Credentials
+
+Account selects one configured credential by Account name and network.
+
+Selection rejects duplicates, missing names, network mismatch, empty address, and empty API key.
+
+Semantic credential validation occurs only before live or testnet Venue initialization.
+
+Simulator ignores the credentials catalog.
+
+Credential values never enter formatted errors or logs.
+
+## Snapshot
+
+Successful reconciliation returns one immutable-by-contract Account snapshot.
+
+The snapshot contains identity, observation time, exposure, equity, margins, PnL, fees, and domain counts.
+
+It contains no Account, Ledger, Trade, Order, Fill, or Venue pointer.
+
+See [AccountSnapshot](../concepts/account-snapshot.md).
+
+## Persistence
+
+Account receives store operations only for `max`.
+
+`none` opens no database during Account execution.
+
+Account receives `persist_mode` and passes it to Ledger and Simulator.
+
+`none` keeps both children in memory until one successful final export.
+
+`max` persists every accepted Ledger mutation and every Simulator state change.
+
+Neither child detects Runner, Sweep, paper, or live mode.
+
+For `none`, ResultPublisher owns the final per-Bot SQLite path.
+
+Live Runner later uses Server-owned store operations.
+
+Account never opens the Server-owned PocketBase database directly.
+
+See [Trading Schema](../concepts/trading-schema.md).
+
+## Terminal Result
+
+Before child teardown, Account creates one immutable terminal result.
+
+`account.Result` contains identity, Venue kind, `persist_mode`, and `ledger.Result`.
+
+Simulator-backed Accounts also contain one explicit optional `simulator.Result`.
+
+Live and testnet Hyperliquid Accounts leave Simulator evidence absent.
+
+They never fabricate a zero Simulator result.
+
+Slices and maps are copied. The result aliases no mutable child state.
+
+AccountSnapshot remains the small one-control-pass Risk value.
+
+The terminal result travels upward without Account, Ledger, or Simulator pointers.
+
+## Does Not
+
+- Calculate Trade PnL.
+- Match Simulator Orders.
+- Mutate Order or Fill fields directly.
+- Expose raw Venue payloads to Executor.
+- Share mutable Accounts between Executors.
+- Log returned errors.
+
+## Required Proof
+
+- Partial initialization publishes no child.
+- Invalid batches create no rows.
+- Unknown submit outcomes retain `created` Orders.
+- Mixed submit results preserve each item.
+- Failed recon changes no domain state or cursor.
+- Simulator BBO changes only mark dirty.
+- Stop releases Venue before Ledger.
+- Credential values never appear in output.

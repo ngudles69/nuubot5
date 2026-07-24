@@ -1,46 +1,77 @@
 # Fill Package
 
-Status: Reserved.
+Status: Reserved. Proposed next-tranche design.
 Covers: `internal/fill/doc.go`
-Purpose: Record one actual Venue or Simulator execution for one Order.
+Purpose: Preserve one actual Venue or Simulator execution as domain evidence.
 
-## Canonical Source
+## Canonical Sources
 
+- `D:/rust/nuubot3/nuubot/account/fill.py`
 - `D:/rust/nuubot3/wiki/account/fill.md`
-- `D:/rust/nuutrader6/src/nuubot/hcbots/simulator.py`
 
-## Scope & Responsibilities
+## Ownership
 
-Fill preserves one execution as immutable trading evidence.
+Order owns Fill.
 
-- Keep Venue identity, side, quantity, price, fee, and time.
-- Accept later metadata without changing execution facts.
+Ledger creates Fill from normalized Venue evidence.
 
-## Program Flow
+Fill never queries or mutates another component.
+
+## Domain Shape
+
+Fill is an execution value.
+
+It is not a lifecycle component.
+
+It has no `Init`, `Start`, `Run`, or `Stop`.
+
+## Immutable Execution
+
+- Local and Venue identity.
+- Ledger, Trade, Order, Account, cycle, and symbol identity.
+- CLOID and Venue Order identity.
+- Side, quantity, price, and execution time.
+
+These fields never change after admission.
+
+## Late Enrichment
+
+Fee, liquidity, and raw evidence may arrive later.
+
+Later evidence may fill missing metadata.
+
+It cannot change execution identity or economics.
+
+## Operations
 
 ```text
-Fill(order, execution)
-
-init
-  keep order identity and execution
-
-start
-  attach to Order
-
-run(metadata)
-  enrich missing metadata
-  return fill
-
-stop
+New
+  validate complete execution identity
   keep immutable execution
+  keep available metadata
 
----
+Enrich
+  reject changed execution
+  accept later metadata
 
-domain
-  one partial execution = one Fill
+Snapshot
+  return immutable Fill values
 ```
 
-## Notes
+These are domain operations, not lifecycle phases.
 
-- Order owns Fill. Ledger creates or updates it from validated Venue evidence.
-- Fill does not calculate Order totals or Trade PnL.
+## Persistence
+
+One Venue TID identifies one Fill inside one Ledger.
+
+SQLite stores decimals as canonical text.
+
+See [Trading Schema](../concepts/trading-schema.md).
+
+## Required Proof
+
+- Missing identity, nonpositive quantity, nonpositive price, and invalid side fail.
+- Duplicate identical evidence is idempotent.
+- Late fee and liquidity enrich the same Fill.
+- Changed side, quantity, or price fails.
+- Fill values survive persistence round-trip exactly.

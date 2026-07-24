@@ -5,6 +5,7 @@ go 1.26.0
 require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/apache/arrow-go/v18 v18.7.0
+	github.com/shopspring/decimal v1.4.0
 	modernc.org/sqlite v1.54.0
 )
 

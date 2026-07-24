@@ -44,6 +44,53 @@ BotCycle coordinates Executors. Executor implementations own execution policy.
 
 BalancedRisk is a stub. ObserverExecutor observes BBO values and records simulated exits.
 
+## Proposed BtRunner Trading Slice
+
+This architecture is designed but unimplemented.
+
+```text
+BtRunner
+`-- Runtime
+    `-- active BotCycle
+        `-- TradeExecutor
+            `-- Account
+                |-- Simulator
+                `-- Ledger
+                    `-- Trades
+                        `-- Orders
+                            `-- Fills
+```
+
+Simulator produces Hyperliquid-shaped Venue truth.
+
+Account validates and translates that truth.
+
+Ledger reconciles it into domain evidence.
+
+Immediate HTTP responses and WebSocket events are non-authoritative hints.
+
+Forced reconciliation restores Venue-authoritative Order, Fill, position, and balance truth.
+
+See [Trading State Tranche](design/concepts/trading-state.md).
+
+## Permanent Parity Probe
+
+```text
+parity-probe command
+`-- Parity Probe
+    `-- Info probe
+        |-- Hyperliquid testnet
+        `-- Simulator simnet
+```
+
+The command runs one selected operation through production code.
+
+Testnet clearinghouse-state is implemented.
+
+Simnet activates after Simulator implements real clearinghouse behavior.
+
+See [Hyperliquid Parity Probe](design/hyperliquid/parity.md).
+
 ## Canonical BtRunner Flow
 
 ```text
@@ -174,7 +221,7 @@ user event
   -> Runtime
   -> BotCycle
   -> Executor
-  -> Account marks its Ledger dirty
+  -> Account marks itself recon-dirty
 
 reconciliation cadence
   -> Runtime
@@ -226,6 +273,24 @@ Approved live persistence separates:
 - Simulator persistence for venue-shaped simulated state.
 
 These are logical boundaries, not one database graph.
+
+Account passes one configured `persist_mode` to Ledger and Simulator.
+
+`none` keeps both in memory until successful result publication.
+
+`max` persists every accepted Ledger mutation and Simulator state change.
+
+Neither child detects Runner, Sweep, paper, or live mode.
+
+`none` opens no database during Account execution.
+
+ResultPublisher atomically creates its final database only after success.
+
+Before teardown, Account evidence moves upward as immutable owned values.
+
+Runtime retains these values, not descendant pointers.
+
+ResultPublisher writes `none` evidence only after successful Runtime shutdown.
 
 The existing SQLite Sweep database remains the read-only backtesting datastore.
 

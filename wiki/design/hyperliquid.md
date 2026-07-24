@@ -1,6 +1,6 @@
 # Hyperliquid
 
-Status: Approved design. Implementation pending.
+Status: Clearinghouse-state REST slice implemented. Remaining boundary pending.
 
 Covers: `internal/hyperliquid/**`
 
@@ -20,6 +20,8 @@ is the secondary implementation reference.
 
 Python `async_hyperliquid` is the third known-working reference.
 
+The locally inspected installed version is `0.4.8`.
+
 Nuubot does not target library parity.
 
 Nuubot copies or adapts audited reference code only when that reduces work.
@@ -37,9 +39,10 @@ These decisions prevent repeated SDK and dependency discussions.
 | Treat Sonirico as secondary reference. | Its Go code proves useful request shapes and behavior. | Official API behavior conflicts with it. |
 | Reuse cleaned Sonirico Meta code. | Its perpetual Meta request works against live mainnet. | Official Meta changes or local proof fails. |
 | Preserve attribution for copied code. | Sonirico code is MIT licensed. | No Sonirico code remains. |
-| Treat `async_hyperliquid` as third reference. | The user has run it successfully, but it also has known issues. | A selected behavior fails official or local proof. |
-| Avoid full Python parity. | Python structure and defects do not define Nuubot correctness. | Never; compare only selected protocol outputs. |
+| Treat `async_hyperliquid` as response reference. | Nuutrader6 uses its client-visible outputs. | A selected output fails official or local proof. |
+| Avoid full Python parity. | Python structure and defects do not define Nuubot correctness. | Never; compare only admitted response outputs. |
 | Compare deterministic wire outputs selectively. | Payload, hash, digest, signature, and formatting comparisons can expose mistakes. | The official protocol intentionally differs. |
+| Match Simulator public response shapes. | Account processes Simulator and live evidence through one translation path. | The admitted response contract changes. |
 | Exclude CCXT. | Its unified, generated, multi-exchange surface exceeds current needs. | A second exchange is approved. |
 | Avoid a CCXT-style unified layer. | Venue already owns Nuubot's required common boundary. | Venue cannot admit an approved second exchange cleanly. |
 | Use standard-library REST. | Hyperliquid REST is bounded JSON POST behavior. | Proven requirements exceed `net/http`. |
@@ -83,6 +86,7 @@ DataEngine uses the Hyperliquid WebSocket transport for live market and user eve
 - Hyperliquid response validation.
 - Hyperliquid errors and rate-limit evidence.
 - Mapping between Venue values and Hyperliquid payloads.
+- Protocol response types constructed by Simulator for parity proof.
 
 ## Out
 
@@ -109,8 +113,10 @@ Network work accepts `context.Context` and returns errors.
 ## Internal Design
 
 - [REST](hyperliquid/rest.md) owns HTTP transport and explicit calls.
+- [Exchange](hyperliquid/exchange.md) owns signed mutations and application responses.
 - [WebSocket](hyperliquid/websocket.md) owns socket mechanics and recovery.
 - [Meta](hyperliquid/meta.md) owns raw Hyperliquid Meta retrieval.
+- [Parity Probe](hyperliquid/parity.md) owns permanent API and Simulator evidence.
 
 Add another page only when one implemented concern needs its own contract.
 
@@ -143,7 +149,17 @@ D:\rust\nuubot3\nuubot\exchange\async_hyperliquid.py
 D:\rust\nuutrader6\src\nuubot\hcbots\account.py
 ```
 
-Reference behavior does not override the official API, Nuubot ownership, or safety rules.
+Nuutrader6 is the matching-behavior reference.
+
+`async_hyperliquid` 0.4.8 is the client-visible response reference.
+
+Reference behavior does not override official semantics, Nuubot ownership, or safety rules.
+
+Simulator may reuse admitted Hyperliquid protocol types.
+
+It must not import REST, signing, WebSocket, or live-client behavior.
+
+See [Simulator Parity](concepts/simulator-parity.md).
 
 ## Required Proof
 

@@ -13,6 +13,8 @@ Purpose: Publish exactly one terminal backtest result from approved Runtime evid
 
 ResultPublisher translates one immutable Runtime result snapshot into durable BtRunner and Sweep result evidence.
 
+Runtime captures descendant evidence before each BotCycle teardown.
+
 ## Owner and Children
 
 BtRunner owns ResultPublisher.
@@ -23,6 +25,7 @@ ResultPublisher owns no Runtime descendant.
 
 - Accept one terminal Runtime result snapshot.
 - Validate identity, completion, and required evidence.
+- Persist supplied Ledger and Simulator evidence when `persist_mode = none`.
 - Persist the Bot result once.
 - Update the owning Sweep result boundary through an approved store.
 - Return publication failure to BtRunner.
@@ -40,7 +43,26 @@ ResultPublisher owns no Runtime descendant.
 - One BtRunner publishes at most one terminal result.
 - Result identity matches Sweep and Bot identity.
 - Publication follows Runtime shutdown and replay verification.
+- Runtime result values alias no stopped child state.
+- Simulator-backed Account results require Simulator evidence.
+- Hyperliquid Account results reject unexpected Simulator evidence.
+- Failed Runtime execution publishes no partial Ledger or Simulator evidence.
+- A failed publication leaves no completed result database or catalog success.
 - Publication failure makes BtRunner fail.
+
+## Atomic Publication
+
+For `none`, Account opens no result database.
+
+ResultPublisher creates a temporary database beside the final path after success.
+
+It writes all evidence in one transaction, closes the database, then atomically renames it.
+
+Only the final filename is completed evidence.
+
+Catalog success follows the rename.
+
+Failure removes or leaves only an ignored temporary file.
 
 ## Required Proof
 
@@ -48,3 +70,4 @@ ResultPublisher owns no Runtime descendant.
 - Incomplete replay cannot publish success.
 - Snapshot identity mismatch fails.
 - Sweep aggregate sees the same terminal Bot result.
+- Failed publication leaves no final database or completed catalog row.

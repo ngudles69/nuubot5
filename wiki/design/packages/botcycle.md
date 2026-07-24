@@ -1,6 +1,6 @@
 # BotCycle Package
 
-Status: Implemented.
+Status: Implemented. Proposed trading reconciliation extension.
 Covers: `internal/botcycle/botcycle.go`
 Purpose: Own Executors for one admitted entry Signal.
 
@@ -38,6 +38,7 @@ Run
 
 Stop
   stop executors
+  collect cached account results
   resolve exit reason
   calculate duration
   report proof
@@ -85,3 +86,39 @@ BotCycle completes when every Executor is stopping, stopped, or in error.
 Runtime closes a completed cycle during its next timed `Run`.
 
 Runtime clears `r.cycle` before stopping the old cycle.
+
+## Proposed Trading Extension
+
+BotCycle remains the capability dispatcher.
+
+It never receives or exposes Account references.
+
+```text
+Reconcile
+  reconcile capable Executors
+  collect Account snapshots
+  return one completed barrier
+
+OnRecon
+  deliver accepted recon event
+```
+
+Runtime calls `Reconcile` before Risk.
+
+Runtime calls `OnRecon` only after reconciliation and Risk succeed.
+
+One Executor reconciliation failure stops the control pass.
+
+BotCycle returns no partial success barrier.
+
+BotCycle stops every Executor before collecting supported `AccountResultProvider` values.
+
+Collected results are immutable values.
+
+`Stop` returns one `botcycle.Result` after every Executor has stopped.
+
+That value contains ordered `account.Result` values captured during Executor shutdown.
+
+BotCycle returns no Account, Ledger, Simulator, or Executor pointer.
+
+See [Trading State Tranche](../concepts/trading-state.md).

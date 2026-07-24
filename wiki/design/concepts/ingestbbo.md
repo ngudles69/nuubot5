@@ -55,8 +55,13 @@ next due control pass
   run Executor decisions
 ```
 
-New Orders created after this matching phase cannot match against the BBO that
-already passed. They wait for a later BBO.
+Resting and trigger Orders created after this matching phase wait for a later BBO.
+
+Explicit market-like IOC Orders are a separate Venue mutation.
+
+They may execute immediately from their caller-supplied current reference.
+
+This exception supports entry and graceful forced-close behavior.
 
 ## Failure Handling
 

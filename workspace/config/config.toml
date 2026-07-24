@@ -15,7 +15,7 @@ min_order_notional_usdc = 11
 
 [process]
 poll_seconds = 10
-request_timeout_seconds = 2
+request_timeout_seconds = 10
 failure_threshold = 3
 unresponsive_seconds = 30
 restart_limit = 3

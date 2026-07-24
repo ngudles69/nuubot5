@@ -1,0 +1,18 @@
+{
+  "time_ms": 1784885506233,
+  "margin": {
+    "equity": "172.232247",
+    "margin_used": "0",
+    "notional": "0",
+    "raw_usd": "172.232247"
+  },
+  "cross_margin": {
+    "equity": "172.232247",
+    "margin_used": "0",
+    "notional": "0",
+    "raw_usd": "172.232247"
+  },
+  "maintenance_margin": "0",
+  "withdrawable": "172.232247",
+  "positions": []
+}

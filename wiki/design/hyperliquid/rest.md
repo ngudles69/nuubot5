@@ -1,10 +1,10 @@
 # Hyperliquid REST
 
-Status: Approved design. Implementation pending.
+Status: Clearinghouse-state read implemented. Remaining calls pending.
 
 Covers: `internal/hyperliquid` REST transport.
 
-Purpose: Send bounded Hyperliquid JSON requests and return validated response bytes.
+Purpose: Send bounded Hyperliquid JSON payloads and translate admitted responses.
 
 Protocol source:
 [official Hyperliquid API documentation](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api).
@@ -14,18 +14,15 @@ Protocol source:
 - Go standard-library `net/http`.
 - Explicit mainnet or testnet base URL.
 - Caller-owned `context.Context`.
-- Thirty-second default request timeout.
-- Optional injected `http.Client` for tests and approved configuration.
+- Explicit positive request timeout.
 - JSON request encoding.
 - HTTP status handling.
 - Bounded response reading.
-- Hyperliquid error decoding.
 
 ## Out
 
 - WebSocket connections.
 - Request signing.
-- Domain mapping.
 - Credentials loading.
 - Constructor network calls.
 - Panics or fatal process exits.
@@ -36,13 +33,28 @@ Protocol source:
 ## Flow
 
 ```text
-caller method
-  encode request
-  create request with context
-  send through owned HTTP client
-  read bounded response
-  reject HTTP or Hyperliquid error
-  return response for typed decoding
+New
+  validate network
+  configure HTTP client
+
+ClearinghouseState
+  request clearinghouse payload
+  decode clearinghouse payload
+
+ClearinghouseStatePayload
+  validate address
+  encode request payload
+  post request payload
+
+Post
+  create request
+  send request
+  read response payload
+  validate response
+
+DecodeClearinghouseState
+  decode response payload
+  translate account state
 ```
 
 ## Construction
@@ -53,7 +65,7 @@ Construction performs no DNS lookup, connection, request, authentication, or bac
 
 ## Logging
 
-Debug logs may include method, endpoint class, status, duration, and response size.
+The REST Client performs no logging.
 
 Logs must not include credentials, signatures, private actions, or complete response bodies.
 
@@ -65,12 +77,65 @@ Safe query retry policy may be added after rate-limit and timeout behavior is pr
 
 Mutations require request-identity and unknown-outcome design before any retry.
 
+## Clearinghouse State
+
+The first implemented call sends:
+
+```json
+{
+  "type": "clearinghouseState",
+  "user": "<address>",
+  "dex": ""
+}
+```
+
+Private wire types retain Hyperliquid field names.
+
+Exported Nuubot types use readable names and `decimal.Decimal`.
+
+| Hyperliquid | Nuubot |
+|---|---|
+| `marginSummary.accountValue` | `Margin.Equity` |
+| `marginSummary.totalMarginUsed` | `Margin.MarginUsed` |
+| `marginSummary.totalNtlPos` | `Margin.Notional` |
+| `marginSummary.totalRawUsd` | `Margin.RawUSD` |
+| `crossMarginSummary` | `CrossMargin` |
+| `crossMaintenanceMarginUsed` | `MaintenanceMargin` |
+| `assetPositions[].position.szi` | `Positions[].SignedSize` |
+| `entryPx` | `EntryPrice` |
+| `liquidationPx` | `LiquidationPrice` |
+| `positionValue` | `Notional` |
+| `unrealizedPnl` | `UnrealizedPnL` |
+
+`RawUSD` remains untranslated because its stronger semantic meaning is unproven.
+
+Live captures belong under `wiki/design/hyperliquid/json`.
+
+The permanent [Parity Probe](parity.md) records the raw payload before decoding.
+
 ## Required Proof
 
 - Context cancellation stops an active request.
-- Default timeout is present.
-- Injected HTTP clients work.
+- Positive timeouts are required.
 - Non-success status returns an error.
 - Oversized responses fail.
-- Debug logging excludes bodies.
-- Perpetual Meta succeeds against live mainnet.
+- REST transport logs no payloads.
+- Clearinghouse state succeeds for approved testnet accounts.
+- Go and `async_hyperliquid` output values match.
+
+## Proven Baseline
+
+Capture: `20260724-clearinghouse-baseline`.
+
+Both approved testnet accounts returned HTTP 200.
+
+Go and `async_hyperliquid` matched every field and value except the expected
+request-time field.
+
+```text
+tgrid   positions=0 equity=172.232247 duration_ms=165
+thedge  positions=0 equity=549.237687 duration_ms=150
+```
+
+Evidence:
+`json/info/clearinghouse-state/20260724-clearinghouse-baseline/testnet`.

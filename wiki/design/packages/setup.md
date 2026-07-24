@@ -34,6 +34,8 @@ Setup
 - Config and credentials are read-only and idempotent when files are unchanged.
 - Setup performs no hot reload. Running processes retain their admitted Context.
 - Credentials receive TOML decoding only. Account validation is deferred.
+- Account validates only its selected live credential during initialization.
+- Simulator receives no private credential.
 - Source marks the future Meta-admission location after current datastore admission.
 - Meta will read dataset freshness through Datastore.
 - Meta younger than 24 hours will continue without an exchange request.

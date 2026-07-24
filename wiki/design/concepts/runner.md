@@ -32,7 +32,7 @@ Runner directly owns:
 - Request required DataEngine subscriptions.
 - Bootstrap required bars before opening Runtime admission.
 - Deliver validated bars and BBO values to Runtime.
-- Mark Account and Ledger dirty from user events.
+- Mark the matching Account recon-dirty from user events.
 - Trigger fast BBO checks and slower reconciliation requests.
 - Supervise its clock, subscriptions, Runtime, and completion.
 - Stop new input before Runtime teardown.

@@ -1,6 +1,6 @@
 # Execution
 
-Status: Approved — unimplemented.
+Status: Approved — unimplemented. Refined by trading-state assessment.
 Covers: No implemented source.
 Purpose: Turn one Executor decision into validated domain evidence and Venue actions without breaking ownership.
 
@@ -15,7 +15,7 @@ Recon remains a separate preceding process.
 ```text
 Runtime completes recon
 Runtime evaluates Risk
-Runtime asks BotCycle to run Executors
+Runtime delivers successful recon event
 Executor chooses one action
 Executor calls its Account
 Account validates the complete batch
@@ -26,7 +26,7 @@ Account records created intent
 Account submits one Venue batch
 Account validates every response item
 Ledger records confirmed submission outcomes
-Later recon applies venue lifecycle and Fill truth
+Later recon applies Venue lifecycle and Fill truth
 ```
 
 ## Responsibilities
@@ -61,11 +61,25 @@ Missing ownership identity MUST fail before submission.
 
 Each request MUST receive exactly one explicit success or rejection.
 
+One payload-wide Venue error MUST expand across every ordered request.
+
 Malformed, incomplete, duplicated, or unknown results MUST preserve recoverable created evidence.
 
 Mixed success and rejection MUST preserve each validated result.
 
+Item errors remain provisional acknowledgement evidence.
+
+Every complete acknowledgement remains submitted until recon.
+
 Immediate Fills MUST still enter canonical domain truth through recon.
+
+Explicit market-like IOC Orders may execute during submission.
+
+Their returned execution still marks Account dirty and enters Ledger through recon.
+
+Mutation HTTP responses and WebSocket events are non-authoritative hints.
+
+Only successful reconciliation commits canonical Order, Fill, position, and balance truth.
 
 ## Shutdown Execution
 
@@ -110,3 +124,7 @@ Nuubot4 currently uses ObserverExecutor without real Account execution. This pag
 ## Recommendation
 
 Implement one real Executor's minimum execution slice before generalizing the Account or Venue surface.
+
+The selected slice is [TradeExecutor](trade-executor.md) with Simulator.
+
+The physical result design is [Trading Schema](trading-schema.md).
