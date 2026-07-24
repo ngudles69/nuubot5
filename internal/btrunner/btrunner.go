@@ -43,10 +43,10 @@ type BtRunner struct {
 func (r *BtRunner) Init(log *logging.Logger, sweepID, botID uint64) error {
 	r.log = log
 
-	// initialize setup
-	var ctx, err = setup.Init(log, sweepID, botID)
+	// prepare setup
+	var ctx, err = setup.Setup(log, sweepID, botID)
 	if err != nil {
-		return fmt.Errorf("initialize setup: %w", err)
+		return fmt.Errorf("prepare setup: %w", err)
 	}
 
 	// set replay range
@@ -157,7 +157,7 @@ func (r *BtRunner) Loop() error {
 		}
 
 		// ingest runtime bbo
-		err = r.runtime.Ingest(bbo)
+		err = r.runtime.IngestBBO(bbo)
 		if err != nil {
 			return fmt.Errorf("ingest runtime bbo: %w", err)
 		}

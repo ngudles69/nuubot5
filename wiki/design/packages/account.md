@@ -14,6 +14,7 @@ Purpose: Give one Executor a trading boundary backed by one Venue and one local 
 Account owns one Venue connection and one Ledger for one configured account.
 
 - Submit and cancel requests through Venue.
+- Route Simulator-only BBO ingestion through the selected Venue.
 - Reconcile Venue responses into Ledger.
 - Hide live, testnet, and simulated Venue differences from Executor.
 
@@ -40,6 +41,10 @@ run(recon)
   snapshot = ledger.run(response)
   return snapshot
 
+IngestBBO
+  call Venue.IngestBBO
+  mark Account dirty when Simulator state changes
+
 stop
   ledger.stop()
   venue.stop()
@@ -56,3 +61,6 @@ domain
 ## Notes
 
 - Account does not calculate Trade PnL or mutate Ledger-owned children directly.
+- [`IngestBBO`](../concepts/ingestbbo.md) never mutates Ledger state directly.
+- Live Venue ingestion is a no-op. Simulator ingestion may match existing Orders.
+- Simulated outcomes reach Ledger and Executor only through reconciliation.

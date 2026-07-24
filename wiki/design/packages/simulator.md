@@ -16,6 +16,7 @@ Simulator provides the SDK-facing behavior Account expects without contacting a 
 - Accept the same requests as the selected SDK boundary.
 - Return equivalent response shapes.
 - Keep simulated Venue truth separate from Ledger truth.
+- Match eligible existing Orders when `IngestBBO` advances simulated Venue time.
 
 ## Program Flow
 
@@ -32,10 +33,18 @@ run(request)
   response = simulate SDK response
   return response
 
+IngestBBO
+  accept one validated BBO
+  match eligible existing Orders
+  record simulated Order and Fill outcomes
+  report whether Account state became dirty
+
 stop
   release simulated state
 ```
 
 ## Notes
 
-- Matching, fills, latency, fees, order books, and detailed mechanics remain intentionally undefined.
+- [`IngestBBO`](../concepts/ingestbbo.md) is the only BBO route that advances Simulator matching.
+- `OnBBO` never advances Simulator or creates simulated Fills.
+- Exact matching, latency, fees, order books, and partial-fill mechanics remain intentionally undefined.

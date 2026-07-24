@@ -4,10 +4,77 @@ Last updated: 2026-07-24
 
 ## Focus
 
-Rework Clock from the Nautilus multi-timer design.
+Prepare the next approved Nuubot5 task.
 
 ## Current status
 
+- Stock `github.com/sonirico/go-hyperliquid` failed the Nuubot5 SDK audit.
+- The audited clone is `D:\rust\references\go-hyperliquid` at `6cb9ba8`.
+- The working fork at `D:\rust\go-hyperliquid` remains reference-only.
+- Fork baseline setup is complete.
+- The module is `github.com/ngudles69/go-hyperliquid`.
+- `origin` owns the fork; `upstream` tracks Sonirico.
+- Explicit perpetual Meta retrieval is already implemented as `Info.Meta`.
+- Live mainnet perpetual Meta retrieval is proven.
+- Hyperliquid design-tree documentation is complete.
+- `wiki/design/hyperliquid.md` owns the boundary.
+- REST, WebSocket, and Meta details have focused child pages.
+- `wiki/DESIGN.md` explains what, where, why, how, in, out, and status.
+- Official Hyperliquid API documentation is authoritative.
+- Sonirico's Go client is the secondary implementation reference.
+- Python `async_hyperliquid` is the third known-working reference.
+- Nuubot rewrites from the official API and targets no library parity.
+- Hyperliquid decision-record documentation is complete.
+- Full-worktree verification passed.
+- Full-worktree publication is authorized.
+- The stock SDK contains unsafe error handling, WebSocket deadlock paths,
+  missing TP/SL grouping, insufficient signing proof, and dependency bloat.
+- The audit rejects direct stock-module adoption.
+- Setup contains the approved deferred Meta-admission comment.
+- Meta refresh and minimum-notional design is recorded.
+- Meta belongs inside the future NuubotDB.
+- Every Setup caller will check Meta freshness.
+- Empty or 24-hour-old Meta triggers caller-driven refresh.
+- Hyperliquid's minimum order notional is USDC 10.
+- Nuubot will configure USDC 11 to buffer price and size rounding.
+- Setup rewrite is complete and partially user reviewed.
+- Setup exposes one coordinator function returning one Context.
+- Config and credentials load from separate owning files.
+- Existing config validation remains; new detailed validation is deferred.
+- Credentials will receive TOML decoding only; account validation is deferred.
+- Datastore behavior and shape remain unchanged.
+- Shared WebSocket ownership remains TBD.
+- `workspace/` is the only approved mutable filesystem root and future Docker mount.
+- Shared config, databases, logs, and runtime data belong under `workspace/`.
+- Main datastore files belong directly under `workspace/db/`.
+- Per-Bot Sweep result databases belong under
+  `workspace/db/sweeps/sweep_<sweep_id>/bot_<bot_id>.db`.
+- Sweep workers write only their owned result database.
+- Main datastore technology, schema, and filename remain unresolved.
+- `workspace/config/config.toml` is approved for Git and must contain no secrets.
+- `workspace/config/credentials.toml` contains secrets and must remain ignored.
+- PocketBase remains unresolved and must not shape the finalized datastore yet.
+- `HANDOFF.md` owns current DONE, TODO, and deferred work buckets.
+- Tranche 1 is the active user-review TODO.
+- Tranches 2 and 3 are deferred implementation buckets.
+- `wiki/DESIGN.md` owns the user review tree and To Code checklist.
+- Checklist states use DONE, PARTIAL, NOT REVIEWED, and TO CODE.
+- DONE and PARTIAL rows record `2026-07-24 12:55:22 +08:00`.
+- The To Code list is workflow state, not package implementation status.
+- Observer increments IngestBBO and OnBBO counters silently.
+- Observer logs both summarized counts only during Stop.
+- Runtime, BotCycle, and Executor implement the approved IngestBBO route.
+- Runtime's BBO method is named `IngestBBO`.
+- Observer retains its existing stop-loss termination behavior.
+- The rejected 20-BBO completion rule is not part of the design.
+- Runtime, BotCycle, Executor, Account, Venue, and Simulator designs link the
+  canonical IngestBBO concept.
+- Executor design owns the factory, common concrete structure, current Observer
+  template, future TradeExecutor template, and complex-Executor page rule.
+- `IngestBBO` is approved only for driving Simulator matching and fills.
+- `OnBBO` remains the separate Executor BBO policy callback.
+- Live Venue `IngestBBO` is a no-op.
+- Simulator outcomes reach Executor state only through reconciliation.
 - Clock hardcut is complete.
 - Program Flow wording completed a repo-wide verb-first hardcut.
 - `STYLE.md` and `RULES.md` now require verb-first action steps and source comments.
@@ -156,6 +223,46 @@ Rework Clock from the Nautilus multi-timer design.
 - `wiki/design/packages/btrunner.md` covers only `internal/btrunner/btrunner.go`.
 - BtRunner review commit and push are authorized.
 
+## Work tracker
+
+Last updated: 2026-07-24 13:33:22 +08:00
+
+### DONE
+
+- nuubot-btrunner review.
+- BtRunner review.
+- Runtime review.
+- WallClock implementation.
+- Setup coordinator rewrite.
+
+### TODO — Tranche 1
+
+1. Review Signaler, Macross, and RSI.
+2. Review Risk and BalancedRisk.
+3. Continue Setup review: validation, datastore shape, and shared WebSocket ownership.
+4. Select the SDK, including Hyperliquid SDK selection.
+
+### DEFERRED — Tranche 2
+
+- Account.
+- Ledger.
+- Trade.
+- Order.
+- Fill.
+- Simulator.
+- TradeExecutor.
+
+### DEFERRED — Tranche 3
+
+- Runner.
+- Detailed Risk implementation.
+
+### DEFERRED — Unassigned
+
+- Simulator parity.
+- Meta.
+- PocketBase consideration: do not add yet.
+
 ## Active agents
 
 - Root only.
@@ -166,6 +273,48 @@ Rework Clock from the Nautilus multi-timer design.
 
 ## Files changed
 
+- `internal/setup/setup.go`: marks the future Meta-admission location without
+  adding disabled code or fake types.
+- `wiki/design/packages/setup.md`: records the deferred Meta integration.
+- `workspace/config/config.toml`: configures Hyperliquid minimum order notional
+  at USDC 11.
+- `internal/config/config.go`: admits the Hyperliquid policy section.
+- `internal/config/config_test.go`: proves the configured USDC 11 floor.
+- `wiki/design/packages/meta.md`: NuubotDB ownership, Setup-driven 24-hour
+  refresh, normalized constraints, retirement, concurrency, and rounding buffer.
+- `wiki/design/packages/config.md`: records Hyperliquid policy ownership.
+- `.gitignore`: tracks shared workspace config while retaining credential ignores.
+- `workspace/config/config.toml`: prominent no-secrets warning.
+- `internal/config/config.go`: shared config types, loading, existing validation,
+  and shared-data path admission.
+- `internal/config/credentials.go`: typed credentials TOML decoding without
+  semantic account validation.
+- `internal/config/config_test.go`: idempotent loading and malformed credentials proof.
+- `internal/setup/setup.go`: one Setup coordinator returning one Context.
+- `internal/btrunner/btrunner.go`: calls `setup.Setup`.
+- `wiki/design/packages/setup.md`: partially reviewed Setup contract.
+- `wiki/design/packages/config.md`: config and credentials ownership.
+- `wiki/design/concepts/filesystem.md`: mutable root, directory ownership,
+  Docker mount, database layout, secret rules, and current drift.
+- `wiki/design/packages/datastore.md`: main-store and per-Bot result-store expectations.
+- `wiki/DESIGN.md`: Filesystem concept index entry.
+- `HANDOFF.md`: filesystem decision and direct proof.
+- `wiki/DESIGN.md`: canonical user review tree, timestamps, and To Code checklist.
+- `HANDOFF.md`: review-tracker task and proof.
+- `internal/btrunner/btrunner.go`: calls `Runtime.IngestBBO`.
+- `internal/runtime/runtime.go`: routes BBO through BotCycle IngestBBO before OnBBO.
+- `internal/botcycle/botcycle.go`: routes IngestBBO through active Executors.
+- `internal/executor/executor.go`: requires Executor IngestBBO.
+- `internal/executor/observer.go`: counts IngestBBO and OnBBO calls and reports
+  both counts during Stop.
+- `internal/executor/observer_test.go`: proves counters, retained stop loss, and
+  summarized stop logging.
+- `wiki/design/concepts/ingestbbo.md`: Simulator-only matching route and hard
+  boundary from Executor `OnBBO`.
+- Runtime, BotCycle, Executor, Account, Venue, and Simulator designs: added their
+  direct IngestBBO responsibility and canonical concept link.
+- `wiki/DESIGN.md`: IngestBBO concept index entry.
+- `HANDOFF.md`: active IngestBBO design task and proof.
 - `wiki/coding/STYLE.md` and `RULES.md`: require verb-first action wording.
 - Implemented Go source and owning designs: converted Program Flow wording to verb-first.
 - `internal/toolkit/clock/clock.go`: Clock contract and implementation factory.
@@ -226,6 +375,91 @@ Rework Clock from the Nautilus multi-timer design.
 
 ## Proof
 
+- Full uncached tests passed across 25 packages with zero failures.
+- Eight packages ran tests; 17 packages reported no test files.
+- Full tests used `CGO_ENABLED=0`, `-tags noasm`, and took 3.165 seconds.
+- Full `go vet -tags noasm ./...` passed in 0.486 seconds.
+- Modified Go files passed `gofmt`.
+- No credential file is tracked.
+- Full-worktree `git diff --check` passed.
+- Hyperliquid local Markdown links passed validation.
+- No stale Hyperliquid concept link remains.
+- Hyperliquid design pages contain no port or selective-port wording.
+- The recorded local Python `async_hyperliquid` reference exists.
+- Hyperliquid decision terms passed direct `rg` verification.
+- Hyperliquid decision-record prose contains no line above 25 words.
+- Hyperliquid documentation passed `git diff --check`.
+- Live perpetual Meta returned 232 assets and seven margin tables.
+- Live BTC Meta reported five size decimals and 40 maximum leverage.
+- Live ETH Meta reported four size decimals and 25 maximum leverage.
+- Focused `TestMeta` passed with `CGO_ENABLED=0` and `-tags noasm`.
+- Working fork compilation passed with `CGO_ENABLED=0` and `-tags noasm`.
+- Working fork root tests passed with `CGO_ENABLED=0` and `-tags noasm`.
+- Working fork `go vet -tags noasm ./...` passed.
+- Working fork `git diff --check` passed.
+- Hyperliquid focused tests passed uncached with `CGO_ENABLED=0` and `-tags noasm`.
+- Hyperliquid root tests and root `go vet -tags noasm .` passed.
+- Hyperliquid examples compile, but full `go test -tags noasm ./...` timed out
+  because live WebSocket examples use unbounded contexts.
+- The stock SDK compiles 101 non-standard packages and 19,263 generated lines.
+- `-tags noasm` still leaves third-party assembly through the dependency graph.
+- Audit report:
+  `D:\rust\references\go-hyperliquid\audits\07-24-go-hyperliquid-v1.md`.
+- Setup contains the approved four-step Meta-admission comment.
+- Setup design records the same deferred behavior.
+- `git diff --check` passed after the comment-only update.
+- Tests and replay were not run because runtime behavior did not change.
+- Focused Config tests passed with `-tags noasm`.
+- Full `go test -tags noasm ./...` passed after the Hyperliquid config addition.
+- `git diff --check` passed.
+- Config proof reads `hyperliquid.min_order_notional_usdc = 11`.
+- Meta design distinguishes Nuutrader6's empty-only load from Nuubot5's
+  caller-driven 24-hour refresh.
+- Replay was not run because no runtime consumes the new Meta policy yet.
+- Setup has exactly one function: `Setup`.
+- Root `config.toml` no longer exists.
+- Setup loads `workspace/config/config.toml` and
+  `workspace/config/credentials.toml`.
+- Datastore source and behavior were unchanged.
+- Config and credentials idempotence tests passed.
+- Malformed credentials TOML test passed.
+- Focused Config, Setup, and BtRunner tests passed with `-tags noasm`.
+- Full `go test -tags noasm ./...` passed.
+- Full `go vet -tags noasm ./...` passed.
+- `gofmt -d` and `git diff --check` passed.
+- Fresh `./rtest.sh 1 6 9` passed 1/1.
+- Fresh suite took 3,142 ms; process took 2,867 ms; replay took 1,566 ms.
+- Replay served 7,948,800 ticks and triggered 794,880 Runtime runs.
+- Replay produced 55 Signals, 18 cycles, and 17 stop-loss exits.
+- Replay log: `workspace/logs/nuubot5-rtest-s6-b9-1-20260724T053308Z.log`.
+- Setup review is PARTIAL at `2026-07-24 13:33:22 +08:00`.
+- `workspace/config/credentials.toml` is ignored and untracked.
+- `workspace/config/config.toml` is no longer ignored and is visible to Git.
+- Shared config starts with `NO SECRETS ALLOWED IN THIS FILE`.
+- Filesystem and Datastore Markdown links resolve.
+- Filesystem documentation passed `git diff --check`.
+- `wiki/DESIGN.md` contains all 14 review-tree components and 14 TO CODE rows.
+- DONE and PARTIAL rows carry `2026-07-24 12:55:22 +08:00`.
+- NOT REVIEWED and TO CODE rows carry no review timestamp.
+- PocketBase remains marked as a new consideration that must not be added yet.
+- Review-tracker documentation passed `git diff --check`.
+- Focused Executor, BotCycle, Runtime, and BtRunner tests passed with `-tags noasm`.
+- Full `go test -tags noasm ./...` passed.
+- Full `go vet -tags noasm ./...` passed.
+- `./rtest.sh 1 6 9` passed 1/1 in 2,918 ms.
+- The replay process took 2,650 ms and replay took 1,444 ms.
+- Replay served 7,948,800 ticks and triggered 794,880 Runtime runs.
+- Replay produced 55 Signals, 18 cycles, and 17 stop-loss exits.
+- All 18 latest Observer stop lines contain equal IngestBBO and OnBBO counts.
+- Cycle 1 reported `ingest_bbo_count=22272 on_bbo_count=22272`.
+- Cycle 18 reported `ingest_bbo_count=4676400 on_bbo_count=4676400`.
+- Observer summaries are in `workspace/logs/bot_6_9.log`.
+- Replay result: `workspace/logs/nuubot5-rtest-s6-b9-1-20260724T044530Z.log`.
+- `wiki/design/concepts/ingestbbo.md` exists and its `wiki/DESIGN.md` link resolves.
+- The page defines non-overlapping `IngestBBO` and `OnBBO` responsibilities.
+- Every IngestBBO owner design contains its direct call and canonical concept link.
+- All Markdown file links in the changed design pages resolve.
+- IngestBBO documentation passed `git diff --check`.
 - Verb-first audit found zero non-verb source action comments.
 - Source/design alignment audit found zero missing exact action matches.
 - Verb-first hardcut passed full tests and `go vet -tags noasm ./...`.
@@ -476,6 +710,8 @@ Rework Clock from the Nautilus multi-timer design.
 
 ## Not run
 
+- Go tests and replay were not run because this change only adds documentation,
+  a Git tracking rule, and TOML comments.
 - Replay was not run because `AssessStop` is a compile-time-only method rename.
 - BtRunner replay was not run because Runtime construction behavior did not change.
 - BtRunner replay was not run because only comments changed.
@@ -484,7 +720,7 @@ Rework Clock from the Nautilus multi-timer design.
 
 ## Next action
 
-User continues the code review. Root stands by.
+Clone the Python reference or implement internal Meta only after the user selects the next scope.
 
 Go toolchain:
 

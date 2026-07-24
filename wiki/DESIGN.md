@@ -10,7 +10,81 @@ Nuubot5 source proves implementation. Reservation files prove names only.
 
 - [`design/packages`](design/packages/) contains exactly one page per Go package.
 - [`design/concepts`](design/concepts/) contains flows, programs, venues, types, and cross-package rules.
+- [`design/hyperliquid`](design/hyperliquid/) contains the internal Hyperliquid boundary details.
 - `internal/toolkit` groups reusable packages. It is not a Go package.
+
+## User Review Checklist
+
+Last updated: 2026-07-24 13:33:22 +08:00
+
+```text
+Component                          Review         Last reviewed
+nuubot-btrunner                    DONE           2026-07-24 12:55:22 +08:00
+`-- BtRunner                       DONE           2026-07-24 12:55:22 +08:00
+    |-- Setup                      PARTIAL        2026-07-24 13:33:22 +08:00
+    |-- ReplayReader               PARTIAL        2026-07-24 12:55:22 +08:00
+    |-- TickClock                  NOT REVIEWED   —
+    `-- Runtime                    DONE           2026-07-24 12:55:22 +08:00
+        |-- Signaler               PARTIAL        2026-07-24 12:55:22 +08:00
+        |   |-- Macross            NOT REVIEWED   —
+        |   `-- RSI                NOT REVIEWED   —
+        |-- Risk                   PARTIAL        2026-07-24 12:55:22 +08:00
+        |   `-- BalancedRisk       NOT REVIEWED   —
+        `-- BotCycle               PARTIAL        2026-07-24 12:55:22 +08:00
+            `-- Executor           NOT REVIEWED   —
+                `-- Observer       NOT REVIEWED   —
+```
+
+The user owns these checklist states: `DONE`, `PARTIAL`, `NOT REVIEWED`, and
+`TO CODE`. `PARTIAL` remains open. `NOT REVIEWED` has no review timestamp.
+
+## To Code
+
+| Component | State | Last reviewed | Note |
+|---|---|---|---|
+| WallClock | TO CODE | — | |
+| Runner | TO CODE | — | |
+| Select the SDK | TO CODE | — | |
+| Simulator parity | TO CODE | — | |
+| Account | TO CODE | — | |
+| Ledger | TO CODE | — | |
+| Trade | TO CODE | — | |
+| Order | TO CODE | — | |
+| Fill | TO CODE | — | |
+| Simulator | TO CODE | — | |
+| PocketBase | TO CODE | — | New consideration; do not add yet. |
+| Meta | TO CODE | — | |
+| Setup | TO CODE | — | |
+| Hyperliquid SDK selection | TO CODE | — | |
+
+This is the user's coding checklist. It does not replace package implementation
+status.
+
+## Hyperliquid Source
+
+| Question | Decision |
+|---|---|
+| What | Build Nuubot's required Hyperliquid protocol boundary. |
+| Where | Source belongs in `internal/hyperliquid`. |
+| Design | [Hyperliquid design](design/hyperliquid.md) owns the complete boundary. |
+| Why internal | Nuubot5 is the only confirmed consumer. Account and Venue changes remain atomic. |
+| Why rewrite | The audited SDK contains unrelated dependencies, generated code, hidden network construction, and unsafe WebSocket lifecycle behavior. |
+| How | Rewrite from the official API. Consult audited reference code only when useful. |
+| In | Transport, signing, protocol types, validation, and Venue mapping. |
+| Out | Trading policy, domain ownership, Meta persistence, Simulator, and reconciliation decisions. |
+| Status | Design approved. Implementation pending. |
+
+Nuubot independently rewrites its Hyperliquid boundary from the
+[official Hyperliquid API documentation](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api).
+
+[Sonirico's Go client](https://github.com/sonirico/go-hyperliquid) is the
+secondary implementation reference.
+
+Python `async_hyperliquid` is the third known-working reference.
+
+Nuubot targets Hyperliquid API correctness, not parity with either reference library.
+
+Nuubot admits only required, audited code. It does not import or preserve either reference library.
 
 ## Packages
 
@@ -50,7 +124,9 @@ Reserved packages contain only an approved package declaration.
 | [CLOID](design/concepts/cloid.md) | Deterministic client-order identity. |
 | [DataEngine](design/concepts/data-engine.md) | Shared market-data acquisition. |
 | [Execution](design/concepts/execution.md) | Persist, submit, normalize, and reconcile flow. |
-| [Hyperliquid](design/concepts/hyperliquid.md) | Venue-specific behavior. |
+| [Filesystem](design/concepts/filesystem.md) | Mutable workspace layout and deployment mount. |
+| [Hyperliquid](design/hyperliquid.md) | Internal Hyperliquid protocol boundary. |
+| [IngestBBO](design/concepts/ingestbbo.md) | Simulator-only BBO matching input. |
 | [Live events](design/concepts/live-events.md) | Live event routing. |
 | [Macross signaler](design/concepts/macross-signaler.md) | EMA crossover implementation. |
 | [nuubot-btrunner](design/concepts/nuubot-btrunner.md) | Standalone historical replay command. |

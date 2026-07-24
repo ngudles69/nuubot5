@@ -1,0 +1,49 @@
+# =============================================================================
+# NO SECRETS ALLOWED IN THIS FILE.
+# =============================================================================
+
+[server]
+host = "127.0.0.1"
+port = 6602
+
+[network]
+default = "testnet"
+allow_mainnet = false
+
+[hyperliquid]
+min_order_notional_usdc = 11
+
+[process]
+poll_seconds = 10
+request_timeout_seconds = 2
+failure_threshold = 3
+unresponsive_seconds = 30
+restart_limit = 3
+restart_interval_seconds = 600
+
+[paths]
+shared_data = "D:/workspace/data"
+sweep_database = "workspace/datastore/nuubot5_sweeps.db"
+
+[btrunner]
+timer_interval_ms = 10000
+
+[runtime]
+max_cycles = 999999
+
+[runtime.signaler]
+kind = "macross"
+signal_timeframe = "1h"
+regime_timeframe = "4h"
+fast_ma = 9
+slow_ma = 21
+rsi_period = 14
+regime_ema = 200
+volume_period = 20
+
+[[runtime.executors]]
+kind = "observer"
+stop_loss_pct = 0.01
+
+[[runtime.risks]]
+kind = "balanced"

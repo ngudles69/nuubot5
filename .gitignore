@@ -53,7 +53,7 @@ config.toml
 *credential*
 *credential*.*
 credentials.json5
-workspace/config/config.toml
+!workspace/config/config.toml
 workspace/config/credentials.json5
 workspace/config/credentials.toml
 workspace/config/telegram.json5

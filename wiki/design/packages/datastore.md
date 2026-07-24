@@ -2,7 +2,7 @@
 
 Status: Implemented.
 Covers: `internal/datastore/*.go`
-Purpose: Load one validated Bot replay specification from the read-only Sweep database.
+Purpose: Load one validated Bot replay specification and define datastore ownership expectations.
 
 ## Canonical Sources
 
@@ -13,6 +13,9 @@ Purpose: Load one validated Bot replay specification from the read-only Sweep da
 ## Scope
 
 Datastore reads one Bot JSON configuration by exact Sweep and Bot identity.
+
+The implemented path remains read-only. Future writable datastore behavior is
+approved only at the ownership level described below.
 
 ## Owner and Children
 
@@ -37,7 +40,7 @@ Datastore opens one short-lived read-only SQLite connection.
 - Resolve shared-data containment.
 - Load market rows.
 - Persist replay results.
-- Implement PostgreSQL live storage.
+- Select or implement the future main datastore.
 
 ## Lifecycle
 
@@ -69,6 +72,44 @@ Each call owns its local connection.
 
 The SQLite database is read-only and immutable for backtesting.
 
+## Approved Target
+
+The canonical mutable layout is defined by
+[`Filesystem`](../concepts/filesystem.md).
+
+```text
+workspace/db/
+|-- <main datastore files>
+`-- sweeps/
+    `-- sweep_<sweep_id>/
+        `-- bot_<bot_id>.db
+```
+
+Main datastore expectations:
+
+- Live tables may share one main datastore.
+- Sweep definitions and Bot configuration remain centrally discoverable.
+- Sweep and Bot status updates stay small.
+- Result database paths are stored relative to `workspace/`.
+- Small terminal summaries may return to the main datastore.
+- High-volume Trade, Order, Fill, and replay rows do not enter it.
+
+Per-Bot Sweep result expectations:
+
+- Each `(sweep_id, bot_id)` owns one SQLite result database.
+- Each worker writes only its owned result database.
+- Workers never share a result database writer.
+- Completed result databases become read-only evidence.
+- Sweep aggregation reads completed databases after Bot termination.
+
+One coordinator may serialize shared Sweep-catalog updates. The design must not
+rely on SQLite WAL to make high-volume shared writes safe.
+
+PocketBase remains an unresolved consideration. Adopting it may change the main
+datastore engine, schema, filename, migrations, and access path.
+
+Datastore must not assume PocketBase until the user approves that decision.
+
 ## Errors
 
 Open, query, JSON, date, and validation failures return errors.
@@ -94,4 +135,9 @@ LoadBot
 
 ## Open Decisions
 
-Result persistence and PostgreSQL live stores require separate designs.
+- PocketBase adoption.
+- Main datastore engine and filename.
+- Main schemas, migrations, and transaction boundaries.
+- Sweep catalog and terminal-summary schema.
+- Live datastore access and write serialization.
+- Per-Bot result schema and aggregation contract.

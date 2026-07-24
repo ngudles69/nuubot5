@@ -13,6 +13,8 @@ Purpose: Own configured Executors for one accepted Signal.
 BotCycle creates Executors through ExecutorFactory and gives each the same
 Signal, BBO stream, and timed Runs.
 
+BotCycle routes Simulator-only BBO ingestion through every active Executor.
+
 ## Program Flow
 
 ```text
@@ -34,10 +36,25 @@ stop
   calculate duration
   report proof
 
+IngestBBO
+  ingest executor bbo
+
 OnBBO
   record cycle time
-  ingest executor bbo
+  deliver executor bbo
 ```
+
+## IngestBBO
+
+[`IngestBBO`](../concepts/ingestbbo.md) follows direct ownership.
+
+```text
+BotCycle.IngestBBO
+  call each active Executor.IngestBBO
+```
+
+This route completes before BotCycle delivers the same BBO through `OnBBO`.
+BotCycle does not select or access Venue implementations.
 
 ## Notes
 

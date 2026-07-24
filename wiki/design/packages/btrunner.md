@@ -22,7 +22,7 @@ BtRunner owns Setup context, TickClock, TickReader, Runtime, and replay proof.
 BtRunner
 
 init
-  initialize setup
+  prepare setup
   set replay range
   create clock
   initialize clock

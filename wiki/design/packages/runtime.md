@@ -13,6 +13,7 @@ Purpose: Own and sequence one Bot's control components.
 Runtime owns one Signaler, factory-created Risks, and at most one BotCycle.
 
 - Release due Signals before delivering each BBO.
+- Route each BBO through the active BotCycle's Simulator-only ingestion path.
 - Assess Risks before the active BotCycle.
 - Own graceful stop decisions.
 
@@ -30,11 +31,12 @@ start
   start signaler
   start runtime
 
-ingest
+IngestBBO
   run signaler
   initialize botcycle
   start botcycle
   ingest botcycle bbo
+  deliver botcycle bbo
 
 run
   assess risk stops
@@ -56,5 +58,18 @@ stop
 - Runtime never selects Signaler calculators, Risks, or Executors.
 - Runtime does not know Signaler requirements, OHLCV, calculation, or validation.
 - Runtime does not use replay dates to stop; BtRunner owns Reader exhaustion.
-- `Ingest` remains a domain helper because it accepts one BBO event.
+- `IngestBBO` remains a domain helper because it accepts one BBO event.
 - Runtime initialization receives the Setup context from BtRunner.
+
+## IngestBBO
+
+[`IngestBBO`](../concepts/ingestbbo.md) is separate from normal Executor
+`OnBBO` policy.
+
+```text
+Runtime.IngestBBO
+  call active BotCycle.IngestBBO
+```
+
+Runtime does not check whether Simulator is selected. The selected Venue owns
+the live no-op or simulated matching behavior.

@@ -17,6 +17,7 @@ The consumer package MUST own the smallest interface Account requires.
 Venue MUST support:
 
 - initialize and close;
+- ingest BBO for Simulator-only matching;
 - place one batch of validated Orders;
 - cancel one batch by supported venue identity;
 - query open Orders;
@@ -25,6 +26,23 @@ Venue MUST support:
 - query transient account state.
 
 The exact Go method signatures belong to the Account implementation plan.
+
+## IngestBBO
+
+[`IngestBBO`](ingestbbo.md) is one common Account-facing Venue operation.
+
+```text
+Venue.IngestBBO
+  Live
+    return without changing state
+  Simulator
+    match eligible existing Orders
+    record simulated Venue outcomes
+    report whether Account state became dirty
+```
+
+Venue ingestion does not mutate Ledger or run Executor policy. Reconciliation
+later copies validated Venue truth into Ledger evidence.
 
 ## Responsibilities
 

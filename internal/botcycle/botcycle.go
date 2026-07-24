@@ -148,6 +148,21 @@ func (c *Control) Stop(reason string) (string, error) {
 
 // Section 2 - Domain Helpers
 
+// IngestBBO routes one BBO through active Executors for Simulator use.
+func (c *Control) IngestBBO(bbo market.BBO) error {
+	// ingest executor bbo
+	for index, activeExecutor := range c.executors {
+		if activeExecutor.Terminal() {
+			continue
+		}
+		var err = activeExecutor.IngestBBO(bbo)
+		if err != nil {
+			return fmt.Errorf("ingest executor %d bbo: %w", index+1, err)
+		}
+	}
+	return nil
+}
+
 // OnBBO distributes one BBO to active Executors.
 func (c *Control) OnBBO(bbo market.BBO) {
 	// record cycle time
@@ -157,10 +172,10 @@ func (c *Control) OnBBO(bbo market.BBO) {
 	c.endMS = bbo.TimestampMS
 	c.ticks++
 
-	// ingest executor bbo
-	for _, executor := range c.executors {
-		if !executor.Terminal() {
-			executor.OnBBO(bbo)
+	// deliver executor bbo
+	for _, activeExecutor := range c.executors {
+		if !activeExecutor.Terminal() {
+			activeExecutor.OnBBO(bbo)
 		}
 	}
 }

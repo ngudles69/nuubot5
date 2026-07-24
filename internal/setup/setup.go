@@ -4,70 +4,78 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"nuubot/internal/config"
 	"nuubot/internal/datastore"
 	"nuubot/internal/toolkit/logging"
 )
 
-// Context contains validated setup values.
+// Context contains one admitted setup result.
 type Context struct {
-	Config config.Config
-	Bot    datastore.BotSpec
+	Config      config.Config
+	Credentials config.Credentials
+	Bot         datastore.BotSpec
 }
 
 // Section 1 - Program Flow
 
-// Init loads and validates one Bot setup.
-func Init(log *logging.Logger, sweepID, botID uint64) (Context, error) {
+// Setup returns one admitted process context.
+func Setup(log *logging.Logger, sweepID, botID uint64) (Context, error) {
 	// resolve root
 	var root, err = os.Getwd()
 	if err != nil {
 		return Context{}, fmt.Errorf("get working directory: %w", err)
 	}
 	// load config
-	var cfg, configErr = config.Load(filepath.Join(root, "config.toml"))
-	if configErr != nil {
-		return Context{}, configErr
+	var cfg config.Config
+	cfg, err = config.Load(filepath.Join(root, "workspace", "config", "config.toml"))
+	if err != nil {
+		return Context{}, fmt.Errorf("load setup config: %w", err)
 	}
-	// load bot
-	var bot, botErr = datastore.LoadBot(
+	// load credentials
+	var credentials config.Credentials
+	credentials, err = config.LoadCredentials(
+		filepath.Join(root, "workspace", "config", "credentials.toml"),
+	)
+	if err != nil {
+		return Context{}, fmt.Errorf("load setup credentials: %w", err)
+	}
+	// setup datastore
+	var bot datastore.BotSpec
+	bot, err = datastore.LoadBot(
 		config.Rooted(root, cfg.Paths.SweepDatabase),
 		sweepID,
 		botID,
 	)
-	if botErr != nil {
-		return Context{}, fmt.Errorf("load bot: %w", botErr)
+	if err != nil {
+		return Context{}, fmt.Errorf("prepare datastore: %w", err)
 	}
 	// validate ticks path
-	bot.TicksPath, err = within(config.Rooted(root, cfg.Paths.SharedData), bot.TicksPath)
+	bot.TicksPath, err = config.ResolveDataPath(
+		config.Rooted(root, cfg.Paths.SharedData),
+		bot.TicksPath,
+	)
 	if err != nil {
 		return Context{}, fmt.Errorf("validate ticks path: %w", err)
 	}
+
+	// Meta REFRESH is pending NuubotDB:
+	// - read the dataset refresh time through Datastore
+	// - continue when Meta is present and younger than 24 hours
+	// - refresh when Meta is empty or stale
+	// - continue only after Meta is admitted
+
+	// Shared WebSocket ownership remains TBD. Setup starts no background work.
+
 	// return setup
 	log.Info(fmt.Sprintf("setup initialized symbol=%s", bot.Symbol))
-	return Context{Config: cfg, Bot: bot}, nil
+	return Context{
+		Config:      cfg,
+		Credentials: credentials,
+		Bot:         bot,
+	}, nil
 }
 
 // Section 2 - Domain Helpers
-
-func within(root, path string) (string, error) {
-	var err error
-	root, err = filepath.EvalSymlinks(root)
-	if err != nil {
-		return "", fmt.Errorf("resolve shared_data %s: %w", root, err)
-	}
-	path, err = filepath.EvalSymlinks(path)
-	if err != nil {
-		return "", fmt.Errorf("resolve data path %s: %w", path, err)
-	}
-	var relative string
-	relative, err = filepath.Rel(root, path)
-	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("data path is outside shared_data: %s", path)
-	}
-	return path, nil
-}
 
 // Section 3 - Generic Helpers

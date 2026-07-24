@@ -55,7 +55,7 @@ run(args)
   return both errors without hiding loopErr
 
 btrunner.Init(...)
-  setup.Init(...)
+  setup.Setup(...)
   select effective end date
   create TickClock
   initialize TickClock at replay start
@@ -71,7 +71,7 @@ BtRunner.Start()
 
 BtRunner.Loop()
   for each validated BBO
-    Runtime.Ingest(BBO)
+    Runtime.IngestBBO(BBO)
     record served tick
     TickClock.Advance(timestamp)
       registered timer callback runs Runtime

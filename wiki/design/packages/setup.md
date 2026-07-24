@@ -1,6 +1,6 @@
 # Setup Package
 
-Status: Implemented.
+Status: Partially reviewed.
 Covers: `internal/setup/setup.go`
 Purpose: Return one fully admitted context before BtRunner composition.
 
@@ -10,16 +10,19 @@ Purpose: Return one fully admitted context before BtRunner composition.
 
 ## Scope & Responsibilities
 
-`nuubot_setup` loads root configuration, loads the identified Bot, resolves
-owned paths, and enforces the shared-data boundary.
+`Setup` coordinates configuration, credentials, and existing Bot admission.
+
+Config and credentials own their decoding. Datastore retains its current
+short-lived read-only Bot-loading behavior.
 
 ## Program Flow
 
 ```text
-init
+Setup
   resolve root
   load config
-  load bot
+  load credentials
+  prepare datastore
   validate ticks path
   return setup
 ```
@@ -27,4 +30,14 @@ init
 ## Notes
 
 - Setup performs admission only. It owns no running child.
-- Setup returns one value, so Create, Start, Run, Loop, and Stop do not apply.
+- Setup has one function and returns one Context.
+- Config and credentials are read-only and idempotent when files are unchanged.
+- Setup performs no hot reload. Running processes retain their admitted Context.
+- Credentials receive TOML decoding only. Account validation is deferred.
+- Source marks the future Meta-admission location after current datastore admission.
+- Meta will read dataset freshness through Datastore.
+- Meta younger than 24 hours will continue without an exchange request.
+- Empty or stale Meta will refresh before Setup continues.
+- Meta implementation waits for NuubotDB and Datastore ownership.
+- Shared WebSocket ownership remains TBD. Setup starts no background work.
+- Datastore redesign is deferred. Setup uses the existing `LoadBot` path.

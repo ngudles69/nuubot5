@@ -10,16 +10,17 @@ import (
 )
 
 type observerStats struct {
-	ticks         uint64
-	runs          uint64
-	startMS       uint64
-	endMS         uint64
-	startPrice    float64
-	stopLossPrice float64
-	exitPrice     float64
-	lastMS        uint64
-	lastPrice     float64
-	reason        string
+	ingestBBOCount uint64
+	onBBOCount     uint64
+	runs           uint64
+	startMS        uint64
+	endMS          uint64
+	startPrice     float64
+	stopLossPrice  float64
+	exitPrice      float64
+	lastMS         uint64
+	lastPrice      float64
+	reason         string
 }
 
 type observer struct {
@@ -113,7 +114,8 @@ func (e *observer) Stop(reason string) error {
 		"executor stopped cycle=%d executor=%d side=%s signal_ts_ms=%d "+
 			"available_ts_ms=%d signal_price=%f stop_loss_pct=%f start_ts_ms=%d "+
 			"end_ts_ms=%d duration_ms=%d start_price=%f stop_loss_price=%f "+
-			"exit_price=%f final_price=%f ticks_received=%d runs=%d stop_reason=%s",
+			"exit_price=%f final_price=%f ingest_bbo_count=%d on_bbo_count=%d "+
+			"runs=%d stop_reason=%s",
 		e.cycleNumber,
 		e.executorNumber,
 		e.signal.Side,
@@ -128,7 +130,8 @@ func (e *observer) Stop(reason string) error {
 		e.stats.stopLossPrice,
 		e.stats.exitPrice,
 		e.stats.lastPrice,
-		e.stats.ticks,
+		e.stats.ingestBBOCount,
+		e.stats.onBBOCount,
 		e.stats.runs,
 		e.stats.reason,
 	))
@@ -137,7 +140,15 @@ func (e *observer) Stop(reason string) error {
 
 // Section 2 - Domain Helpers
 
+func (e *observer) IngestBBO(_ market.BBO) error {
+	// count ingested bbo
+	e.stats.ingestBBOCount++
+	return nil
+}
+
 func (e *observer) OnBBO(bbo market.BBO) {
+	// count received bbo
+	e.stats.onBBOCount++
 	if !e.started || e.terminal {
 		return
 	}
@@ -155,7 +166,6 @@ func (e *observer) OnBBO(bbo market.BBO) {
 		}
 	}
 	// check stop loss
-	e.stats.ticks++
 	triggered := e.signal.Side == signaler.Long && bbo.Price <= e.stats.stopLossPrice ||
 		e.signal.Side == signaler.Short && bbo.Price >= e.stats.stopLossPrice
 	if triggered {

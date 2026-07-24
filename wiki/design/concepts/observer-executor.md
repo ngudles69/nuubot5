@@ -24,6 +24,8 @@ ObserverExecutor owns no child.
 - Validate configured stop-loss percentage.
 - Record the first BBO after Signal availability as entry.
 - Calculate side-specific stop-loss price.
+- Count every `IngestBBO` call.
+- Count every `OnBBO` call.
 - Track last timestamp and price.
 - Trigger at the inclusive stop boundary.
 - Preserve final evidence during parent stop.
@@ -33,12 +35,14 @@ ObserverExecutor owns no child.
 
 - Place or cancel orders.
 - Create Account, Ledger, Trade, Order, Fill, or Simulator state.
+- Match Orders or create simulated Fills.
 - Model slippage, fees, liquidity, or fills.
 - Decide Runtime stop policy.
 
 ## Lifecycle
 
-Create, `Start`, repeated `OnBBO` and timed `Run`, then idempotent `Stop`.
+Create, `Start`, repeated `IngestBBO` and `OnBBO`, timed `Run`, then idempotent
+`Stop`.
 
 Invalid `Start` returns an error.
 
@@ -48,9 +52,11 @@ Invalid `Start` returns an error.
 
 ## Inputs and Outputs
 
-Inputs are Signal, stop-loss percentage, BBO values, Run timestamps, and parent stop reason.
+Inputs are Signal, stop-loss percentage, ingested BBO values, delivered BBO
+values, Run timestamps, and parent stop reason.
 
-Outputs are terminal state, exit reason, and execution evidence in terminal statistics.
+Outputs are terminal state, exit reason, both BBO counts, and execution evidence
+in terminal statistics.
 
 ## State and Invariants
 
@@ -90,7 +96,11 @@ createObserver
 Start
   start observer
 
+IngestBBO
+  count ingested bbo
+
 OnBBO
+  count received bbo
   record last bbo
   record entry
   check stop loss
@@ -109,6 +119,8 @@ Stop
 ## Required Proof
 
 - Long and short inclusive stop boundaries trigger.
+- Every `IngestBBO` and `OnBBO` call increments its separate count.
+- Stop logging reports both BBO counts.
 - Entry comes from first received BBO.
 - Parent shutdown after Reader exhaustion records final evidence.
 - Stop is idempotent.

@@ -12,6 +12,7 @@ import (
 // Executor defines one BotCycle-owned execution policy.
 type Executor interface {
 	Start() error
+	IngestBBO(market.BBO) error
 	OnBBO(market.BBO)
 	Run(uint64) bool
 	Stop(string) error

@@ -172,8 +172,8 @@ func (r *Runtime) Stop(reason string) error {
 
 // Section 2 - Domain Helpers
 
-// Ingest accepts one validated BBO.
-func (r *Runtime) Ingest(bbo market.BBO) error {
+// IngestBBO accepts one validated BBO.
+func (r *Runtime) IngestBBO(bbo market.BBO) error {
 	if !r.started || r.stopped || r.stopReason != "" {
 		return fmt.Errorf("runtime cannot ingest bbo from current state")
 	}
@@ -200,6 +200,11 @@ func (r *Runtime) Ingest(bbo market.BBO) error {
 
 	// ingest botcycle bbo
 	if r.cycle != nil {
+		var ingestErr = r.cycle.IngestBBO(bbo)
+		if ingestErr != nil {
+			return fmt.Errorf("ingest bot cycle bbo: %w", ingestErr)
+		}
+		// deliver botcycle bbo
 		r.cycle.OnBBO(bbo)
 	}
 	r.stats.ticks++
