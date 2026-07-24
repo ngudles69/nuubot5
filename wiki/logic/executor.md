@@ -9,7 +9,7 @@
 
 ## Intent
 
-An Executor MUST run one execution policy inside one BotCycle.
+An Executor MUST own one execution policy inside one BotCycle.
 
 ## Ownership
 
@@ -19,39 +19,60 @@ Runtime
     `-- []Executor
 ```
 
-BotCycle MUST create configured Executors through the approved
-configuration-selected factory. The factory MUST return BotCycle's
-consumer-owned Executor interface.
+BotCycle MUST create configured Executors through `executor.Create`.
 
-BotCycle MUST pass the same accepted Signal to each Executor. Runtime MUST NOT
-know concrete Executor types.
+The factory MUST call `OnInit` before returning.
 
-The consumer-owned Executor interface separates BotCycle from the selected
-concrete policy.
+Runtime MUST NOT know concrete Executor types.
 
-The interface MUST contain only BotCycle's current lifecycle and event
-requirements.
+## Required Contract
 
-It MUST NOT expand for testing or hypothetical policies.
+Every Executor MUST implement:
 
-The current source contract uses this exact control path:
+- `OnInit`.
+- `OnStop`.
+- `Status`.
+- `ExitReason`.
 
-```text
-Runtime.MainLoop(now)
-  BotCycle.MainLoop(now)
-    Executor.MainLoop(now)
-```
+Status MUST be the only terminal-state source.
 
-`MainLoop` is a pre-contract source name. Its separately approved migration
-target is `Pass`; this page MUST retain `MainLoop` until the source changes.
+## Optional Capabilities
+
+Executors implement only events they consume.
+
+Current capabilities are:
+
+- `BBOHandler.OnBBO`.
+- `BBOIngestHandler.IngestBBO`.
+
+BotCycle MUST use type assertions and skip unsupported capabilities.
+
+Concrete identity MUST NOT derive from a callback name.
+
+## Admission
+
+An Executor MAY reject BotCycle admission through `executor.ErrRejected`.
+
+BotCycle MUST stop earlier initialized Executors.
+
+Runtime MUST consume the triggering Signal and wait for the next Signal.
+
+Unexpected initialization errors MUST remain fatal.
+
+## Signal Access
+
+Executor initialization receives the triggering package and passive Signaler.
+
+Concrete Executors own custom fields, history length, guards, and missing-data policy.
+
+Runtime owns only standard entry admission.
 
 ## ObserverExecutor
 
-ObserverExecutor MUST prove the execution control path without Account, Ledger,
-Trade, Order, Fill, Simulator, or Venue.
+Observer MUST implement `BBOHandler.OnBBO`.
 
 ```text
-first BBO after Signal availability
+first BBO
   record entry timestamp and price
   calculate stop-loss price
 
@@ -60,24 +81,6 @@ long
 
 short
   stop when price >= entry * (1 + stopLossPct)
-
-Stop(reason)
-  preserve an existing stop-loss reason
-  otherwise use the parent reason
-  record final timestamp and price
-  become terminal
 ```
 
-## Evidence
-
-ObserverExecutor MUST report:
-
-- Signal and availability timestamps;
-- side and Signal price;
-- configured stop-loss percentage;
-- entry, stop, exit, and final prices;
-- start, end, and duration;
-- ticks and passes;
-- terminal reason.
-
-BotCycle MUST report its own work separately.
+Observer MUST report separate ingestion and normal BBO counts once during stop.

@@ -2,92 +2,72 @@
 
 Status: Implemented.
 Covers: `internal/signaler/rsi.go`
-Purpose: Create volume-confirmed RSI Signals from closed Bars.
+Purpose: Produce volume-confirmed RSI Signal packages from closed Bars.
 
-## Canonical Sources
+## Ownership
 
-- Nuubot4: `D:/rust/nuubot4/src/signaler/rsi.rs`
-- Nuubot4 contract: `D:/rust/nuubot4/wiki/logic/signaler.md`
+Signaler factory creates and initializes RSI.
 
-## Scope
+RSI is a complete Signaler.
 
-RSI owns its timeframe, RSI period, volume period, indicators, and Signal interpretation.
-
-## Owner and Children
-
-Signaler owns one RSI calculator when selected.
-
-RSI owns no lifecycle child.
+It owns configuration, requirements, OHLCV loading, calculation, packages, and cleanup.
 
 ## Responsibilities
 
-- Request sufficient RSI and volume warmup.
+- Load OHLCV with RSI and volume warmup.
 - Calculate smoothed relative strength.
 - Calculate volume moving average.
 - Require current volume above its average.
-- Emit long at RSI 30 or below.
-- Emit short at RSI 70 or above.
+- Trigger long at RSI 30 or below.
+- Trigger short at RSI 70 or above.
 - Suppress repeated identical sides.
+- Produce one package for every admitted signal bar.
+- Serve timestamp-bounded package history.
 
-## Does Not
+## Package Fields
 
-- Load Bars.
-- Release Signals.
-- Own replay state.
-- Place orders.
+Standard fields include entry triggers and neutral regime.
 
-## Lifecycle
+Custom fields include:
 
-Construct once, report requirements, calculate once, then remain immutable.
-
-## Inputs and Outputs
-
-Inputs are validated OHLCV and configured RSI and volume periods.
-
-Output is ordered `[]Signal`.
-
-## State and Invariants
-
-Indicator decisions use only the current closed Bar and earlier Bars.
-
-Signals begin after warmup.
-
-Repeated identical sides remain suppressed until the state changes.
-
-## Concurrency
-
-Calculation is synchronous.
-
-## Persistence
-
-None.
-
-## Errors
-
-Unknown intervals or missing required OHLCV fail.
+- `bar_start_ms`.
+- `signal_price`.
+- `rsi`.
+- `volume_ratio`.
+- `oversold`.
+- `overbought`.
 
 ## Program Flow
 
 ```text
-createRSI
-  parse interval
-
-Requirements
-  create requirements
+Init
+  configure rsi
+  load rsi data
+  calculate rsi signals
+  validate packages
+  initialize signaler
 
 Calculate
   find rows
   calculate indicators
   calculate signals
+
+configure
+  parse interval
+  validate config
 ```
+
+## Invariants
+
+Indicator decisions use only the current closed Bar and earlier Bars.
+
+Repeated identical sides remain suppressed until state changes.
+
+Package time uses the next admitted signal-bar start.
 
 ## Required Proof
 
 - Threshold boundaries include 30 and 70.
-- Low volume blocks Signals.
-- Repeated identical sides are suppressed.
-- Missing timeframe fails.
-
-## Open Decisions
-
-None.
+- Low volume blocks entry triggers.
+- Every admitted signal bar produces one package.
+- Flat JSON contains standard and custom fields.

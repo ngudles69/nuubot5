@@ -20,6 +20,11 @@ Each row records one fresh-process `rtest.sh` suite.
 | Uncommitted | BtRunner review cleanup | 2 | 2 | 4,025 | 1,771 [1,191-2,351] | 1,111 [1,110-1,113] | `workspace/logs/nuubot5-rtest-s6-b9-2-20260723T154808Z.log` |
 | Uncommitted | Exact-format Logger | 2 | 2 | 4,049 | 1,776 [1,204-2,349] | 1,117 [1,114-1,120] | `workspace/logs/nuubot5-rtest-s6-b9-2-20260723T161651Z.log` |
 | Uncommitted | BtRunner Loop and direct errors | 2 | 2 | 4,010 | 1,762 [1,194-2,331] | 1,115 [1,114-1,117] | `workspace/logs/nuubot5-rtest-s6-b9-2-20260723T163450Z.log` |
+| `5011d91` | Release-driven Signaler | 20 | 20 | 35,788 | 1,542 [1,488-1,626] | 1,456 [1,410-1,542] | `workspace/logs/nuubot5-rtest-s6-b9-20-20260724T035217Z.log` |
+| Uncommitted | Flat-map Signal packages | 2 | 2 | 4,731 | 2,112 [1,562-2,663] | 1,483 [1,482-1,484] | `workspace/logs/nuubot5-rtest-s6-b9-2-20260724T082230Z.log` |
+| Uncommitted | Typed Signal packages | 2 | 2 | 4,641 | 2,050 [1,491-2,610] | 1,413 [1,406-1,421] | `workspace/logs/nuubot5-rtest-s6-b9-2-20260724T083008Z.log` |
+| Uncommitted | Typed Signal package stability | 20 | 20 | 34,499 | 1,478 [1,463-1,509] | 1,397 [1,377-1,426] | `workspace/logs/nuubot5-rtest-s6-b9-20-20260724T083014Z.log` |
+| Uncommitted | Direct history index experiment | 2 | 2 | 4,625 | 2,061 [1,504-2,618] | 1,420 [1,415-1,426] | `workspace/logs/nuubot5-rtest-s6-b9-2-20260724T082609Z.log` |
 
 ## Memory
 
@@ -39,6 +44,11 @@ Each row records one fresh-process `rtest.sh` suite.
 | Uncommitted | BtRunner review cleanup | 2 | 35.833 [33.424-38.243] | 975.703 [975.679-975.726] | 49.500 [49-50] | 3.013 [3.005-3.020] |
 | Uncommitted | Exact-format Logger | 2 | 34.548 [34.383-34.712] | 975.697 [975.675-975.719] | 50.000 [50-50] | 7.098 [4.099-10.097] |
 | Uncommitted | BtRunner Loop and direct errors | 2 | 40.306 [33.423-47.189] | 975.742 [975.687-975.796] | 49.500 [49-50] | 3.170 [3.116-3.224] |
+| `5011d91` | Release-driven Signaler | 20 | 34.064 [21.146-47.183] | 975.698 [975.599-975.872] | 49.750 [48-51] | 5.634 [1.000-18.778] |
+| Uncommitted | Flat-map Signal packages | 2 | 37.873 [27.085-48.662] | 977.862 [977.840-977.884] | 47.500 [47-48] | 7.651 [1.706-13.596] |
+| Uncommitted | Typed Signal packages | 2 | 28.375 [20.967-35.782] | 976.632 [976.593-976.670] | 48.000 [48-48] | 2.038 [1.050-3.026] |
+| Uncommitted | Typed Signal package stability | 20 | 29.939 [18.070-48.305] | 976.613 [976.513-976.724] | 48.550 [47-50] | 4.242 [0.000-23.410] |
+| Uncommitted | Direct history index experiment | 2 | 34.493 [34.463-34.523] | 976.631 [976.624-976.637] | 48.500 [48-49] | 3.318 [1.730-4.906] |
 
 ## Comparison
 
@@ -53,6 +63,13 @@ Seven-column Stream versus seven-column Load:
 Seven-column Stream remains 3.31 times slower than the two-column stream baseline.
 
 Six-column Stream versus seven-column Stream:
+
+Passive Signaler hardcut versus release-driven Signaler:
+
+- Typed packages improved 20x replay average 4.1 percent.
+- Typed packages improved 20x process average 4.2 percent.
+- Total allocation increased 0.094 percent.
+- Direct regular-history indexing showed no improvement and was removed.
 
 - Replay improved 11.1 percent.
 - Process time improved 10.5 percent.

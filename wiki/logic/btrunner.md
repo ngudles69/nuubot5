@@ -114,9 +114,11 @@ For Sweep 6 Bot 9, the current accepted result is:
 ```text
 ticks                 7,948,800
 passes                  794,880
-signals                      55
-signals skipped              37
+signal packages           2,207
+entry triggers               55
+entry triggers skipped       37
 cycles started               18
+cycles rejected               0
 cycles closed                18
 stop-loss exits              17
 ```

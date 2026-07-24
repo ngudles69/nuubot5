@@ -2,6 +2,7 @@ package executor
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 
@@ -13,45 +14,84 @@ import (
 
 // Section 1 - Program Flow
 
-func TestObserverCountsBBOAndRecordsStopLoss(t *testing.T) {
+func TestObserverHandlesBBOAndRecordsStopLoss(t *testing.T) {
 	var output bytes.Buffer
-	executor, err := createObserver(
-		logging.Create(&output), 1, 1,
-		signaler.Signal{SignalMS: 1_000, AvailableMS: 2_000, Side: signaler.Long, Price: 100},
-		config.Executor{Kind: "observer", StopLossPct: 0.01},
-	)
+	var signal = testSignal(t, true, false)
+	var created, err = Create(Context{
+		Log:            logging.Create(&output),
+		CycleNumber:    1,
+		ExecutorNumber: 1,
+		Signal:         signal,
+		Config:         config.Executor{Kind: "observer", StopLossPct: 0.01},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := executor.Start(); err != nil {
-		t.Fatal(err)
-	}
+	var observer = created.(*observer)
 	var first = market.BBO{TimestampMS: 3_000, Price: 100}
 	var second = market.BBO{TimestampMS: 4_000, Price: 99}
-	if err := executor.IngestBBO(first); err != nil {
+	if err = observer.IngestBBO(first); err != nil {
 		t.Fatal(err)
 	}
-	executor.OnBBO(first)
-	if err := executor.IngestBBO(second); err != nil {
+	observer.OnBBO(first)
+	if err = observer.IngestBBO(second); err != nil {
 		t.Fatal(err)
 	}
-	executor.OnBBO(second)
-	if !executor.Terminal() || executor.ExitReason() != "stop_loss" ||
-		executor.stats.startMS != 3_000 || executor.stats.endMS != 4_000 ||
-		executor.stats.ingestBBOCount != 2 || executor.stats.onBBOCount != 2 {
-		t.Fatalf("unexpected observer state: %+v", executor.stats)
+	observer.OnBBO(second)
+	if observer.Status() != Stopping ||
+		observer.ExitReason() != "stop_loss" ||
+		observer.stats.startMS != 3_000 ||
+		observer.stats.endMS != 4_000 ||
+		observer.stats.ingestBBOCount != 2 ||
+		observer.stats.onBBOCount != 2 {
+		t.Fatalf("unexpected observer state: %+v", observer.stats)
 	}
-	if err := executor.Stop("completed"); err != nil {
+	if err = observer.OnStop("completed"); err != nil {
 		t.Fatal(err)
+	}
+	if observer.Status() != Stopped {
+		t.Fatalf("actual status %q, expected %q", observer.Status(), Stopped)
 	}
 	if !strings.Contains(
 		output.String(),
-		"ingest_bbo_count=2 on_bbo_count=2 runs=0 stop_reason=stop_loss",
+		"ingest_bbo_count=2 on_bbo_count=2 stop_reason=stop_loss",
 	) {
 		t.Fatalf("missing observer counters in stop log: %s", output.String())
 	}
 }
 
+func TestObserverRejectsSignalWithoutOneEntry(t *testing.T) {
+	var _, err = Create(Context{
+		Log:            logging.Create(&bytes.Buffer{}),
+		CycleNumber:    1,
+		ExecutorNumber: 1,
+		Signal:         testSignal(t, false, false),
+		Config:         config.Executor{Kind: "observer", StopLossPct: 0.01},
+	})
+	if !errors.Is(err, ErrRejected) {
+		t.Fatalf("actual error %v, expected admission rejection", err)
+	}
+}
+
 // Section 2 - Domain Helpers
+
+func testSignal(t *testing.T, enterLong, enterShort bool) signaler.Package {
+	t.Helper()
+	var signal, err = signaler.CreatePackage(
+		"BTC",
+		2_000,
+		enterLong,
+		enterShort,
+		false,
+		false,
+		"bull",
+		0,
+		map[string]any{"signal_price": 100.0},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return signal
+}
 
 // Section 3 - Generic Helpers

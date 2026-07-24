@@ -83,15 +83,19 @@ for ((run = 1; run <= runs; run++)); do
     done
     runtime_line="$(printf '%s\n' "$output" | grep '] runtime stopped ' | tail -n 1)"
     runtime_ok=0
-    if [[ "$runtime_line" =~ ticks_accepted=([0-9]+).*runs=([0-9]+).*signals_received=([0-9]+).*cycles_started=([0-9]+).*cycles_closed=([0-9]+).*stop_loss_exits=([0-9]+).*stop_reason=parent_stop ]]; then
+    if [[ "$runtime_line" =~ ticks_accepted=([0-9]+).*runs=([0-9]+).*signal_packages_read=([0-9]+).*entry_signals_skipped=([0-9]+).*cycles_started=([0-9]+).*cycles_rejected=([0-9]+).*cycles_closed=([0-9]+).*stop_loss_exits=([0-9]+).*stop_reason=parent_stop ]]; then
         ticks="${BASH_REMATCH[1]}"
         runtime_runs="${BASH_REMATCH[2]}"
-        signals="${BASH_REMATCH[3]}"
-        cycles_started="${BASH_REMATCH[4]}"
-        cycles_closed="${BASH_REMATCH[5]}"
-        stop_loss_exits="${BASH_REMATCH[6]}"
-        if [[ $ticks -eq 7948800 && $runtime_runs -eq 794880 && $signals -eq 55 &&
-              $cycles_started -eq 18 && $cycles_closed -eq 18 &&
+        signal_packages="${BASH_REMATCH[3]}"
+        entry_signals_skipped="${BASH_REMATCH[4]}"
+        cycles_started="${BASH_REMATCH[5]}"
+        cycles_rejected="${BASH_REMATCH[6]}"
+        cycles_closed="${BASH_REMATCH[7]}"
+        stop_loss_exits="${BASH_REMATCH[8]}"
+        if [[ $ticks -eq 7948800 && $runtime_runs -eq 794880 &&
+              $signal_packages -eq 2207 && $entry_signals_skipped -eq 37 &&
+              $cycles_started -eq 18 && $cycles_rejected -eq 0 &&
+              $cycles_closed -eq 18 &&
               $stop_loss_exits -eq 17 ]]; then
             runtime_ok=1
         fi
@@ -111,7 +115,7 @@ for ((run = 1; run <= runs; run++)); do
         exit "$status"
     fi
 
-    printf '%s\n' "$output" | grep -E '] (signaler prepared|runtime stopped|tick reader stopped|btrunner stopped)'
+    printf '%s\n' "$output" | grep -E '] (signaler initialized|runtime stopped|tick reader stopped|btrunner stopped)'
 
     replay_total_ms=$((replay_total_ms + replay_ms))
     if [[ $replay_minimum_ms -eq 0 || $replay_ms -lt $replay_minimum_ms ]]; then
@@ -125,9 +129,10 @@ for ((run = 1; run <= runs; run++)); do
     gc_run_values+=("$gc_runs")
     gc_pause_values+=("$gc_pause_ms")
     ((passed += 1))
-    printf 'run=%d result=PASS exit=0 process_ms=%d replay_ms=%d heap_mb=%s total_alloc_mb=%s gc_runs=%s gc_pause_ms=%s ticks=%d runs=%d signals=%d cycles=%d stop_loss=%d\n' \
+    printf 'run=%d result=PASS exit=0 process_ms=%d replay_ms=%d heap_mb=%s total_alloc_mb=%s gc_runs=%s gc_pause_ms=%s ticks=%d runs=%d signal_packages=%d entry_skipped=%d cycles_started=%d cycles_rejected=%d cycles_closed=%d stop_loss=%d\n' \
         "$run" "$elapsed_ms" "$replay_ms" "$heap_mb" "$total_alloc_mb" "$gc_runs" "$gc_pause_ms" \
-        "$ticks" "$runtime_runs" "$signals" "$cycles_closed" "$stop_loss_exits"
+        "$ticks" "$runtime_runs" "$signal_packages" "$entry_signals_skipped" \
+        "$cycles_started" "$cycles_rejected" "$cycles_closed" "$stop_loss_exits"
 done
 
 printf 'requested=%d attempted=%d passed=%d failed=0 suite_ms=%d process_total_ms=%d process_average_ms=%d process_min_ms=%d process_max_ms=%d replay_total_ms=%d replay_average_ms=%d replay_min_ms=%d replay_max_ms=%d log=%s\n' \

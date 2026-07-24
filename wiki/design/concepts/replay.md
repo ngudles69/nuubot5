@@ -103,7 +103,8 @@ Exit zero alone is insufficient.
 
 - Sweep 6 Bot 9 serves 7,948,800 ticks.
 - TickClock triggers 794,880 Runtime runs.
-- Runtime produces 55 Signals and 18 closed cycles.
+- Runtime reads 2,207 packages and observes 55 entry triggers.
+- Runtime starts and closes 18 cycles with 17 stop-loss exits.
 - Reader and BtRunner ranges match expected boundaries.
 - Canonical `noasm` stability gate passes.
 

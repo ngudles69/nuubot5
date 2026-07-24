@@ -10,90 +10,75 @@
 
 ## Intent
 
-Signaler MUST select one calculator, load complete closed OHLCV bars, calculate
-indicators once, and release ordered Signals without lookahead.
+Signaler MUST remain passive.
+
+It calculates immutable flat packages and serves timestamp-bounded history.
 
 ## Ownership
 
-Runtime MUST own one `Signaler`. `Signaler` MUST own:
+Runtime MUST own one factory-selected Signaler.
 
-- the selected calculator;
-- required Bars;
-- calculated Signals;
-- the next unreleased Signal index;
-- its lifecycle state.
+`signaler.Create` MUST select Macross or RSI and complete initialization.
 
-The calculator interface is valid because Macross and RSI are both current
-implementations of the same boundary.
+Macross and RSI are complete Signalers.
 
-## Program Flow
+They are not calculators behind another Signaler.
+
+Each concrete Signaler owns:
+
+- Configuration and requirements.
+- Replay OHLCV loading.
+- Calculations and custom fields.
+- Ordered package history.
+- Cleanup.
+
+## Runtime Contract
 
 ```text
-Signaler.Init(config, source, start, end)
-  select Macross or RSI calculator
-  resolve exact timeframe and warmup requirements
-  load required OHLCV
-  calculate indicators wholesale
-  generate all Backtest Signal candidates
-  validate timestamp order
-  retain OHLCV and Signals
+Runtime.Init
+  create initialized Signaler
 
-Signaler.Start()
-  require prepared state
-  admit release requests
+Runtime.Run
+  request latest available package
+  consume unseen timestamp
+  inspect standard entry triggers
 
-Signaler.Run(now)
-  release next Signal only after now crosses the next-row start
-  set availableMS to now
-
-Signaler.Stop()
-  close admission
-  log calculated, released, and pending counts
+Runtime.Stop
+  stop Signaler
 ```
+
+No `Start`, `Run`, or `Release` method exists on Signaler.
 
 ## Data Contract
 
-Every OHLCV value MUST contain aligned:
+Every package contains standard fields.
 
-```text
-startMS, open, high, low, close, volume
-```
+Concrete fields remain flat beside those fields.
 
-The loader MUST reject missing files, nulls, invalid OHLCV, gaps, duplicates,
-wrong types, and incorrect range length.
+Package time MUST use the next admitted bar start.
 
-`SignalMS` MUST identify the closed bar that produced the Signal.
-The next row start MUST prove closure.
+Queries MUST return no future package.
 
-`AvailableMS` MUST record the release observation time, not a theoretical bar
-end. Signals MUST release in strictly increasing `AvailableMS` order.
-
-Live calculators MUST generate only the concrete Signaler's required frame
-tail. Tail length is strategy-owned.
+Returned history MUST remain chronological.
 
 ## Implementations
 
-### Macross
-
 Macross MUST calculate:
 
-- 1h EMA 9/21 crossover;
-- backward-aligned closed 4h EMA 200 regime filter.
-
-It MUST NOT use an unclosed 4h bar.
-
-### RSI
+- Signal and regime EMAs.
+- Closed-regime alignment.
+- Regime-filtered crossover triggers.
+- One package per signal bar.
 
 RSI MUST calculate:
 
-- 1h RSI;
-- volume moving-average confirmation.
-
-Indicator calculations MUST remain in the concrete calculator. Runtime MUST
-receive only Signals.
+- Smoothed relative strength.
+- Volume moving-average confirmation.
+- Threshold transition triggers.
+- One package per signal bar.
 
 ## Evidence
 
-Signaler MUST report intervals, rows loaded, Signals calculated, Signals
-released, and Signals pending. Runtime MUST separately report received and
-active-cycle-skipped Signals.
+Signaler MUST report kind, symbol, timeframes, loaded rows, and package count.
+
+Runtime MUST separately report packages read and skipped entry triggers.

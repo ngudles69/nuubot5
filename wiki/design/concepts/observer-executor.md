@@ -2,99 +2,60 @@
 
 Status: Implemented.
 Covers: `internal/executor/observer.go`
-Purpose: Prove execution control and stop-loss behavior without orders or account state.
+Purpose: Provide the complete starting template without placing trades.
 
-## Canonical Sources
-
-- Nuubot4: `D:/rust/nuubot4/src/executor/observer.rs`
-- Nuubot4 contract: `D:/rust/nuubot4/wiki/logic/executor.md`
-
-## Scope
-
-ObserverExecutor observes BBO values, records an entry, calculates stop price, and becomes terminal after stop loss.
-
-## Owner and Children
+## Ownership
 
 BotCycle owns ObserverExecutor through the Executor interface.
 
-ObserverExecutor owns no child.
+Observer owns no Account or trading state.
 
-## Responsibilities
-
-- Validate configured stop-loss percentage.
-- Record the first BBO after Signal availability as entry.
-- Calculate side-specific stop-loss price.
-- Count every `IngestBBO` call.
-- Count every `OnBBO` call.
-- Track last timestamp and price.
-- Trigger at the inclusive stop boundary.
-- Preserve final evidence during parent stop.
-- Report terminal statistics once.
-
-## Does Not
-
-- Place or cancel orders.
-- Create Account, Ledger, Trade, Order, Fill, or Simulator state.
-- Match Orders or create simulated Fills.
-- Model slippage, fees, liquidity, or fills.
-- Decide Runtime stop policy.
+Executor factory constructs it and calls `OnInit`.
 
 ## Lifecycle
 
-Create, `Start`, repeated `IngestBBO` and `OnBBO`, timed `Run`, then idempotent
-`Stop`.
+Observer uses the canonical Executor status.
 
-Invalid `Start` returns an error.
+```text
+configured
+  starting
+    running
+      stopping
+        stopped
+```
 
-`OnBBO` silently ignores inactive or terminal states.
+Invalid initialization enters error.
 
-`Run` returns terminal state successfully and has no error path.
+Stopped and error states never transition.
 
-## Inputs and Outputs
+No separate terminal flag exists.
 
-Inputs are Signal, stop-loss percentage, ingested BBO values, delivered BBO
-values, Run timestamps, and parent stop reason.
+`OnStop` is idempotent.
 
-Outputs are terminal state, exit reason, both BBO counts, and execution evidence
-in terminal statistics.
+## Admission
 
-## State and Invariants
+Observer requires exactly one standard entry trigger.
 
-Stop-loss percentage MUST be greater than zero and less than one.
+Missing or conflicting triggers reject BotCycle admission.
 
-Long stops when price is at or below entry multiplied by one minus stop percentage.
+Valid long or short entry starts Observer immediately.
 
-Short stops when price is at or above entry multiplied by one plus stop percentage.
+## Capabilities
 
-Parent stop preserves last BBO as final time and price.
+Observer implements:
 
-## Concurrency
+- `BBOHandler.OnBBO`.
+- `BBOIngestHandler.IngestBBO`.
 
-ObserverExecutor is synchronous.
-
-## Persistence
-
-None.
-
-## Errors
-
-Invalid construction and invalid `Start` calls fail.
-
-`OnBBO` silently ignores inactive or terminal states.
-
-Current `Run` and `Stop` return no operational error.
-
-`Stop` is idempotent.
+It implements no unused event method.
 
 ## Program Flow
 
 ```text
-createObserver
+OnInit
   validate config
-  create observer
-
-Start
-  start observer
+  admit signal
+  initialize observer
 
 IngestBBO
   count ingested bbo
@@ -103,12 +64,9 @@ OnBBO
   count received bbo
   record last bbo
   record entry
-  check stop loss
+  assess stop loss
 
-Run
-  record run
-
-Stop
+OnStop
   preserve stop reason
   preserve end time
   stop observer
@@ -116,16 +74,35 @@ Stop
   report proof
 ```
 
-## Required Proof
+## Stop Loss
 
-- Long and short inclusive stop boundaries trigger.
-- Every `IngestBBO` and `OnBBO` call increments its separate count.
-- Stop logging reports both BBO counts.
-- Entry comes from first received BBO.
-- Parent shutdown after Reader exhaustion records final evidence.
-- Stop is idempotent.
-- Accepted replay reports 17 stop-loss exits and one parent-stop closure.
+The first delivered `OnBBO` price becomes the observed entry.
 
-## Open Decisions
+Long stops at or below entry multiplied by one minus stop percentage.
 
-None.
+Short stops at or above entry multiplied by one plus stop percentage.
+
+Stop loss moves Observer to stopping.
+
+Runtime closes the owning BotCycle during its next timed pass.
+
+## Logging
+
+Observer never logs each BBO.
+
+Its final summary reports:
+
+- Triggering Signal facts.
+- Entry and final prices.
+- Stop-loss price.
+- Duration and reason.
+- `ingest_bbo_count`.
+- `on_bbo_count`.
+
+## Does Not
+
+- Place or cancel Orders.
+- Create Account, Ledger, Trade, Fill, Simulator, or Venue state.
+- Match Orders or create simulated Fills.
+- Model fees, liquidity, or slippage.
+- Directly stop Runtime.

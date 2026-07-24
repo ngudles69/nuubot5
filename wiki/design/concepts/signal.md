@@ -1,93 +1,109 @@
 # Signal
 
 Status: Implemented.
-Covers: `internal/signaler/signaler.go`
-Purpose: Carry one immutable, timestamped trading intent from Signaler to Runtime and BotCycle.
+Covers: `internal/signaler/*.go`
+Purpose: Carry immutable, timestamped calculated facts from Signaler to Runtime and Executors.
 
-## Canonical Sources
+## Meaning
 
-- Nuubot4: `D:/rust/nuubot4/src/signaler.rs`
+A Signal package contains facts, not commands.
 
-## Scope
+Signaler calculates and stores it.
 
-Signal contains event time, availability time, side, and observed close price.
+Runtime uses only standard entry triggers.
 
-## Owner and Children
+Executor decides whether and how to use custom fields.
 
-Signaler creates Signals.
+## Standard Fields
 
-Runtime accepts them. BotCycle and Executors consume copies.
+Every package contains:
 
-Signal owns no child.
-
-## Responsibilities
-
-- Identify long or short intent.
-- Preserve the source Bar start timestamp.
-- Preserve the earliest safe release timestamp.
-- Preserve the source closing price.
-
-## Does Not
-
-- Decide release timing.
-- Create BotCycles.
-- Place orders.
-- Track execution state.
-- Own mutable lifecycle.
-
-## Lifecycle
-
-Calculate once, validate once, release once, and pass by value.
-
-## Inputs and Outputs
-
-Inputs are one closed indicator Bar and calculator decision.
-
-Output is one `signaler.Signal`.
-
-## State and Invariants
-
-Side MUST be `long` or `short`.
-
-Signal timestamp MUST precede availability timestamp.
-
-Availability MUST represent the close of all data used by the decision.
-
-Price MUST be the Signal Bar close.
-
-## Concurrency
-
-Signal is an immutable value after creation.
-
-## Persistence
-
-None.
-
-## Errors
-
-Signaler initialization rejects invalid timestamp ordering.
-
-## Program Flow
-
-```text
-Init
-  select calculator
-  resolve requirements
-  load ohlcv
-  calculate signals
-  validate signals
-  initialize signaler
-
-Run
-  release signal
+```json
+{
+  "symbol": "BTC",
+  "timestamp_ms": 1234567890,
+  "enter_long": true,
+  "enter_short": false,
+  "close_long": false,
+  "close_short": false,
+  "regime": "bull",
+  "risk_score": 24
+}
 ```
 
-## Required Proof
+Standard field names and types are reserved.
 
-- Equal-time BBO cannot observe a Signal early.
-- Released Signals retain exact side, timestamps, and price.
-- Each Signal releases once.
+`risk_score` uses zero through 100.
 
-## Open Decisions
+Zero represents the lowest risk.
 
-Future persistent Signal identity has no approved contract.
+Both entry triggers cannot be true.
+
+## Custom Fields
+
+Concrete Signalers append calculated fields at the same top level.
+
+```json
+{
+  "symbol": "BTC",
+  "timestamp_ms": 1234567890,
+  "enter_long": true,
+  "enter_short": false,
+  "close_long": false,
+  "close_short": false,
+  "regime": "bull",
+  "risk_score": 24,
+  "vol_spike": 1.3,
+  "vp_lvz": true,
+  "vp_hvz": false,
+  "vp_poc": 343.2
+}
+```
+
+There is no nested `extra_signals` object.
+
+Current Macross packages include bar time, price, and three EMA values.
+
+Current RSI packages include bar time, price, RSI, volume ratio, and threshold facts.
+
+Executor reads only the fields it needs.
+
+## Timestamp
+
+`timestamp_ms` is the earliest safe availability time.
+
+It uses the next admitted bar start.
+
+Signal queries never return a package after the requested time.
+
+## History
+
+Macross and RSI produce one package for every admitted signal bar.
+
+Executor may request the last N packages.
+
+Returned packages are ordered oldest to newest.
+
+The latest package is the final element.
+
+The Signaler may return fewer packages than requested.
+
+Executor owns insufficient-history policy and timestamp guards.
+
+## Runtime Shape
+
+`Package` stores decoded fields behind typed read methods.
+
+Its field map is not exposed.
+
+JSON marshaling produces the same flat object.
+
+Replay performs no JSON decoding in its hot loop.
+
+## Invariants
+
+- Standard fields always exist.
+- Custom fields cannot replace standard fields.
+- Packages are ordered by increasing availability time.
+- Package time never exceeds query time.
+- Signaler never tracks Executor consumption.

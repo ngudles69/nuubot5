@@ -2,35 +2,41 @@
 
 Status: Implemented.
 Covers: `internal/botcycle/botcycle.go`
-Purpose: Own configured Executors for one accepted Signal.
+Purpose: Own Executors for one admitted entry Signal.
 
-## Canonical Source
+## Ownership
 
-- `D:/rust/nuubot4/src/botcycle.rs`
+Runtime creates one BotCycle after a standard entry trigger.
 
-## Scope & Responsibilities
+BotCycle owns its initialized Executors.
 
-BotCycle creates Executors through ExecutorFactory and gives each the same
-Signal, BBO stream, and timed Runs.
+BotCycle knows Executor interfaces, never concrete types.
 
-BotCycle routes Simulator-only BBO ingestion through every active Executor.
+## Admission
+
+BotCycle asks the Executor factory to initialize every configured Executor.
+
+Any Executor may return admission rejection.
+
+BotCycle then stops previously initialized Executors and rejects the cycle.
+
+Runtime consumes that Signal, keeps no cycle, and waits for the next Signal.
+
+Unexpected Executor errors remain fatal.
+
+Executors without gates initialize normally.
 
 ## Program Flow
 
 ```text
-init
+Init
   create executors
   initialize botcycle
 
-start
-  start executors
-  start botcycle
-
-run
-  run executors
+Run
   check completion
 
-stop
+Stop
   stop executors
   resolve exit reason
   calculate duration
@@ -44,19 +50,38 @@ OnBBO
   deliver executor bbo
 ```
 
-## IngestBBO
+## Event Dispatch
 
-[`IngestBBO`](../concepts/ingestbbo.md) follows direct ownership.
+BotCycle uses capability assertions.
 
-```text
-BotCycle.IngestBBO
-  call each active Executor.IngestBBO
+```go
+if handler, ok := activeExecutor.(executor.BBOHandler); ok {
+    handler.OnBBO(bbo)
+}
 ```
 
-This route completes before BotCycle delivers the same BBO through `OnBBO`.
-BotCycle does not select or access Venue implementations.
+Only running Executors receive events.
 
-## Notes
+An Executor without a capability is silently skipped.
 
-- BotCycle knows the Executor interface, never concrete Executor types.
-- `OnBBO` remains a domain helper because it accepts one market event.
+## BBO Order
+
+```text
+Runtime.IngestBBO
+  BotCycle.IngestBBO
+    each running BBOIngestHandler
+  BotCycle.OnBBO
+    each running BBOHandler
+```
+
+Simulator ingestion completes before `OnBBO`.
+
+See [IngestBBO](../concepts/ingestbbo.md).
+
+## Completion
+
+BotCycle completes when every Executor is stopping, stopped, or in error.
+
+Runtime closes a completed cycle during its next timed `Run`.
+
+Runtime clears `r.cycle` before stopping the old cycle.

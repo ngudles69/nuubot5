@@ -2,97 +2,73 @@
 
 Status: Implemented.
 Covers: `internal/signaler/macross.go`
-Purpose: Create regime-filtered EMA crossover Signals from closed Bars.
+Purpose: Produce regime-filtered EMA Signal packages from closed Bars.
 
-## Canonical Sources
+## Ownership
 
-- Nuubot4: `D:/rust/nuubot4/src/signaler/macross.rs`
-- Nuubot4 contract: `D:/rust/nuubot4/wiki/logic/signaler.md`
+Signaler factory creates and initializes Macross.
 
-## Scope
+Macross is a complete Signaler.
 
-Macross owns its timeframes, EMA periods, closed-bar alignment, and Signal interpretation.
-
-## Owner and Children
-
-Signaler owns one Macross calculator when selected.
-
-Macross owns no lifecycle child.
+It owns configuration, requirements, OHLCV loading, calculation, packages, and cleanup.
 
 ## Responsibilities
 
-- Request signal OHLCV with slow-EMA warmup.
-- Request regime OHLCV with regime-EMA warmup.
+- Load signal OHLCV with slow-EMA warmup.
+- Load regime OHLCV with regime-EMA warmup.
 - Calculate fast, slow, and regime EMAs.
 - Backward-align only closed regime values.
 - Detect confirmed crossover direction.
 - Apply matching regime filter.
-- Return ordered Signals.
+- Produce one package for every admitted signal bar.
+- Serve timestamp-bounded package history.
 
-## Does Not
+## Package Fields
 
-- Load Bars.
-- Release Signals.
-- Use an unclosed regime Bar.
-- Own lifecycle or replay state.
-- Place orders.
+Standard fields include entry triggers and regime.
 
-## Lifecycle
+Custom fields include:
 
-Construct once, report requirements, calculate once, then remain immutable.
-
-## Inputs and Outputs
-
-Inputs are validated signal and regime OHLCV plus configured EMA periods.
-
-Output is ordered `[]Signal`.
-
-## State and Invariants
-
-Signal and regime timeframes MUST differ.
-
-Long requires upward crossover and close above the latest closed regime EMA.
-
-Short requires downward crossover and close below the latest closed regime EMA.
-
-Signals begin after configured warmup.
-
-## Concurrency
-
-Calculation is synchronous.
-
-## Persistence
-
-None.
-
-## Errors
-
-Unknown intervals, equal intervals, or missing required OHLCV fail.
+- `bar_start_ms`.
+- `signal_price`.
+- `fast_ma`.
+- `slow_ma`.
+- `regime_ma`.
 
 ## Program Flow
 
 ```text
-createMacross
-  parse intervals
-  validate intervals
-
-Requirements
-  create requirements
+Init
+  configure macross
+  load macross data
+  calculate macross signals
+  validate packages
+  initialize signaler
 
 Calculate
   find rows
   calculate emas
   align regime
   calculate signals
+
+configure
+  parse intervals
+  validate config
 ```
+
+## Invariants
+
+Signal and regime timeframes MUST differ.
+
+Long requires upward crossover and bullish closed regime.
+
+Short requires downward crossover and bearish closed regime.
+
+Package time uses the next admitted signal-bar start.
 
 ## Required Proof
 
 - Regime values never look ahead.
-- Long and short conditions match canon.
-- Missing timeframe fails.
-- Accepted dataset produces the canonical Signal sequence.
-
-## Open Decisions
-
-None.
+- Every admitted signal bar produces one package.
+- Crossover entry triggers match the accepted baseline.
+- Flat JSON contains standard and custom fields.

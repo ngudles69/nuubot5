@@ -86,21 +86,23 @@ Correctness and fresh-process stability take priority over speed.
 
 Sweep 6 Bot 9 replays 7,948,800 one-second ticks through 794,880 Runtime passes.
 
-Each accepted run reports 55 signals, 18 cycles, and 17 stop-loss exits.
+Each accepted run reports 2,207 packages and 55 standard entry triggers.
 
-The canonical `noasm` build passed 1,000 of 1,000 fresh-process runs without delay.
+Those triggers produce 18 admitted cycles, 37 skipped entries, and 17 stop-loss exits.
 
-Process time averaged 445 ms. Replay time averaged 371 ms.
+The passive Signaler hardcut passed 20 of 20 fresh-process runs.
 
-The run reported zero failure markers, zero incorrect statistics, and zero stderr.
+Process time averaged 1,478 ms. Replay time averaged 1,397 ms.
 
 Proof log:
 
 ```text
-workspace/logs/nuubot5-rtest-s6-b9-1000-20260723T041701Z.log
+workspace/logs/nuubot5-rtest-s6-b9-20-20260724T083014Z.log
 ```
 
 Historical commit benchmarks live in [PERFORMANCE.md](PERFORMANCE.md).
+
+The earlier canonical `noasm` decoder gate passed 1,000 of 1,000 fresh processes.
 
 The optimized decoder returned one corrupt timestamp at run 183.
 

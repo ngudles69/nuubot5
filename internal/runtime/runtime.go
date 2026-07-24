@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -14,26 +15,29 @@ import (
 )
 
 type stats struct {
-	ticks          uint64
-	runs           uint64
-	signals        uint64
-	signalsSkipped uint64
-	cyclesStarted  uint64
-	cyclesClosed   uint64
-	stopLossExits  uint64
+	ticks               uint64
+	runs                uint64
+	signalPackagesRead  uint64
+	entrySignalsSkipped uint64
+	cyclesStarted       uint64
+	cyclesRejected      uint64
+	cyclesClosed        uint64
+	stopLossExits       uint64
 }
 
-// Runtime owns synchronous trading decisions and its direct children.
+// Runtime owns synchronous Bot decisions and its direct children.
 type Runtime struct {
-	log        *logging.Logger
-	config     config.Runtime
-	signaler   signaler.Signaler
-	risks      []risk.Risk
-	cycle      *botcycle.Control
-	stats      stats
-	stopReason string
-	started    bool
-	stopped    bool
+	log          *logging.Logger
+	config       config.Runtime
+	symbol       string
+	signaler     signaler.Signaler
+	risks        []risk.Risk
+	cycle        *botcycle.Control
+	stats        stats
+	lastSignalMS uint64
+	stopReason   string
+	started      bool
+	stopped      bool
 }
 
 // Section 1 - Program Flow
@@ -42,23 +46,27 @@ type Runtime struct {
 func (r *Runtime) Init(log *logging.Logger, ctx setup.Context, end time.Time) error {
 	r.log = log
 	r.config = ctx.Config.Runtime
+	r.symbol = ctx.Bot.Symbol
 
-	// initialize signaler
-	var err = r.signaler.Init(
+	// create signaler
+	var err error
+	r.signaler, err = signaler.Create(
 		log,
 		r.config.Signaler,
+		r.symbol,
 		ctx.Bot.TicksPath,
 		ctx.Bot.ReplayStart,
 		end,
 	)
 	if err != nil {
-		return fmt.Errorf("initialize signaler: %w", err)
+		return fmt.Errorf("create signaler: %w", err)
 	}
 
 	// create risks
 	for index, riskConfig := range r.config.Risks {
 		var created, riskErr = risk.Create(log, index+1, riskConfig)
 		if riskErr != nil {
+			r.signaler.Stop()
 			return fmt.Errorf("create risk %d: %w", index+1, riskErr)
 		}
 		r.risks = append(r.risks, created)
@@ -69,15 +77,10 @@ func (r *Runtime) Init(log *logging.Logger, ctx setup.Context, end time.Time) er
 	return nil
 }
 
-// Start starts Runtime children and admission.
+// Start starts Runtime admission.
 func (r *Runtime) Start() error {
 	if r.started || r.stopped {
 		return fmt.Errorf("runtime cannot start from current state")
-	}
-	// start signaler
-	var err = r.signaler.Start()
-	if err != nil {
-		return fmt.Errorf("start signaler: %w", err)
 	}
 
 	// start runtime
@@ -104,29 +107,69 @@ func (r *Runtime) Run(nowMS uint64) (bool, error) {
 	if r.stopReason != "" {
 		return true, nil
 	}
-	if r.cycle == nil {
-		return false, nil
-	}
 
-	// run botcycle
-	var completed, err = r.cycle.Run(nowMS)
-	if err != nil {
-		return false, fmt.Errorf("run bot cycle: %w", err)
-	}
-	if !completed {
-		return false, nil
-	}
-
-	// close botcycle
-	err = r.closeCycle("completed")
-	if err != nil {
-		return false, fmt.Errorf("close completed bot cycle: %w", err)
+	// check botcycle
+	if r.cycle != nil {
+		var completed, err = r.cycle.Run(nowMS)
+		if err != nil {
+			return false, fmt.Errorf("run bot cycle: %w", err)
+		}
+		if completed {
+			err = r.closeCycle("completed")
+			if err != nil {
+				return false, fmt.Errorf("close completed bot cycle: %w", err)
+			}
+		}
 	}
 
 	// check max cycles
 	if r.stats.cyclesClosed >= r.config.MaxCycles {
 		r.requestStop("max_cycles")
 		return true, nil
+	}
+
+	// read signal
+	var packages = r.signaler.Signals(r.symbol, nowMS, 1)
+	if len(packages) == 0 {
+		return false, nil
+	}
+	var signalPackage = packages[len(packages)-1]
+	if signalPackage.TimestampMS() <= r.lastSignalMS {
+		return false, nil
+	}
+
+	// consume signal
+	r.lastSignalMS = signalPackage.TimestampMS()
+	r.stats.signalPackagesRead++
+	var enterLong = signalPackage.EnterLong()
+	var enterShort = signalPackage.EnterShort()
+	if enterLong && enterShort {
+		return false, fmt.Errorf(
+			"signal package %d contains conflicting entry triggers",
+			signalPackage.TimestampMS(),
+		)
+	}
+	if !enterLong && !enterShort {
+		return false, nil
+	}
+	if r.cycle != nil {
+		r.stats.entrySignalsSkipped++
+		return false, nil
+	}
+
+	// open botcycle
+	var err = r.openCycle(signalPackage)
+	if errors.Is(err, botcycle.ErrRejected) {
+		r.stats.cyclesRejected++
+		r.log.Warning(fmt.Sprintf(
+			"bot cycle rejected signal_ts_ms=%d reason=%v",
+			signalPackage.TimestampMS(),
+			err,
+		))
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("open bot cycle: %w", err)
 	}
 	return false, nil
 }
@@ -155,14 +198,15 @@ func (r *Runtime) Stop(reason string) error {
 	// stop runtime
 	r.stopped = true
 	r.log.Info(fmt.Sprintf(
-		"runtime stopped ticks_accepted=%d runs=%d signals_received=%d "+
-			"signals_skipped=%d cycles_started=%d cycles_closed=%d "+
-			"stop_loss_exits=%d stop_reason=%s",
+		"runtime stopped ticks_accepted=%d runs=%d signal_packages_read=%d "+
+			"entry_signals_skipped=%d cycles_started=%d cycles_rejected=%d "+
+			"cycles_closed=%d stop_loss_exits=%d stop_reason=%s",
 		r.stats.ticks,
 		r.stats.runs,
-		r.stats.signals,
-		r.stats.signalsSkipped,
+		r.stats.signalPackagesRead,
+		r.stats.entrySignalsSkipped,
 		r.stats.cyclesStarted,
+		r.stats.cyclesRejected,
 		r.stats.cyclesClosed,
 		r.stats.stopLossExits,
 		r.stopReason,
@@ -178,32 +222,13 @@ func (r *Runtime) IngestBBO(bbo market.BBO) error {
 		return fmt.Errorf("runtime cannot ingest bbo from current state")
 	}
 
-	// run signaler
-	for {
-		var signal, available, err = r.signaler.Run(bbo.TimestampMS)
-		if err != nil {
-			return fmt.Errorf("release signal: %w", err)
-		}
-		if !available {
-			break
-		}
-		r.stats.signals++
-		if r.cycle != nil {
-			r.stats.signalsSkipped++
-		} else {
-			err = r.openCycle(signal)
-			if err != nil {
-				return fmt.Errorf("open bot cycle: %w", err)
-			}
-		}
-	}
-
 	// ingest botcycle bbo
 	if r.cycle != nil {
-		var ingestErr = r.cycle.IngestBBO(bbo)
-		if ingestErr != nil {
-			return fmt.Errorf("ingest bot cycle bbo: %w", ingestErr)
+		var err = r.cycle.IngestBBO(bbo)
+		if err != nil {
+			return fmt.Errorf("ingest bot cycle bbo: %w", err)
 		}
+
 		// deliver botcycle bbo
 		r.cycle.OnBBO(bbo)
 	}
@@ -211,23 +236,18 @@ func (r *Runtime) IngestBBO(bbo market.BBO) error {
 	return nil
 }
 
-func (r *Runtime) openCycle(signal signaler.Signal) error {
+func (r *Runtime) openCycle(signal signaler.Package) error {
 	// initialize botcycle
 	var cycle botcycle.Control
 	var err = cycle.Init(
 		r.log,
-		int(r.stats.cyclesStarted+1),
+		int(r.stats.cyclesStarted+r.stats.cyclesRejected+1),
+		r.signaler,
 		signal,
 		r.config.Executors,
 	)
 	if err != nil {
 		return err
-	}
-
-	// start botcycle
-	err = cycle.Start()
-	if err != nil {
-		return fmt.Errorf("start bot cycle: %w", err)
 	}
 	r.cycle = &cycle
 	r.stats.cyclesStarted++

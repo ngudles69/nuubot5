@@ -91,7 +91,7 @@ Nuubot admits only required, audited code. It does not import or preserve either
 | Package | Status | Purpose |
 |---|---|---|
 | [account](design/packages/account.md) | Reserved | Coordinate venue requests and ledger evidence. |
-| [botcycle](design/packages/botcycle.md) | Implemented | Coordinate Executors for one accepted Signal. |
+| [botcycle](design/packages/botcycle.md) | Implemented | Coordinate Executors for one admitted entry Signal. |
 | [btrunner](design/packages/btrunner.md) | Implemented | Execute one complete historical replay. |
 | [config](design/packages/config.md) | Implemented | Decode and validate immutable settings. |
 | [datastore](design/packages/datastore.md) | Implemented | Load one validated BotSpec. |
@@ -106,7 +106,7 @@ Nuubot admits only required, audited code. It does not import or preserve either
 | [risk](design/packages/risk.md) | Implemented | Assess configured risk policy. |
 | [runtime](design/packages/runtime.md) | Implemented | Own signals, risks, cycles, and stop decisions. |
 | [setup](design/packages/setup.md) | Implemented | Prepare one validated BtRunner context. |
-| [signaler](design/packages/signaler.md) | Implemented | Calculate and release ordered Signals. |
+| [signaler](design/packages/signaler.md) | Implemented | Calculate and serve ordered Signal packages. |
 | [simulator](design/packages/simulator.md) | Reserved | Provide venue-shaped simulated execution. |
 | [trade](design/packages/trade.md) | Reserved | Own strategy-level orders and evidence. |
 | [toolkit/clock](design/packages/clock.md) | Implemented | Provide deterministic clock mechanics. |

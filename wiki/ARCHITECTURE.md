@@ -210,7 +210,7 @@ Boundary packages validate shape, identity, timestamps, prices, quantities, and 
 
 Runtime MUST NOT decode Parquet, query Sweep storage, or parse venue messages.
 
-Signaler receives validated OHLCV. Indicator code MUST NOT read files.
+Each concrete Signaler loads validated OHLCV through the `ohlcv` package.
 
 Venue normalizes external outcomes. Account reconciles them into Ledger evidence.
 

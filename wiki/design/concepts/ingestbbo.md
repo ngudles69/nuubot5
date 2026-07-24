@@ -15,7 +15,7 @@ without changing simulated or domain state. A live Venue returns unchanged.
 ```text
 Runtime.IngestBBO
   -> BotCycle.IngestBBO
-  -> Executor.IngestBBO
+  -> supported Executor.IngestBBO
   -> Account.IngestBBO
   -> Venue.IngestBBO
        Live: no-op
@@ -44,7 +44,7 @@ Order and Fill state only after reconciliation updates its Account and Ledger.
 
 ```text
 receive validated BBO
-  ingest BBO through existing Executor-owned Accounts
+  ingest BBO through supported Executor-owned Accounts
   let Simulator match existing Orders
   mark changed Accounts dirty
   deliver BBO through Executor.OnBBO

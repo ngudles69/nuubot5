@@ -4,7 +4,7 @@ Last updated: 2026-07-24
 
 ## Focus
 
-Prepare the next approved Nuubot5 task.
+Continue user review of Signaler, Macross, RSI, and Executor lifecycle.
 
 ## Current status
 
@@ -27,6 +27,32 @@ Prepare the next approved Nuubot5 task.
 - Hyperliquid decision-record documentation is complete.
 - Full-worktree verification passed.
 - Full-worktree publication is authorized.
+- Signaler and Executor redesign documentation is complete.
+- `signaler.Create` selects, initializes, and returns Macross or RSI.
+- Macross and RSI are complete Signalers, not calculators.
+- Signaler is passive and stores immutable timestamped Signal packages.
+- Executors poll Signal packages and own consumption guards.
+- Every Executor implements `OnInit` and `OnStop`.
+- `BBOHandler` and `BBOIngestHandler` are implemented optional capabilities.
+- Recon and user-event capabilities remain deferred until their event types exist.
+- `BBOHandler` exposes the `OnBBO` callback.
+- Concrete Executor identity does not depend on implemented callbacks.
+- Future Executor timers will use concrete callbacks registered directly with Clock.
+- BotCycle detects supported handler interfaces and dispatches matching events.
+- Runtime interprets only standard entry triggers, never custom Signal fields.
+- Runtime polls standard entry triggers and creates BotCycle only after entry.
+- Runtime consumes each Signal before BotCycle admission.
+- Executor admission rejection is nonfatal and never retries that Signal.
+- Executors without admission gates initialize immediately.
+- Signaler and Executor implementation hardcut is complete.
+- Macross produces 2,207 timestamped packages for Sweep 6 Bot 9.
+- Runtime observes 55 entry triggers and skips 37 while a cycle is active.
+- Runtime admits 18 cycles; zero are rejected in the accepted replay.
+- Observer closes 17 cycles by stop loss and one during parent shutdown.
+- Final 2x passed 2/2 with 1,413 ms average replay.
+- Final 20x passed 20/20 with 1,397 ms average replay.
+- Latest 2x log: `workspace/logs/nuubot5-rtest-s6-b9-2-20260724T083008Z.log`.
+- Latest 20x log: `workspace/logs/nuubot5-rtest-s6-b9-20-20260724T083014Z.log`.
 - The stock SDK contains unsafe error handling, WebSocket deadlock paths,
   missing TP/SL grouping, insufficient signing proof, and dependency bloat.
 - The audit rejects direct stock-module adoption.
@@ -115,10 +141,9 @@ Prepare the next approved Nuubot5 task.
 - Reader exhaustion owns replay completion; Runtime does not stop from replay dates.
 - Runtime shutdown closes any active cycle after clearing `r.cycle`.
 - Reader-owned replay completion passed fresh `1x` and `20x` proof.
-- Signaler is one concrete lifecycle owner; Macross and RSI are internal calculators.
-- Signaler `Init` must select its calculator, resolve requirements, load OHLCV,
-  calculate and validate Signals, then commit initialized state.
-- Runtime must only initialize Signaler and must not orchestrate Signaler internals.
+- Signaler is a factory-selected interface with Macross and RSI implementations.
+- Signaler factory owns concrete selection and initialization.
+- Runtime owns the returned Signaler and reads only standard entry triggers.
 - Runtime child-tree cleanup is approved for Replay, Signaler, BotCycle, Risk,
   and Executor. Command and BtRunner are excluded.
 - The `rtest.sh` counter collision and dead Replay failure state are approved fixes.
@@ -196,7 +221,7 @@ Prepare the next approved Nuubot5 task.
 - `wiki/PERFORMANCE.md` records commit-linked benchmark history.
 - Nuubot4 core ownership is ported into compact Go designs and one cascading implementation.
 - Executor and Risk are permanent factories for many concrete implementations.
-- Signaler is one concrete lifecycle owner with selected calculator implementations.
+- Signaler is a factory-selected passive service with complete implementations.
 - Approved baseline remains Macross, Observer stop-loss, and BalancedRisk.
 - Setup owns configuration and Bot admission.
 - Signaler initialization owns its OHLCV requirements, loading, calculation, and validation.
@@ -273,6 +298,31 @@ Last updated: 2026-07-24 13:33:22 +08:00
 
 ## Files changed
 
+- `internal/signaler/*.go`: factory-selected Macross and RSI, immutable flat
+  packages, typed fields, history, validation, and focused proof.
+- `internal/executor/*.go`: required lifecycle, canonical status, typed
+  admission rejection, optional BBO handlers, and Observer proof.
+- `internal/botcycle/botcycle.go`: Executor admission, rejection cleanup,
+  capability dispatch, and completion checks.
+- `internal/botcycle/botcycle_test.go`: BBO dispatch and rejection proof.
+- `internal/runtime/runtime.go`: timed standard-trigger polling, consumption
+  guard, nonfatal rejection, cycle admission, and cycle clearing.
+- `rtest.sh`: canonical package, entry, rejection, cycle, and exit proof.
+- `wiki/design/packages/signaler.md`: passive factory, calculation, history,
+  and current replay boundary.
+- `wiki/design/packages/executor.md`: lifecycle, optional handlers, signal
+  guards, timers, and BBO boundaries.
+- `wiki/design/packages/botcycle.md`: capability dispatch, BBO ordering, and
+  admission rejection.
+- `wiki/design/packages/runtime.md`: timed Signal polling, standard entry
+  ownership, event routing, and Runtime stop ownership.
+- `wiki/design/concepts/signal.md`: standard fields, flat custom fields,
+  timestamps, history, and hot-path representation.
+- `wiki/design/concepts/observer-executor.md`: template lifecycle, optional
+  capabilities, counters, and retained stop-loss observation.
+- Signaler, Executor, replay, project, architecture, and performance pages:
+  synchronized current behavior and measured proof.
+- `HANDOFF.md`: implementation status, proof, and next review action.
 - `internal/setup/setup.go`: marks the future Meta-admission location without
   adding disabled code or fake types.
 - `wiki/design/packages/setup.md`: records the deferred Meta integration.
@@ -375,6 +425,22 @@ Last updated: 2026-07-24 13:33:22 +08:00
 
 ## Proof
 
+- `BBOHandler` owns `OnBBO`; no `BBOExecutor` wording exists.
+- Changed design pages contain no line over 25 words.
+- Every changed local Markdown link resolves.
+- Every changed source action comment matches an owning design step.
+- Full uncached `go test -tags noasm ./...` passed.
+- Full `go vet -tags noasm ./...` passed.
+- `bash -n rtest.sh` passed.
+- Final 2x passed 2/2 with exact semantic proof.
+- Final 20x passed 20/20 with exact semantic proof.
+- Final 20x process average was 1,478 ms.
+- Final 20x replay average was 1,397 ms.
+- Final 20x replay range was 1,377-1,426 ms.
+- Final 20x total allocation averaged 976.613 MB.
+- Final 20x log is
+  `workspace/logs/nuubot5-rtest-s6-b9-20-20260724T083014Z.log`.
+- `git diff --check` passed.
 - Full uncached tests passed across 25 packages with zero failures.
 - Eight packages ran tests; 17 packages reported no test files.
 - Full tests used `CGO_ENABLED=0`, `-tags noasm`, and took 3.165 seconds.
@@ -704,23 +770,18 @@ Last updated: 2026-07-24 13:33:22 +08:00
 - `:=` remains allowed only when `var` or `=` is impossible or materially less clear.
 - Setup, BtRunner, and Runtime form one cascading lifecycle.
 - Executor and Risk remain configuration-selected factories.
-- Signaler remains one concrete lifecycle owner initialized directly by Runtime.
-- Runtime owns Signaler preparation; BtRunner does not know OHLCV or Signaler.
+- Signaler factory returns one fully initialized concrete implementation.
+- Runtime owns Signaler and interprets only standard entry triggers.
+- BotCycle owns optional Executor capability detection and dispatch.
 - Observer retains canonical one-percent adverse-move exit behavior.
 
 ## Not run
 
-- Go tests and replay were not run because this change only adds documentation,
-  a Git tracking rule, and TOML comments.
-- Replay was not run because `AssessStop` is a compile-time-only method rename.
-- BtRunner replay was not run because Runtime construction behavior did not change.
-- BtRunner replay was not run because only comments changed.
-- Go tests were not run because only Markdown changed.
-- Runtime `Run` hardcut did not run a real replay because behavior did not change.
+- None for the current task.
 
 ## Next action
 
-Clone the Python reference or implement internal Meta only after the user selects the next scope.
+Continue user review before any further implementation.
 
 Go toolchain:
 
