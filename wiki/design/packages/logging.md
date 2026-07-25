@@ -22,7 +22,7 @@ Logging owns destinations, append-only opening, timestamps, levels, record forma
 - Write to one destination only.
 - Write one console error only when `server.log` cannot open.
 - `Open` owns directory creation, file opening, and Logger construction.
-- `OpenBot` opens one identity-bound Bot logger.
+- `OpenBotLog` opens one identity-bound Bot log.
 - Configure logging once at each executable or Server boundary.
 - Pass explicit `*logging.Logger` values.
 - Name every Logger parameter `log`.
@@ -62,14 +62,14 @@ Open
   open log file
   return logger
 
-OpenBot
+OpenBotLog
   open bot log
 
 write
   write record
 ```
 
-`Open`, `OpenBot`, and level methods remain domain helpers because their names
+`Open`, `OpenBotLog`, and level methods remain domain helpers because their names
 state the exact logging operation.
 
 ## Required Proof

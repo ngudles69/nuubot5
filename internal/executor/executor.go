@@ -48,6 +48,9 @@ type Spec struct {
 	Resource        Resource
 	CapitalUSDC     decimal.Decimal
 	OrderSizeUSDC   decimal.Decimal
+	GridLevels      int
+	RangePct        decimal.Decimal
+	MinExpectedPnL  decimal.Decimal
 	TakeProfitPct   decimal.Decimal
 	StopLossPct     decimal.Decimal
 	FeePct          decimal.Decimal
@@ -69,17 +72,59 @@ type Result struct {
 	ExitReason    string
 	CapitalUSDC   decimal.Decimal
 	OrderSizeUSDC decimal.Decimal
+	Cancellations uint64
+	ClosureOrders uint64
+	Retries       uint64
+	RoundTrips    uint64
+	Levels        []GridLevel
 	Account       *account.Result
+}
+
+// Telemetry contains one immutable current Executor observation.
+type Telemetry struct {
+	ID       string
+	Kind     string
+	Resource Resource
+	Status   Status
+	Account  *account.Snapshot
 }
 
 // Clone returns one independently owned Executor result.
 func (r Result) Clone() Result {
 	var copied = r
+	copied.Levels = append([]GridLevel(nil), r.Levels...)
 	if r.Account != nil {
 		var accountResult = r.Account.Clone()
 		copied.Account = &accountResult
 	}
 	return copied
+}
+
+// GridLevel contains one Grid Executor's calculated level and runtime state.
+type GridLevel struct {
+	Level                      uint16
+	Boundary                   bool
+	GridPrice                  decimal.Decimal
+	InitialEntryPrice          decimal.Decimal
+	ReentryPrice               decimal.Decimal
+	ExitPrice                  decimal.Decimal
+	Quantity                   decimal.Decimal
+	InitialNotional            decimal.Decimal
+	ReentryNotional            decimal.Decimal
+	InitialEntryCommission     decimal.Decimal
+	ReentryCommission          decimal.Decimal
+	ExitCommission             decimal.Decimal
+	InitialExpectedPnL         decimal.Decimal
+	ReentryExpectedPnL         decimal.Decimal
+	IntendedAction             string
+	CurrentTradeID             uint64
+	CurrentTradeNo             uint32
+	CurrentTradeStatus         string
+	Status                     string
+	InitialSubmissionCompleted bool
+	SubmissionAttempts         uint32
+	LastSubmittedMS            uint64
+	LastCompletedMS            uint64
 }
 
 // Status identifies one Executor lifecycle state.
@@ -112,7 +157,13 @@ type Executor interface {
 	OnStop(string) error
 	Status() Status
 	ExitReason() string
+	Telemetry() Telemetry
 	Result() (Result, error)
+}
+
+// StartHandler starts after every sibling Executor initializes.
+type StartHandler interface {
+	OnStart() error
 }
 
 // BBOHandler consumes normal Executor BBO events.
@@ -146,6 +197,8 @@ func Create(ctx Context) (Executor, error) {
 		selected = &observer{status: Configured}
 	case "trade":
 		selected = &tradeExecutor{status: Configured}
+	case "grid":
+		selected = &gridExecutor{status: Configured}
 	default:
 		return nil, fmt.Errorf("unknown executor: %s", ctx.Spec.Kind)
 	}

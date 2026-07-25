@@ -28,6 +28,13 @@ type Result struct {
 	Executors   []executor.Result
 }
 
+// Telemetry contains one immutable current BotCycle observation.
+type Telemetry struct {
+	CycleNumber int
+	Status      string
+	Executors   []executor.Telemetry
+}
+
 // Control owns one active BotCycle and its Executors.
 type Control struct {
 	log       *logging.Logger
@@ -88,6 +95,21 @@ func (c *Control) Init(
 			)
 		}
 		c.executors = append(c.executors, created)
+	}
+
+	// start executors after every sibling initializes
+	for index, activeExecutor := range c.executors {
+		var starter, supported = activeExecutor.(executor.StartHandler)
+		if !supported {
+			continue
+		}
+		var err = starter.OnStart()
+		if err != nil {
+			return errors.Join(
+				fmt.Errorf("start executor %d: %w", index+1, err),
+				c.stopExecutors("start_error"),
+			)
+		}
 	}
 
 	// initialize botcycle
@@ -223,11 +245,33 @@ func (c *Control) Result() Result {
 	return result
 }
 
+// Telemetry returns one immutable current BotCycle observation.
+func (c *Control) Telemetry() Telemetry {
+	var status = "configured"
+	switch {
+	case c.stopped:
+		status = "stopped"
+	case c.completed:
+		status = "completed"
+	case c.running:
+		status = "running"
+	}
+	var result = Telemetry{
+		CycleNumber: c.number,
+		Status:      status,
+	}
+	for _, current := range c.executors {
+		result.Executors = append(result.Executors, current.Telemetry())
+	}
+	return result
+}
+
 // IngestBBO routes one BBO through supported Simulator handlers.
 func (c *Control) IngestBBO(bbo market.BBO) error {
 	// ingest executor bbo
 	for index, activeExecutor := range c.executors {
-		if activeExecutor.Status() != executor.Running {
+		var status = activeExecutor.Status()
+		if status != executor.Running && status != executor.Stopping {
 			continue
 		}
 		var handler, supported = activeExecutor.(executor.BBOIngestHandler)

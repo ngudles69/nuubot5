@@ -75,6 +75,18 @@ func (m *macross) Calculate(symbol string, loaded []Series) ([]Package, error) {
 	if err != nil {
 		return nil, err
 	}
+	var signalDuration time.Duration
+	signalDuration, err = m.signalInterval.Duration()
+	if err != nil {
+		return nil, err
+	}
+	var regimeDuration time.Duration
+	regimeDuration, err = m.regimeInterval.Duration()
+	if err != nil {
+		return nil, err
+	}
+	var signalDurationMS = uint64(signalDuration.Milliseconds())
+	var regimeDurationMS = uint64(regimeDuration.Milliseconds())
 
 	// calculate emas
 	var fast = ema(signalBars.Close, m.fastPeriod)
@@ -87,10 +99,10 @@ func (m *macross) Calculate(symbol string, loaded []Series) ([]Package, error) {
 	var regimeRow int
 	var latest float64
 	var hasLatest bool
-	for row := 0; row+1 < len(signalBars.StartMS); row++ {
-		var signalBoundary = signalBars.StartMS[row+1]
-		for regimeRow+1 < len(regimeBars.StartMS) &&
-			regimeBars.StartMS[regimeRow+1] <= signalBoundary {
+	for row := range signalBars.StartMS {
+		var signalBoundary = signalBars.StartMS[row] + signalDurationMS
+		for regimeRow < len(regimeBars.StartMS) &&
+			regimeBars.StartMS[regimeRow]+regimeDurationMS <= signalBoundary {
 			if regimeRow+1 >= m.regimePeriod {
 				latest = regime[regimeRow]
 				hasLatest = true
@@ -107,7 +119,7 @@ func (m *macross) Calculate(symbol string, loaded []Series) ([]Package, error) {
 		0,
 		max(0, len(signalBars.Close)-signalBars.PriorRows),
 	)
-	for row := signalBars.PriorRows; row+1 < len(signalBars.Close); row++ {
+	for row := signalBars.PriorRows; row < len(signalBars.Close); row++ {
 		var regimeName = "unknown"
 		if ready[row] && signalBars.Close[row] > aligned[row] {
 			regimeName = "bull"
@@ -127,7 +139,7 @@ func (m *macross) Calculate(symbol string, loaded []Series) ([]Package, error) {
 		var signalPackage Package
 		signalPackage, err = CreatePackage(
 			symbol,
-			signalBars.StartMS[row+1],
+			signalBars.StartMS[row]+signalDurationMS,
 			action,
 			regimeName,
 			0,

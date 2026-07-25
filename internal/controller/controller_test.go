@@ -2,6 +2,7 @@ package controller
 
 import (
 	"bytes"
+	"reflect"
 	"testing"
 
 	"github.com/shopspring/decimal"
@@ -103,6 +104,11 @@ func TestControllerReusesCurrentStartActionAfterCycleCompletes(t *testing.T) {
 	}
 	if _, err = controller.Run(4_000); err != nil {
 		t.Fatal(err)
+	}
+	var firstTelemetry = controller.Telemetry()
+	var secondTelemetry = controller.Telemetry()
+	if !reflect.DeepEqual(firstTelemetry, secondTelemetry) {
+		t.Fatal("Controller telemetry changed owned state")
 	}
 	if err = controller.Stop("test"); err != nil {
 		t.Fatal(err)

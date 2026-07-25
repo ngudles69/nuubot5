@@ -77,7 +77,7 @@ func TestSimulatorMatchesBracketAndCancelsSibling(t *testing.T) {
 	}
 }
 
-func TestSimulatorDoesNotReuseBBOForRestingOrder(t *testing.T) {
+func TestSimulatorMatchesMarketableGTCAtSubmission(t *testing.T) {
 	var actual Simulator
 	var err = actual.Init(Config{
 		LedgerID:    1,
@@ -97,7 +97,7 @@ func TestSimulatorDoesNotReuseBBOForRestingOrder(t *testing.T) {
 	if _, err = actual.IngestBBO(first); err != nil {
 		t.Fatalf("warm simulator: %v", err)
 	}
-	var resting = request(1, order.Entry, order.Buy, "110", false)
+	var resting = request(1, order.Entry, order.Buy, "90", false)
 	resting.TimeInForce = order.GTC
 	var response SubmitResponse
 	response, err = actual.PlaceOrders([]OrderRequest{resting})
@@ -116,6 +116,7 @@ func TestSimulatorDoesNotReuseBBOForRestingOrder(t *testing.T) {
 	}
 	var immediate = request(2, order.Entry, order.Buy, "100", false)
 	immediate.TradeID = 2
+	immediate.TimeInForce = order.GTC
 	response, err = actual.PlaceOrders([]OrderRequest{immediate})
 	if err != nil || response.Statuses[0].Kind != "filled" {
 		t.Fatalf("submit immediate Order response=%+v error=%v", response, err)

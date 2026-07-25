@@ -1,6 +1,6 @@
 # Executor Package
 
-Status: Implemented for ObserverExecutor and Simulator TradeExecutor.
+Status: Implemented for ObserverExecutor, Simulator TradeExecutor, and Simulator GridExecutor.
 Covers: `internal/executor/*.go`
 Purpose: Own fixed execution roles inside one BotCycle.
 
@@ -11,7 +11,7 @@ One immutable Executor Spec contains:
 - ID, role, kind, and fixed side;
 - `(venue, network, physical_account_id, symbol)` resource;
 - declared capital and order size;
-- strategy-specific percentages;
+- strategy-specific levels, thresholds, and percentages;
 - Meta and minimum notional; and
 - result persistence path.
 
@@ -27,6 +27,7 @@ type Executor interface {
     OnStop(string) error
     Status() Status
     ExitReason() string
+    Telemetry() Telemetry
     Result() (Result, error)
 }
 ```
@@ -35,6 +36,10 @@ Optional narrow capabilities handle BBO, reconciliation, and Account
 snapshots.
 
 BotCycle owns capability dispatch.
+
+`Telemetry()` returns current status and optional Account state.
+
+It performs no reconciliation, mutation, logging, or persistence.
 
 ## ObserverExecutor
 
@@ -53,6 +58,50 @@ flat cleanup path.
 
 Controller carries terminal Account equity into the same resource's next
 cycle.
+
+## GridExecutor
+
+GridExecutor owns one Simulator-backed Account and one bottom-up Level table.
+
+Thirty total Levels contain two non-enterable boundaries and 28 active Levels.
+
+Current `macross_grid_bot` uses arithmetic spacing and equal capital slices.
+
+It deploys 95 percent of cycle-start equity across active Levels.
+
+Initial long entries use the lower of current and Grid price.
+
+Initial short entries use the higher value.
+
+Each active Level submits one GTC entry and one reduce-only TP.
+
+Completed Levels re-enter at their stored Grid price.
+
+Every calculation is stored before submission.
+
+Each expected PnL deducts entry and exit commissions.
+
+Zero, negative, or threshold-failing expected PnL stops Controller startup.
+
+Both boundaries stop the BotCycle.
+
+Adverse boundaries report `stop_loss`; favorable boundaries report `take_profit`.
+
+Shutdown cancels TP, SL, then entry Orders in one ordered batch.
+
+It then closes each open Trade and proves zero Orders and zero position.
+
+TradeExecutor and GridExecutor use the same `stop` Order role for shutdown exposure.
+
+One submission plus two proven-safe retries precedes fatal graceful exit.
+
+Accepted or uncertain mutation outcomes never retry.
+
+Every start logs one header and one record per validated Level.
+
+Geometric spacing, scaled sizing, and minimum price-gap filtering are absent.
+
+Those behaviors require another exact BotSpec.
 
 ## Resource Rules
 

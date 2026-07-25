@@ -14,6 +14,7 @@ import (
 const (
 	MacrossObserver = "macross_observer_bot"
 	MacrossTrade    = "macross_trade_bot"
+	MacrossGrid     = "macross_grid_bot"
 )
 
 type admitted struct {
@@ -81,6 +82,32 @@ type observerExecutorConfig struct {
 	StopLossPct string `toml:"stop_loss_pct"`
 }
 
+type gridConfig struct {
+	BotSpec    string               `toml:"bot_spec"`
+	Controller controllerConfig     `toml:"controller"`
+	Signaler   macrossConfig        `toml:"signaler"`
+	Executors  []gridExecutorConfig `toml:"executors"`
+	Risks      []riskConfig         `toml:"risks"`
+}
+
+type gridExecutorConfig struct {
+	ID                 string `toml:"id"`
+	Role               string `toml:"role"`
+	Kind               string `toml:"kind"`
+	Side               string `toml:"side"`
+	Venue              string `toml:"venue"`
+	Network            string `toml:"network"`
+	PhysicalAccountID  string `toml:"physical_account_id"`
+	Symbol             string `toml:"symbol"`
+	CapitalUSDC        string `toml:"capital_usdc"`
+	Levels             int    `toml:"levels"`
+	RangePct           string `toml:"range_pct"`
+	MinExpectedPnLUSDC string `toml:"min_expected_pnl_usdc"`
+	FeePct             string `toml:"fee_pct"`
+	SlippagePct        string `toml:"slippage_pct"`
+	PersistMode        string `toml:"persist_mode"`
+}
+
 // Section 1 - Program Flow
 
 // Validate admits one exact BotSpec Config.
@@ -95,11 +122,40 @@ func admit(botSpecID, configTOML string) (admitted, error) {
 	switch botSpecID {
 	case MacrossTrade:
 		return admitMacrossTrade(configTOML)
+	case MacrossGrid:
+		return admitMacrossGrid(configTOML)
 	case MacrossObserver:
 		return admitMacrossObserver(configTOML)
 	default:
 		return admitted{}, fmt.Errorf("unknown BotSpecID: %s", botSpecID)
 	}
+}
+
+func admitMacrossGrid(configTOML string) (admitted, error) {
+	var cfg gridConfig
+	if _, err := toml.Decode(configTOML, &cfg); err != nil {
+		return admitted{}, fmt.Errorf("decode %s Config: %w", MacrossGrid, err)
+	}
+	var result, err = admitMacross(
+		MacrossGrid,
+		cfg.BotSpec,
+		cfg.Controller,
+		cfg.Signaler,
+		cfg.Risks,
+	)
+	if err != nil {
+		return admitted{}, err
+	}
+	if len(cfg.Executors) != 1 {
+		return admitted{}, fmt.Errorf("%s requires one Grid Executor", MacrossGrid)
+	}
+	var spec executor.Spec
+	spec, err = admitGridExecutor(cfg.Executors[0])
+	if err != nil {
+		return admitted{}, err
+	}
+	result.executors = []executor.Spec{spec}
+	return result, nil
 }
 
 func admitMacrossTrade(configTOML string) (admitted, error) {
@@ -275,6 +331,59 @@ func admitTradeExecutor(raw tradeExecutorConfig) (executor.Spec, error) {
 		FeePct:        values[4],
 		SlippagePct:   values[5],
 		PersistMode:   raw.PersistMode,
+	}, nil
+}
+
+func admitGridExecutor(raw gridExecutorConfig) (executor.Spec, error) {
+	var values = make([]decimal.Decimal, 0, 5)
+	for _, text := range []string{
+		raw.CapitalUSDC,
+		raw.RangePct,
+		raw.MinExpectedPnLUSDC,
+		raw.FeePct,
+		raw.SlippagePct,
+	} {
+		var value, err = decimal.NewFromString(text)
+		if err != nil {
+			return executor.Spec{}, fmt.Errorf("invalid Executor decimal: %w", err)
+		}
+		values = append(values, value)
+	}
+	var resource = executor.Resource{
+		Venue:             raw.Venue,
+		Network:           raw.Network,
+		PhysicalAccountID: raw.PhysicalAccountID,
+		Symbol:            raw.Symbol,
+	}
+	if raw.ID == "" || raw.Role == "" || raw.Kind != "grid" ||
+		(raw.Side != executor.Long && raw.Side != executor.Short) ||
+		resource.Venue != "simulator" ||
+		resource.Network != "simnet" ||
+		resource.PhysicalAccountID == "" ||
+		resource.Symbol == "" ||
+		!values[0].IsPositive() ||
+		raw.Levels < 3 || raw.Levels > 1024 ||
+		!values[1].IsPositive() ||
+		values[1].GreaterThanOrEqual(decimal.NewFromInt(1)) ||
+		values[2].IsNegative() ||
+		values[3].IsNegative() ||
+		values[4].IsNegative() ||
+		(raw.PersistMode != "none" && raw.PersistMode != "max") {
+		return executor.Spec{}, fmt.Errorf("invalid %s Grid Executor", MacrossGrid)
+	}
+	return executor.Spec{
+		ID:             raw.ID,
+		Role:           raw.Role,
+		Kind:           raw.Kind,
+		Side:           raw.Side,
+		Resource:       resource,
+		CapitalUSDC:    values[0],
+		GridLevels:     raw.Levels,
+		RangePct:       values[1],
+		MinExpectedPnL: values[2],
+		FeePct:         values[3],
+		SlippagePct:    values[4],
+		PersistMode:    raw.PersistMode,
 	}, nil
 }
 

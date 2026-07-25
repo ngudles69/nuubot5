@@ -350,6 +350,21 @@ func (e *tradeExecutor) ExitReason() string {
 	return e.exitReason
 }
 
+// Telemetry returns one immutable current TradeExecutor observation.
+func (e *tradeExecutor) Telemetry() Telemetry {
+	var result = Telemetry{
+		ID:       e.spec.ID,
+		Kind:     e.spec.Kind,
+		Resource: e.spec.Resource,
+		Status:   e.status,
+	}
+	var snapshot, observed = e.account.Telemetry()
+	if observed {
+		result.Account = &snapshot
+	}
+	return result
+}
+
 // Result returns one terminal TradeExecutor result.
 func (e *tradeExecutor) Result() (Result, error) {
 	if !e.hasResult {

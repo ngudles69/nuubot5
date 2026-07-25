@@ -12,42 +12,45 @@ import (
 	"nuubot/internal/controller"
 	"nuubot/internal/replay"
 	"nuubot/internal/resultpublisher"
+	"nuubot/internal/runreport"
 	"nuubot/internal/setup"
+	"nuubot/internal/telemetry"
 	"nuubot/internal/toolkit/clock"
 	"nuubot/internal/toolkit/logging"
 )
 
 type stats struct {
-	ticksExpected   uint64
-	ticksServed     uint64
-	runsExpected    uint64
-	runsTriggered   uint64
-	expectedFirstMS uint64
-	expectedLastMS  uint64
-	firstMS         uint64
-	lastMS          uint64
-	replayCompleted bool
-	elapsed         time.Duration
+	ticksExpected             uint64
+	ticksServed               uint64
+	runsExpected              uint64
+	runsTriggered             uint64
+	expectedFirstMS           uint64
+	expectedLastMS            uint64
+	firstMS                   uint64
+	lastMS                    uint64
+	replayCompleted           bool
+	historicalDataLoopElapsed time.Duration
 }
 
 // ReplayResult contains immutable replay and publication proof.
 type ReplayResult struct {
-	Symbol        string
-	TicksExpected uint64
-	TicksServed   uint64
-	RunsExpected  uint64
-	RunsTriggered uint64
-	FirstMS       uint64
-	LastMS        uint64
-	ReplayMS      int64
-	Completed     bool
-	Published     bool
+	Symbol                      string
+	TicksExpected               uint64
+	TicksServed                 uint64
+	RunsExpected                uint64
+	RunsTriggered               uint64
+	FirstMS                     uint64
+	LastMS                      uint64
+	HistoricalDataLoopElapsedMS int64
+	Completed                   bool
+	Published                   bool
 }
 
 // Result contains one complete immutable backtest result.
 type Result struct {
 	Controller controller.Result
 	Replay     ReplayResult
+	Report     runreport.Run
 }
 
 // BtRunner owns one bounded historical replay.
@@ -59,6 +62,8 @@ type BtRunner struct {
 	symbol        string
 	resultPath    string
 	stats         stats
+	telemetry     []telemetry.Sample
+	report        runreport.Run
 	stopRequested bool
 	published     bool
 	started       bool
@@ -201,7 +206,9 @@ func (r *BtRunner) Loop() error {
 	}
 	r.log.Info("btrunner loop started")
 	var started = time.Now()
-	defer func() { r.stats.elapsed = time.Since(started) }()
+	defer func() {
+		r.stats.historicalDataLoopElapsed = time.Since(started)
+	}()
 
 	for {
 
@@ -271,26 +278,39 @@ func (r *BtRunner) Stop() error {
 		controllerErr = fmt.Errorf("stop Controller: %w", controllerErr)
 	}
 
-	// publish completed result
+	// build and publish completed result
 	var publishErr error
 	if readerErr == nil && controllerErr == nil && r.stats.replayCompleted {
-		publishErr = resultpublisher.Publish(
-			r.resultPath,
-			r.controller.Result(),
-			resultpublisher.ReplayProof{
-				Symbol:        r.symbol,
-				TicksExpected: r.stats.ticksExpected,
-				TicksServed:   r.stats.ticksServed,
-				RunsExpected:  r.stats.runsExpected,
-				RunsTriggered: r.stats.runsTriggered,
-				FirstMS:       r.stats.firstMS,
-				LastMS:        r.stats.lastMS,
-				ReplayMS:      r.stats.elapsed.Milliseconds(),
-				Completed:     r.stats.replayCompleted,
+		r.collectTelemetry(r.stats.lastMS, true)
+		var memory stdruntime.MemStats
+		stdruntime.ReadMemStats(&memory)
+		var input = runreport.Input{
+			Controller: r.controller.Result(),
+			Replay: runreport.Replay{
+				Symbol:                      r.symbol,
+				TicksExpected:               r.stats.ticksExpected,
+				TicksServed:                 r.stats.ticksServed,
+				RunsExpected:                r.stats.runsExpected,
+				RunsTriggered:               r.stats.runsTriggered,
+				FirstMS:                     r.stats.firstMS,
+				LastMS:                      r.stats.lastMS,
+				HistoricalDataLoopElapsedMS: r.stats.historicalDataLoopElapsed.Milliseconds(),
+				Completed:                   r.stats.replayCompleted,
 			},
-		)
+			Telemetry: append([]telemetry.Sample(nil), r.telemetry...),
+			Memory: runreport.Memory{
+				HeapMB:       float64(memory.HeapAlloc) / (1 << 20),
+				TotalAllocMB: float64(memory.TotalAlloc) / (1 << 20),
+				GCRuns:       memory.NumGC,
+				GCPauseMS:    float64(memory.PauseTotalNs) / 1e6,
+			},
+		}
+		r.report, publishErr = runreport.Build(input)
+		if publishErr == nil {
+			publishErr = resultpublisher.Publish(r.resultPath, input, r.report)
+		}
 		if publishErr != nil {
-			publishErr = fmt.Errorf("publish result: %w", publishErr)
+			publishErr = fmt.Errorf("build or publish result: %w", publishErr)
 		} else {
 			r.published = true
 		}
@@ -302,13 +322,13 @@ func (r *BtRunner) Stop() error {
 		r.stats.replayCompleted {
 		result = "complete"
 	}
-	var memory stdruntime.MemStats
-	stdruntime.ReadMemStats(&memory)
 	r.log.Info(fmt.Sprintf(
 		"btrunner stopped loader=parquet ticks_served=%d ticks_expected=%d "+
 			"runs_triggered=%d runs_expected=%d first_ts_ms=%d last_ts_ms=%d "+
-			"replay_completed=%t replay_ms=%d heap_mb=%f total_alloc_mb=%f "+
-			"gc_runs=%d gc_pause_ms=%f result=%s",
+			"replay_completed=%t btrunner_historical_data_loop_elapsed_ms=%d "+
+			"heap_before_publication_mb=%f total_alloc_before_publication_mb=%f "+
+			"gc_runs_before_publication=%d gc_pause_before_publication_ms=%f "+
+			"result=%s",
 		r.stats.ticksServed,
 		r.stats.ticksExpected,
 		r.stats.runsTriggered,
@@ -316,11 +336,11 @@ func (r *BtRunner) Stop() error {
 		r.stats.firstMS,
 		r.stats.lastMS,
 		r.stats.replayCompleted,
-		r.stats.elapsed.Milliseconds(),
-		float64(memory.HeapAlloc)/(1<<20),
-		float64(memory.TotalAlloc)/(1<<20),
-		memory.NumGC,
-		float64(memory.PauseTotalNs)/1e6,
+		r.stats.historicalDataLoopElapsed.Milliseconds(),
+		r.report.Memory.HeapMB,
+		r.report.Memory.TotalAllocMB,
+		r.report.Memory.GCRuns,
+		r.report.Memory.GCPauseMS,
 		result,
 	))
 
@@ -350,6 +370,7 @@ func (r *BtRunner) controllerRun(nowMS uint64) error {
 	if err != nil {
 		return fmt.Errorf("run Controller: %w", err)
 	}
+	r.collectTelemetry(nowMS, false)
 	// remember stop request
 	if stop {
 		r.stopRequested = true
@@ -365,18 +386,43 @@ func (r *BtRunner) Result() (Result, error) {
 	return Result{
 		Controller: r.controller.Result(),
 		Replay: ReplayResult{
-			Symbol:        r.symbol,
-			TicksExpected: r.stats.ticksExpected,
-			TicksServed:   r.stats.ticksServed,
-			RunsExpected:  r.stats.runsExpected,
-			RunsTriggered: r.stats.runsTriggered,
-			FirstMS:       r.stats.firstMS,
-			LastMS:        r.stats.lastMS,
-			ReplayMS:      r.stats.elapsed.Milliseconds(),
-			Completed:     r.stats.replayCompleted,
-			Published:     r.published,
+			Symbol:                      r.symbol,
+			TicksExpected:               r.stats.ticksExpected,
+			TicksServed:                 r.stats.ticksServed,
+			RunsExpected:                r.stats.runsExpected,
+			RunsTriggered:               r.stats.runsTriggered,
+			FirstMS:                     r.stats.firstMS,
+			LastMS:                      r.stats.lastMS,
+			HistoricalDataLoopElapsedMS: r.stats.historicalDataLoopElapsed.Milliseconds(),
+			Completed:                   r.stats.replayCompleted,
+			Published:                   r.published,
 		},
+		Report: r.report,
 	}, nil
+}
+
+func (r *BtRunner) collectTelemetry(nowMS uint64, terminal bool) {
+	var current = r.controller.Telemetry()
+	r.telemetry = append(r.telemetry, telemetry.Sample{
+		Sequence:            uint64(len(r.telemetry) + 1),
+		TimestampMS:         nowMS,
+		Terminal:            terminal,
+		TicksServed:         r.stats.ticksServed,
+		ControllerRuns:      current.Runs,
+		SignalPackages:      current.SignalPackagesRead,
+		StartActionsSkipped: current.StartActionsSkipped,
+		CyclesStarted:       current.CyclesStarted,
+		CyclesRejected:      current.CyclesRejected,
+		CyclesClosed:        current.CyclesClosed,
+		ActiveCycle:         current.ActiveCycle,
+		BotCapital:          current.BotCapital,
+		BotBalance:          current.BotBalance,
+		BotEquity:           current.BotEquity,
+		NetPnL:              current.NetPnL,
+		PeakEquity:          current.PeakEquity,
+		Drawdown:            current.Drawdown,
+		MaxDrawdown:         current.MaxDrawdown,
+	})
 }
 
 func (r *BtRunner) verify() error {

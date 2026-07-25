@@ -14,7 +14,10 @@ Publication receives:
 - Controller capital, PnL, equity, and drawdown;
 - Signal and changed Risk decisions;
 - BotCycle and Executor results;
+- Grid Level calculations and terminal state;
 - Account, Ledger, Trade, Order, Fill, and Simulator evidence; and
+- ordered telemetry samples;
+- one calculated terminal RunReport; and
 - replay counts, range, duration, and completion.
 
 ResultPublisher creates `.partial`, writes all evidence, commits, and renames

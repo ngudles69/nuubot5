@@ -39,5 +39,7 @@ Signaler loads no BotConfig after initialization.
 
 - Packages are ordered by unique timestamp.
 - Closed bars preserve no-lookahead behavior.
+- Package availability equals bar start plus its configured interval.
+- The final fully closed loaded bar produces a Package.
 - Signaler performs no lifecycle or trading mutation.
 - Controller may reuse the current action after a BotCycle completes.

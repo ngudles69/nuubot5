@@ -3,6 +3,7 @@ package botspec
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -53,7 +54,7 @@ persist_mode = "none"
 }
 
 func TestCanonicalTemplatesValidate(t *testing.T) {
-	for _, botSpecID := range []string{MacrossObserver, MacrossTrade} {
+	for _, botSpecID := range []string{MacrossObserver, MacrossTrade, MacrossGrid} {
 		var content, err = os.ReadFile(filepath.Join("templates", botSpecID+".toml"))
 		if err != nil {
 			t.Fatalf("read %s template: %v", botSpecID, err)
@@ -61,6 +62,21 @@ func TestCanonicalTemplatesValidate(t *testing.T) {
 		if err = Validate(botSpecID, string(content)); err != nil {
 			t.Fatalf("validate %s template: %v", botSpecID, err)
 		}
+	}
+}
+
+func TestGridLevelCountUsesCompleteTenBitRange(t *testing.T) {
+	var content, err = os.ReadFile(filepath.Join("templates", MacrossGrid+".toml"))
+	if err != nil {
+		t.Fatalf("read Grid template: %v", err)
+	}
+	var maximum = strings.Replace(string(content), "levels = 30", "levels = 1024", 1)
+	if err = Validate(MacrossGrid, maximum); err != nil {
+		t.Fatalf("validate 1024 Grid levels: %v", err)
+	}
+	var excessive = strings.Replace(string(content), "levels = 30", "levels = 1025", 1)
+	if err = Validate(MacrossGrid, excessive); err == nil {
+		t.Fatal("1025 Grid levels were accepted")
 	}
 }
 

@@ -7,33 +7,21 @@ import (
 	"os"
 	"path/filepath"
 
-	"nuubot/internal/controller"
 	"nuubot/internal/ledger"
+	"nuubot/internal/runreport"
 	"nuubot/internal/simulator"
 
 	_ "modernc.org/sqlite"
 )
 
-// ReplayProof contains terminal replay evidence for publication.
-type ReplayProof struct {
-	Symbol        string
-	TicksExpected uint64
-	TicksServed   uint64
-	RunsExpected  uint64
-	RunsTriggered uint64
-	FirstMS       uint64
-	LastMS        uint64
-	ReplayMS      int64
-	Completed     bool
-}
-
 // Section 1 - Program Flow
 
-// Publish writes one complete Controller and replay result atomically.
-func Publish(path string, result controller.Result, replay ReplayProof) error {
+// Publish writes one complete backtest result atomically.
+func Publish(path string, input runreport.Input, report runreport.Run) error {
 	if path == "" {
 		return fmt.Errorf("publish result: path is empty")
 	}
+	var result = input.Controller
 	for _, cycle := range result.Cycles {
 		for _, executorResult := range cycle.Executors {
 			if executorResult.Account == nil {
@@ -84,7 +72,7 @@ func Publish(path string, result controller.Result, replay ReplayProof) error {
 	}
 
 	// publish Controller and replay evidence
-	err = publishResult(partial, result, replay)
+	err = publishResult(partial, input, report)
 	if err != nil {
 		return err
 	}
@@ -102,9 +90,11 @@ func Publish(path string, result controller.Result, replay ReplayProof) error {
 
 func publishResult(
 	path string,
-	result controller.Result,
-	replay ReplayProof,
+	input runreport.Input,
+	report runreport.Run,
 ) error {
+	var result = input.Controller
+	var replay = input.Replay
 	var db, err = sql.Open("sqlite", path)
 	if err != nil {
 		return fmt.Errorf("publish result: open summary database: %w", err)
@@ -131,7 +121,7 @@ func publishResult(
 			runs_triggered INTEGER NOT NULL,
 			first_ms INTEGER NOT NULL,
 			last_ms INTEGER NOT NULL,
-			replay_ms INTEGER NOT NULL,
+			btrunner_historical_data_loop_elapsed_ms INTEGER NOT NULL,
 			completed INTEGER NOT NULL,
 			bot_capital TEXT NOT NULL,
 			net_pnl TEXT NOT NULL,
@@ -157,8 +147,42 @@ func publishResult(
 			exit_reason TEXT NOT NULL,
 			capital_usdc TEXT NOT NULL,
 			order_size_usdc TEXT NOT NULL,
+			cancellations INTEGER NOT NULL,
+			closure_orders INTEGER NOT NULL,
+			retries INTEGER NOT NULL,
+			round_trips INTEGER NOT NULL,
 			PRIMARY KEY (cycle_number, executor_id),
 			FOREIGN KEY (cycle_number) REFERENCES botcycle_result(cycle_number)
+		);
+		CREATE TABLE grid_level_result (
+			cycle_number INTEGER NOT NULL,
+			executor_id TEXT NOT NULL,
+			level INTEGER NOT NULL,
+			boundary INTEGER NOT NULL,
+			grid_price TEXT NOT NULL,
+			initial_entry_price TEXT NOT NULL,
+			reentry_price TEXT NOT NULL,
+			exit_price TEXT NOT NULL,
+			quantity TEXT NOT NULL,
+			initial_notional TEXT NOT NULL,
+			reentry_notional TEXT NOT NULL,
+			initial_entry_commission TEXT NOT NULL,
+			reentry_commission TEXT NOT NULL,
+			exit_commission TEXT NOT NULL,
+			initial_expected_pnl TEXT NOT NULL,
+			reentry_expected_pnl TEXT NOT NULL,
+			intended_action TEXT NOT NULL,
+			current_trade_id INTEGER NOT NULL,
+			current_trade_no INTEGER NOT NULL,
+			current_trade_status TEXT NOT NULL,
+			status TEXT NOT NULL,
+			initial_submission_completed INTEGER NOT NULL,
+			submission_attempts INTEGER NOT NULL,
+			last_submitted_ms INTEGER NOT NULL,
+			last_completed_ms INTEGER NOT NULL,
+			PRIMARY KEY (cycle_number, executor_id, level),
+			FOREIGN KEY (cycle_number, executor_id)
+				REFERENCES executor_result(cycle_number, executor_id)
 		);
 		CREATE TABLE signal_decision (
 			sequence INTEGER PRIMARY KEY,
@@ -170,6 +194,64 @@ func publishResult(
 			timestamp_ms INTEGER NOT NULL,
 			policy INTEGER NOT NULL,
 			decision TEXT NOT NULL
+		);
+		CREATE TABLE telemetry_sample (
+			sequence INTEGER PRIMARY KEY,
+			timestamp_ms INTEGER NOT NULL,
+			terminal INTEGER NOT NULL,
+			ticks_served INTEGER NOT NULL,
+			controller_runs INTEGER NOT NULL,
+			signal_packages INTEGER NOT NULL,
+			start_actions_skipped INTEGER NOT NULL,
+			cycles_started INTEGER NOT NULL,
+			cycles_rejected INTEGER NOT NULL,
+			cycles_closed INTEGER NOT NULL,
+			active_cycle INTEGER NOT NULL,
+			bot_capital TEXT NOT NULL,
+			bot_balance TEXT NOT NULL,
+			bot_equity TEXT NOT NULL,
+			net_pnl TEXT NOT NULL,
+			peak_equity TEXT NOT NULL,
+			drawdown TEXT NOT NULL,
+			max_drawdown TEXT NOT NULL
+		);
+		CREATE INDEX telemetry_sample_timestamp
+			ON telemetry_sample(timestamp_ms);
+		CREATE TABLE run_report (
+			sweep_id INTEGER NOT NULL,
+			bot_id INTEGER NOT NULL,
+			bot_spec_id TEXT NOT NULL,
+			config_hash TEXT NOT NULL,
+			symbol TEXT NOT NULL,
+			first_ms INTEGER NOT NULL,
+			last_ms INTEGER NOT NULL,
+			status TEXT NOT NULL,
+			ticks INTEGER NOT NULL,
+			controller_runs INTEGER NOT NULL,
+			signal_packages INTEGER NOT NULL,
+			start_actions_skipped INTEGER NOT NULL,
+			cycles_started INTEGER NOT NULL,
+			cycles_rejected INTEGER NOT NULL,
+			cycles_closed INTEGER NOT NULL,
+			trades INTEGER NOT NULL,
+			orders INTEGER NOT NULL,
+			fills INTEGER NOT NULL,
+			cancellations INTEGER NOT NULL,
+			stop_orders INTEGER NOT NULL,
+			retries INTEGER NOT NULL,
+			round_trips INTEGER NOT NULL,
+			bot_capital TEXT NOT NULL,
+			gross_pnl TEXT NOT NULL,
+			fees TEXT NOT NULL,
+			net_pnl TEXT NOT NULL,
+			ending_equity TEXT NOT NULL,
+			max_drawdown TEXT NOT NULL,
+			historical_data_loop_elapsed_ms INTEGER NOT NULL,
+			heap_before_publication_mb REAL NOT NULL,
+			total_alloc_before_publication_mb REAL NOT NULL,
+			gc_runs_before_publication INTEGER NOT NULL,
+			gc_pause_before_publication_ms REAL NOT NULL,
+			telemetry_samples INTEGER NOT NULL
 		)
 	`)
 	if err != nil {
@@ -193,7 +275,7 @@ func publishResult(
 		replay.RunsTriggered,
 		replay.FirstMS,
 		replay.LastMS,
-		replay.ReplayMS,
+		replay.HistoricalDataLoopElapsedMS,
 		replay.Completed,
 		result.BotCapital.String(),
 		result.NetPnL.String(),
@@ -215,7 +297,9 @@ func publishResult(
 		}
 		for _, current := range cycle.Executors {
 			_, err = tx.Exec(
-				`INSERT INTO executor_result VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				`INSERT INTO executor_result VALUES (
+					?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+				)`,
 				cycle.CycleNumber,
 				current.ID,
 				current.Role,
@@ -229,9 +313,49 @@ func publishResult(
 				current.ExitReason,
 				current.CapitalUSDC.String(),
 				current.OrderSizeUSDC.String(),
+				current.Cancellations,
+				current.ClosureOrders,
+				current.Retries,
+				current.RoundTrips,
 			)
 			if err != nil {
 				return fmt.Errorf("publish result: insert Executor: %w", err)
+			}
+			for _, level := range current.Levels {
+				_, err = tx.Exec(
+					`INSERT INTO grid_level_result VALUES (
+						?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+						?, ?, ?, ?, ?, ?, ?, ?
+					)`,
+					cycle.CycleNumber,
+					current.ID,
+					level.Level,
+					level.Boundary,
+					level.GridPrice.String(),
+					level.InitialEntryPrice.String(),
+					level.ReentryPrice.String(),
+					level.ExitPrice.String(),
+					level.Quantity.String(),
+					level.InitialNotional.String(),
+					level.ReentryNotional.String(),
+					level.InitialEntryCommission.String(),
+					level.ReentryCommission.String(),
+					level.ExitCommission.String(),
+					level.InitialExpectedPnL.String(),
+					level.ReentryExpectedPnL.String(),
+					level.IntendedAction,
+					level.CurrentTradeID,
+					level.CurrentTradeNo,
+					level.CurrentTradeStatus,
+					level.Status,
+					level.InitialSubmissionCompleted,
+					level.SubmissionAttempts,
+					level.LastSubmittedMS,
+					level.LastCompletedMS,
+				)
+				if err != nil {
+					return fmt.Errorf("publish result: insert Grid level: %w", err)
+				}
 			}
 		}
 	}
@@ -257,6 +381,84 @@ func publishResult(
 		if err != nil {
 			return fmt.Errorf("publish result: insert Risk decision: %w", err)
 		}
+	}
+	var telemetryStatement *sql.Stmt
+	telemetryStatement, err = tx.Prepare(`
+		INSERT INTO telemetry_sample VALUES (
+			?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+		)
+	`)
+	if err != nil {
+		return fmt.Errorf("publish result: prepare telemetry samples: %w", err)
+	}
+	defer telemetryStatement.Close()
+	for _, current := range input.Telemetry {
+		_, err = telemetryStatement.Exec(
+			current.Sequence,
+			current.TimestampMS,
+			current.Terminal,
+			current.TicksServed,
+			current.ControllerRuns,
+			current.SignalPackages,
+			current.StartActionsSkipped,
+			current.CyclesStarted,
+			current.CyclesRejected,
+			current.CyclesClosed,
+			current.ActiveCycle,
+			current.BotCapital.String(),
+			current.BotBalance.String(),
+			current.BotEquity.String(),
+			current.NetPnL.String(),
+			current.PeakEquity.String(),
+			current.Drawdown.String(),
+			current.MaxDrawdown.String(),
+		)
+		if err != nil {
+			return fmt.Errorf("publish result: insert telemetry sample: %w", err)
+		}
+	}
+	_, err = tx.Exec(
+		`INSERT INTO run_report VALUES (
+			?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+			?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+		)`,
+		report.SweepID,
+		report.BotID,
+		report.BotSpecID,
+		report.ConfigHash,
+		report.Symbol,
+		report.FirstMS,
+		report.LastMS,
+		report.Status,
+		report.Ticks,
+		report.ControllerRuns,
+		report.SignalPackages,
+		report.StartActionsSkipped,
+		report.CyclesStarted,
+		report.CyclesRejected,
+		report.CyclesClosed,
+		report.Trades,
+		report.Orders,
+		report.Fills,
+		report.Cancellations,
+		report.StopOrders,
+		report.Retries,
+		report.RoundTrips,
+		report.BotCapital.String(),
+		report.GrossPnL.String(),
+		report.Fees.String(),
+		report.NetPnL.String(),
+		report.EndingEquity.String(),
+		report.MaxDrawdown.String(),
+		report.HistoricalDataLoopElapsedMS,
+		report.Memory.HeapMB,
+		report.Memory.TotalAllocMB,
+		report.Memory.GCRuns,
+		report.Memory.GCPauseMS,
+		report.TelemetrySamples,
+	)
+	if err != nil {
+		return fmt.Errorf("publish result: insert RunReport: %w", err)
 	}
 	if err = tx.Commit(); err != nil {
 		return fmt.Errorf("publish result: commit summary: %w", err)

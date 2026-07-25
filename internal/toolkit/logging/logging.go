@@ -45,8 +45,8 @@ func Open(name string) (*Logger, error) {
 	return Create(output), nil
 }
 
-// OpenBot opens one identity-bound Bot logger.
-func OpenBot(sweepID, botID uint64) (*Logger, error) {
+// OpenBotLog opens one identity-bound Bot log.
+func OpenBotLog(sweepID, botID uint64) (*Logger, error) {
 	// open bot log
 	return Open(fmt.Sprintf("bot_%d_%d.log", sweepID, botID))
 }

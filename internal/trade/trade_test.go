@@ -25,7 +25,7 @@ func TestTradeCalculatesWeightedEntryAndClosePnL(t *testing.T) {
 	}
 	var first = filledOrder(t, 1, order.Buy, order.Entry, "1", "100")
 	var second = filledOrder(t, 2, order.Buy, order.Entry, "1", "120")
-	var closeOrder = filledOrder(t, 3, order.Sell, order.Close, "2", "130")
+	var closeOrder = filledOrder(t, 3, order.Sell, order.Stop, "2", "130")
 	for _, created := range []*order.Order{first, second, closeOrder} {
 		err = actual.AddOrder(created)
 		if err != nil {
@@ -67,7 +67,7 @@ func TestTradeRejectsReversal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("add entry: %v", err)
 	}
-	err = actual.AddOrder(filledOrder(t, 2, order.Sell, order.Close, "2", "90"))
+	err = actual.AddOrder(filledOrder(t, 2, order.Sell, order.Stop, "2", "90"))
 	if err == nil {
 		t.Fatal("actual error nil, expected reversal rejection")
 	}

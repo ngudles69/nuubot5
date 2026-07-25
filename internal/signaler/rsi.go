@@ -68,6 +68,12 @@ func (r *rsi) Calculate(symbol string, loaded []Series) ([]Package, error) {
 	if err != nil {
 		return nil, err
 	}
+	var duration time.Duration
+	duration, err = r.interval.Duration()
+	if err != nil {
+		return nil, err
+	}
+	var durationMS = uint64(duration.Milliseconds())
 
 	// calculate indicators
 	var rsiValues = relativeStrength(data.Close, r.rsiPeriod)
@@ -77,7 +83,7 @@ func (r *rsi) Calculate(symbol string, loaded []Series) ([]Package, error) {
 	// calculate signals
 	var packages = make([]Package, 0, max(0, len(data.Close)-data.PriorRows))
 	var action = NoAction
-	for row := data.PriorRows; row+1 < len(data.Close); row++ {
+	for row := data.PriorRows; row < len(data.Close); row++ {
 		var volumeRatio float64
 		if volumeAverage[row] > 0 {
 			volumeRatio = data.Volume[row] / volumeAverage[row]
@@ -95,7 +101,7 @@ func (r *rsi) Calculate(symbol string, loaded []Series) ([]Package, error) {
 		var signalPackage Package
 		signalPackage, err = CreatePackage(
 			symbol,
-			data.StartMS[row+1],
+			data.StartMS[row]+durationMS,
 			action,
 			"neutral",
 			0,

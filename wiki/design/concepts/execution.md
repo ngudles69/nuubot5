@@ -1,7 +1,7 @@
 # Execution
 
-Status: Implemented for TradeExecutor with Simulator.
-Covers: `internal/executor/trade.go`, `internal/account`, `internal/ledger`, and domain packages
+Status: Implemented for TradeExecutor and GridExecutor with Simulator.
+Covers: `internal/executor`, `internal/account`, `internal/ledger`, and domain packages
 Purpose: Turn one Executor decision into validated domain evidence and Venue actions without breaking ownership.
 
 ## Scope
@@ -51,7 +51,9 @@ Later recon applies Venue lifecycle and Fill truth
 
 New entry batches MUST create one Trade.
 
-TP, SL, exit, close, cleanup, and stop Orders MUST attach to the Trade they close.
+TP, SL, exit, cleanup, and stop Orders MUST attach to the Trade they close.
+
+Executor shutdown MUST use the `stop` Order role.
 
 An entry, TP, and SL bracket creates separate Orders under one Trade.
 
@@ -121,7 +123,7 @@ D:\rust\nuutrader6\src\nuubot\hcbots\exchange.py
 
 ## Boundary
 
-The implemented slice is [TradeExecutor](trade-executor.md) with Simulator.
+Implemented slices are [TradeExecutor](trade-executor.md) and [GridExecutor](grid-executor.md) with Simulator.
 
 Live and testnet mutations remain blocked.
 

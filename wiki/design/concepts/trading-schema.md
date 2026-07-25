@@ -132,6 +132,26 @@ CREATE TABLE IF NOT EXISTS simulator_state (
 
 Every SQLite connection enables foreign keys and a 30-second busy timeout.
 
+## Grid Result Evidence
+
+`grid_level_result` belongs to one terminal Executor result.
+
+Its primary key is `(cycle_number, executor_id, level)`.
+
+It stores:
+
+- boundary, Grid, initial-entry, re-entry, and exit prices;
+- quantity, notionals, commissions, and expected PnL;
+- intended action;
+- current Trade ID, number, and status;
+- Level status and initial-submission completion;
+- submission attempts; and
+- last submitted and completed timestamps.
+
+Grid Level identity is not duplicated into persisted Order `order_pos`.
+
+CLOID `order_level` provides Order-to-Level identity.
+
 ## Persistence Modes
 
 | Mode | Ledger | Simulator | Use |

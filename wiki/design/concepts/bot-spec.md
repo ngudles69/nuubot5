@@ -134,7 +134,8 @@ Execution code never rereads the original TOML file.
 Implemented exact IDs are:
 
 - `macross_observer_bot`;
-- `macross_trade_bot`.
+- `macross_trade_bot`;
+- `macross_grid_bot`.
 
 Changing or deleting the import file changes nothing after saving.
 

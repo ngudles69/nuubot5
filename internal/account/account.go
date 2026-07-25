@@ -30,10 +30,12 @@ var purposeCodes = map[string]uint8{
 	order.TakeProfit: 2,
 	order.StopLoss:   3,
 	order.Exit:       4,
-	order.Close:      5,
 	order.Cleanup:    6,
 	order.Stop:       7,
 }
+
+// ErrNotSubmitted proves the Venue did not commit the requested Order batch.
+var ErrNotSubmitted = errors.New("account Order batch was not submitted")
 
 // Config contains one Account's identity, policy, and direct-child inputs.
 type Config struct {
@@ -56,6 +58,7 @@ type Config struct {
 // OrderSpec contains one Executor-owned Order intent.
 type OrderSpec struct {
 	TradeID      uint64
+	OrderLevel   uint16
 	Role         string
 	Side         string
 	Type         string
@@ -245,7 +248,7 @@ func (a *Account) PlaceOrders(specs []OrderSpec) (PlaceResult, error) {
 		value, err = a.createCLOID(
 			tradeInput.TradeNo,
 			batchNo,
-			uint16(index+1),
+			spec.OrderLevel,
 			spec,
 		)
 		if err != nil {
@@ -319,13 +322,19 @@ func (a *Account) PlaceOrders(specs []OrderSpec) (PlaceResult, error) {
 			}
 		}
 		var ledgerErr = a.ledger.RecordSubmit(outcomes)
-		return PlaceResult{}, errors.Join(submitErr, ledgerErr)
+		return PlaceResult{
+			TradeID: tradeInput.TradeID,
+		}, errors.Join(ErrNotSubmitted, submitErr, ledgerErr)
 	}
 
 	// validate submit response
+	var partial = PlaceResult{
+		TradeID: tradeInput.TradeID,
+		Submit:  response,
+	}
 	if response.Status != "ok" || response.Type != "order" ||
 		len(response.Statuses) != len(created) {
-		return PlaceResult{}, fmt.Errorf("place Account Orders: malformed Simulator response")
+		return partial, fmt.Errorf("place Account Orders: malformed Simulator response")
 	}
 	var outcomes = make([]ledger.SubmitOutcome, 0, len(response.Statuses))
 	var rejected = false
@@ -333,21 +342,21 @@ func (a *Account) PlaceOrders(specs []OrderSpec) (PlaceResult, error) {
 		switch status.Kind {
 		case "resting", "filled", simulator.WaitingForFill, simulator.WaitingForTrigger:
 			if status.VenueOrderID == 0 {
-				return PlaceResult{}, fmt.Errorf(
+				return partial, fmt.Errorf(
 					"place Account Orders: response %d lacks Venue identity",
 					index,
 				)
 			}
 		case "error":
 			if status.Error == "" {
-				return PlaceResult{}, fmt.Errorf(
+				return partial, fmt.Errorf(
 					"place Account Orders: response %d has empty error",
 					index,
 				)
 			}
 			rejected = true
 		default:
-			return PlaceResult{}, fmt.Errorf(
+			return partial, fmt.Errorf(
 				"place Account Orders: unknown response %q",
 				status.Kind,
 			)
@@ -370,7 +379,7 @@ func (a *Account) PlaceOrders(specs []OrderSpec) (PlaceResult, error) {
 	// commit submit outcomes
 	err = a.ledger.RecordSubmit(outcomes)
 	if err != nil {
-		return PlaceResult{}, fmt.Errorf("place Account Orders: %w", err)
+		return partial, fmt.Errorf("place Account Orders: %w", err)
 	}
 
 	// mark Account dirty
@@ -379,7 +388,7 @@ func (a *Account) PlaceOrders(specs []OrderSpec) (PlaceResult, error) {
 	var snapshots []order.Snapshot
 	snapshots, err = a.ledger.Orders(orderIDs)
 	if err != nil {
-		return PlaceResult{}, fmt.Errorf("place Account Orders: %w", err)
+		return partial, fmt.Errorf("place Account Orders: %w", err)
 	}
 	var result = PlaceResult{
 		TradeID: tradeInput.TradeID,
@@ -448,8 +457,8 @@ func (a *Account) IngestBBO(bbo market.BBO) error {
 	a.hasBBO = true
 	a.stats.bbosIngested++
 
-	// mark Account dirty when Venue changes
-	if changed {
+	// mark Account dirty when Venue or open-position marks change
+	if changed || !a.lastSnapshot.PositionQuantity.IsZero() {
 		a.dirty = true
 	}
 	return nil
@@ -580,6 +589,14 @@ func (a *Account) Result() (Result, error) {
 	}, nil
 }
 
+// Telemetry returns the latest observed immutable Account snapshot.
+func (a *Account) Telemetry() (Snapshot, bool) {
+	if a.lastSnapshot.ObservedMS == 0 {
+		return Snapshot{}, false
+	}
+	return a.lastSnapshot, true
+}
+
 // Clone returns one independently owned Account result.
 func (r Result) Clone() Result {
 	var clone = r
@@ -707,7 +724,7 @@ func (a *Account) normalizeSpecs(specs []OrderSpec) ([]OrderSpec, error) {
 func (a *Account) createCLOID(
 	tradeNo uint32,
 	batchNo uint16,
-	orderPos uint16,
+	orderLevel uint16,
 	spec OrderSpec,
 ) (string, error) {
 	if a.config.Meta.AssetID > 0xffff || spec.TimestampMS/1000 > 0x7fffffff {
@@ -735,7 +752,7 @@ func (a *Account) createCLOID(
 		Purpose:    purpose,
 		TradeNo:    tradeNo,
 		BatchNo:    batchNo,
-		OrderPos:   orderPos,
+		OrderLevel: orderLevel,
 		TimestampS: uint32(spec.TimestampMS / 1000),
 	})
 	if err != nil {

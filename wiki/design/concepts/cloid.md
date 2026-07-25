@@ -25,7 +25,7 @@ Account creates every submitted Simulator CLOID.
 | `purpose` | 8 | 0 to 255 |
 | `trade_no` | 21 | 1 to 2,097,151 |
 | `batch_no` | 10 | 1 to 1,000 |
-| `order_pos` | 10 | 1 to 1,000 |
+| `order_level` | 10 | 0 to 1,023 |
 | `timestamp_s` | 31 | 0 to 2,147,483,647 |
 
 Fields pack from highest to lowest bit in table order.
@@ -38,7 +38,13 @@ Fields pack from highest to lowest bit in table order.
 
 `batch_no` increments per Trade submission.
 
-`order_pos` identifies one request position inside its batch.
+`order_level` identifies the Executor-owned level.
+
+TradeExecutor and future HedgeExecutor use Level zero.
+
+GridExecutor uses its bottom-up Grid Level.
+
+Persisted Order `order_pos` separately identifies request position inside its batch.
 
 Timestamp is real Unix seconds. It MUST NOT be altered to force uniqueness.
 
@@ -86,6 +92,6 @@ D:\rust\nuubot3\wiki\account\account.md
 
 ## Conflict
 
-Nuutrader6 contains a different CLOID layout. Nuubot5 MUST use the Nuubot4 layout unless the user explicitly replaces it.
+The approved Nuubot5 hardcut renamed the 10-bit field without changing its position.
 
-The implementation uses safe standard Go with no compatibility decoder.
+No old field alias or compatibility decoder exists.

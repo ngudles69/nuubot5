@@ -15,7 +15,7 @@ func TestEncodeDecodeRoundTrip(t *testing.T) {
 		Purpose:    3,
 		TradeNo:    4,
 		BatchNo:    5,
-		OrderPos:   6,
+		OrderLevel: 6,
 		TimestampS: 7,
 	}
 	var encoded, err = Encode(fields)
@@ -37,11 +37,17 @@ func TestEncodeDecodeRoundTrip(t *testing.T) {
 }
 
 func TestCLOIDRejectsInvalidIdentity(t *testing.T) {
-	var fields = Fields{TradeNo: 1, BatchNo: 1, OrderPos: 1}
+	var fields = Fields{TradeNo: 1, BatchNo: 1}
 	fields.BatchNo = 1001
 	var _, err = Encode(fields)
 	if err == nil {
 		t.Fatal("actual error nil, expected batch range rejection")
+	}
+	fields.BatchNo = 1
+	fields.OrderLevel = 1024
+	_, err = Encode(fields)
+	if err == nil {
+		t.Fatal("actual error nil, expected level range rejection")
 	}
 	_, err = Decode("0x00000000000000000000000000000000")
 	if err == nil {

@@ -186,6 +186,7 @@ workspace/data/*
 !workspace/data/AGENTS.md
 workspace/db/
 workspace/logs/
+workspace/perf/
 workspace/results/
 workspace/research/*/results/bot_*/
 workspace/tmp/

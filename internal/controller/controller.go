@@ -56,6 +56,25 @@ type Result struct {
 	MaxDrawdown decimal.Decimal
 }
 
+// Telemetry contains one immutable current Controller observation.
+type Telemetry struct {
+	Ticks               uint64
+	Runs                uint64
+	SignalPackagesRead  uint64
+	StartActionsSkipped uint64
+	CyclesStarted       uint64
+	CyclesRejected      uint64
+	CyclesClosed        uint64
+	ActiveCycle         int
+	BotCapital          decimal.Decimal
+	BotBalance          decimal.Decimal
+	BotEquity           decimal.Decimal
+	NetPnL              decimal.Decimal
+	PeakEquity          decimal.Decimal
+	Drawdown            decimal.Decimal
+	MaxDrawdown         decimal.Decimal
+}
+
 // Controller owns synchronous Bot decisions and its direct children.
 type Controller struct {
 	log            *logging.Logger
@@ -341,6 +360,57 @@ func (c *Controller) Result() Result {
 		result.Cycles = append(result.Cycles, copied)
 	}
 	return result
+}
+
+// Telemetry returns one immutable current Controller observation.
+func (c *Controller) Telemetry() Telemetry {
+	var equity = decimal.Zero
+	var unrealizedPnL = decimal.Zero
+	for _, value := range c.resourceEquity {
+		equity = equity.Add(value)
+	}
+	var activeCycle int
+	if c.cycle != nil {
+		var cycle = c.cycle.Telemetry()
+		activeCycle = cycle.CycleNumber
+		for _, current := range cycle.Executors {
+			if current.Account == nil {
+				continue
+			}
+			var resourceEquity = c.resourceEquity[current.Resource]
+			equity = equity.Sub(resourceEquity).Add(current.Account.AccountValue)
+			unrealizedPnL = unrealizedPnL.Add(current.Account.UnrealizedPnL)
+		}
+	}
+	var peakEquity = c.peakEquity
+	if equity.GreaterThan(peakEquity) {
+		peakEquity = equity
+	}
+	var drawdown = peakEquity.Sub(equity)
+	if drawdown.IsNegative() {
+		drawdown = decimal.Zero
+	}
+	var maxDrawdown = c.maxDrawdown
+	if drawdown.GreaterThan(maxDrawdown) {
+		maxDrawdown = drawdown
+	}
+	return Telemetry{
+		Ticks:               c.stats.ticks,
+		Runs:                c.stats.runs,
+		SignalPackagesRead:  c.stats.signalPackagesRead,
+		StartActionsSkipped: c.stats.startActionsSkipped,
+		CyclesStarted:       c.stats.cyclesStarted,
+		CyclesRejected:      c.stats.cyclesRejected,
+		CyclesClosed:        c.stats.cyclesClosed,
+		ActiveCycle:         activeCycle,
+		BotCapital:          c.botCapital,
+		BotBalance:          equity.Sub(unrealizedPnL),
+		BotEquity:           equity,
+		NetPnL:              equity.Sub(c.botCapital),
+		PeakEquity:          peakEquity,
+		Drawdown:            drawdown,
+		MaxDrawdown:         maxDrawdown,
+	}
 }
 
 func (c *Controller) openCycle(signal signaler.Package) error {

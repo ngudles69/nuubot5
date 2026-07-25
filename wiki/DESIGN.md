@@ -53,6 +53,7 @@ The user owns these checklist states: `DONE`, `PARTIAL`, `NOT REVIEWED`, and
 | Fill | NOT REVIEWED | — | Implemented. |
 | Simulator | NOT REVIEWED | — | Implemented for BtRunner. |
 | TradeExecutor | NOT REVIEWED | — | Simulator-first vertical slice implemented. |
+| GridExecutor | NOT REVIEWED | — | Arithmetic, equal-capital Simulator slice implemented. |
 | PocketBase | TO CODE | — | Approved design; implementation deferred. |
 | Meta | NOT REVIEWED | — | Mainnet perpetual Meta implemented. |
 | Setup | PARTIAL | 2026-07-24 | Shared database and mainnet Meta added after user review. |
@@ -139,6 +140,8 @@ deferred.
 | Persistent traffic-light strategy source | [Signaler](design/packages/signaler.md) |
 | Persistent Risk gates and exit source | [Risk](design/packages/risk.md) |
 | Coordinated exchange-style campaign and flat-stop proof | [BotCycle](design/packages/botcycle.md) |
+| Ongoing detachable state observation | [Telemetry](design/telemetry.md) |
+| Terminal detachable analysis and rendering | [RunReport](design/runreport.md) |
 | AppConfig, BotConfig, ReplayInput, and Credentials split | [Config](design/packages/config.md) |
 | Typed saved-Config and fail-closed Meta admission | [Setup](design/packages/setup.md) |
 | Stored TOML and active Account-symbol claims | [Datastore](design/packages/datastore.md) |
@@ -146,6 +149,7 @@ deferred.
 | Thin Server API and Manager-to-process boundaries | [Server](design/concepts/server.md) |
 | Reusable Sweep definition and standalone execution | [SweepManager](design/concepts/sweep-manager.md) |
 | ControllerResult, BotCycleResult, and ExecutorResult hierarchy | [BotCycle](design/packages/botcycle.md) |
+| Arithmetic Grid levels, lifecycle, flattening, and proof | [GridExecutor](design/concepts/grid-executor.md) |
 
 Current implementation sections remain authoritative until each approved
 hardcut is implemented and proven.
@@ -154,6 +158,8 @@ hardcut is implemented and proven.
 
 | Concept | Purpose |
 |---|---|
+| [Telemetry](design/telemetry.md) | Ongoing detachable state snapshots for backtest, monitoring, and run playback. |
+| [RunReport](design/runreport.md) | Terminal detachable calculations, aggregation, and standardized rendering. |
 | [AccountSnapshot](design/concepts/account-snapshot.md) | Immutable account state. |
 | [BalancedRisk](design/concepts/balanced-risk.md) | Current balanced risk implementation. |
 | [BotSpec](design/concepts/bot-spec.md) | Exact complete Bot design, TOML Config, and admission contract. |
@@ -186,6 +192,7 @@ hardcut is implemented and proven.
 | [SweepManager](design/concepts/sweep-manager.md) | Server-side Sweep requests and standalone SweepRunner control. |
 | [Toolkit](design/concepts/toolkit.md) | Portable package rules. |
 | [TradeExecutor](design/concepts/trade-executor.md) | First Account-owning Executor design. |
+| [GridExecutor](design/concepts/grid-executor.md) | Arithmetic Grid calculations, Orders, re-entry, boundaries, and flattening. |
 | [Trading schema](design/concepts/trading-schema.md) | Per-Bot SQLite trading evidence DDL. |
 | [Trading state tranche](design/concepts/trading-state.md) | Next-tranche assessment and implementation order. |
 | [Venue](design/concepts/venue.md) | Normalized execution truth. |

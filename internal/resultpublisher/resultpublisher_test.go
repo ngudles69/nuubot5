@@ -14,14 +14,16 @@ import (
 	"nuubot/internal/controller"
 	"nuubot/internal/executor"
 	"nuubot/internal/ledger"
+	"nuubot/internal/runreport"
 	"nuubot/internal/simulator"
+	"nuubot/internal/telemetry"
 )
 
 // Section 1 - Program Flow
 
 func TestPublishWritesControllerAndReplayResult(t *testing.T) {
 	var path = filepath.Join(t.TempDir(), "result.db")
-	var err = Publish(path, controller.Result{
+	var err = publishTestResult(t, path, controller.Result{
 		Identity: bot.Identity{
 			SweepID: 1, BotID: 2, BotSpecID: "test_bot",
 			ConfigTOML: "bot_spec = \"test_bot\"\n",
@@ -31,8 +33,10 @@ func TestPublishWritesControllerAndReplayResult(t *testing.T) {
 		BotCapital: decimal.NewFromInt(1000),
 		NetPnL:     decimal.NewFromInt(25),
 		BotEquity:  decimal.NewFromInt(1025),
-	}, ReplayProof{
-		Symbol: "BTC", TicksServed: 10, RunsTriggered: 1, Completed: true,
+	}, runreport.Replay{
+		Symbol: "BTC", TicksServed: 10, RunsTriggered: 1,
+		HistoricalDataLoopElapsedMS: 123,
+		Completed:                   true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -47,17 +51,34 @@ func TestPublishWritesControllerAndReplayResult(t *testing.T) {
 	var configTOML string
 	var botEquity string
 	var ticks uint64
+	var historicalDataLoopElapsedMS int64
+	var telemetrySamples int
+	var storedReportSamples int
 	err = db.QueryRow(`
-		SELECT bot_spec_id, config_toml, bot_equity, ticks_served
+		SELECT bot_spec_id, config_toml, bot_equity, ticks_served,
+		       btrunner_historical_data_loop_elapsed_ms,
+		       (SELECT COUNT(*) FROM telemetry_sample),
+		       (SELECT telemetry_samples FROM run_report)
 		FROM backtest_result
-	`).Scan(&botSpecID, &configTOML, &botEquity, &ticks)
+	`).Scan(
+		&botSpecID,
+		&configTOML,
+		&botEquity,
+		&ticks,
+		&historicalDataLoopElapsedMS,
+		&telemetrySamples,
+		&storedReportSamples,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if botSpecID != "test_bot" ||
 		configTOML != "bot_spec = \"test_bot\"\n" ||
 		botEquity != "1025" ||
-		ticks != 10 {
+		ticks != 10 ||
+		historicalDataLoopElapsedMS != 123 ||
+		telemetrySamples != 1 ||
+		storedReportSamples != 1 {
 		t.Fatalf(
 			"unexpected result bot_spec=%s config=%q equity=%s ticks=%d",
 			botSpecID,
@@ -94,7 +115,7 @@ func TestPublishPreservesMaximumAccountEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = Publish(path, controller.Result{
+	err = publishTestResult(t, path, controller.Result{
 		Identity: bot.Identity{
 			SweepID: 1, BotID: 2, BotSpecID: "test_bot",
 			ConfigTOML: "bot_spec = \"test_bot\"\n",
@@ -117,7 +138,7 @@ func TestPublishPreservesMaximumAccountEvidence(t *testing.T) {
 		ExitReason: "parent_stop",
 		BotCapital: decimal.NewFromInt(1000),
 		BotEquity:  decimal.NewFromInt(1000),
-	}, ReplayProof{Symbol: "BTC", Completed: true})
+	}, runreport.Replay{Symbol: "BTC", Completed: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,6 +168,100 @@ func TestPublishPreservesMaximumAccountEvidence(t *testing.T) {
 	}
 }
 
+func TestPublishWritesGridLevels(t *testing.T) {
+	var path = filepath.Join(t.TempDir(), "result.db")
+	var err = publishTestResult(t, path, controller.Result{
+		Identity: bot.Identity{
+			SweepID: 1, BotID: 2, BotSpecID: "macross_grid_bot",
+			ConfigTOML: "bot_spec = \"macross_grid_bot\"\n",
+			ConfigHash: "hash",
+		},
+		Cycles: []botcycle.Result{{
+			CycleNumber: 1,
+			Executors: []executor.Result{{
+				ID: "grid", Role: "grid", Kind: "grid", Side: executor.Long,
+				Resource: executor.Resource{
+					Venue:             "simulator",
+					Network:           "simnet",
+					PhysicalAccountID: "sim",
+					Symbol:            "BTC",
+				},
+				Status: executor.Stopped,
+				Levels: []executor.GridLevel{{
+					Level:                      1,
+					GridPrice:                  decimal.NewFromInt(100),
+					InitialEntryPrice:          decimal.NewFromInt(100),
+					ReentryPrice:               decimal.NewFromInt(100),
+					ExitPrice:                  decimal.NewFromInt(101),
+					Quantity:                   decimal.RequireFromString("0.11"),
+					InitialNotional:            decimal.NewFromInt(11),
+					ReentryNotional:            decimal.NewFromInt(11),
+					IntendedAction:             "enter_long",
+					Status:                     "completed",
+					InitialSubmissionCompleted: true,
+					SubmissionAttempts:         1,
+				}},
+			}},
+		}},
+		ExitReason: "parent_stop",
+	}, runreport.Replay{Symbol: "BTC", Completed: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var db *sql.DB
+	db, err = sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var levels int
+	var action string
+	err = db.QueryRow(`
+		SELECT COUNT(*), intended_action
+		FROM grid_level_result
+	`).Scan(&levels, &action)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if levels != 1 || action != "enter_long" {
+		t.Fatalf("actual levels=%d action=%s", levels, action)
+	}
+}
+
 // Section 2 - Domain Helpers
+
+func publishTestResult(
+	t *testing.T,
+	path string,
+	result controller.Result,
+	replay runreport.Replay,
+) error {
+	t.Helper()
+	var input = runreport.Input{
+		Controller: result,
+		Replay:     replay,
+		Telemetry: []telemetry.Sample{{
+			Sequence:       1,
+			Terminal:       true,
+			ControllerRuns: replay.RunsTriggered,
+			BotCapital:     result.BotCapital,
+			BotBalance:     result.BotEquity,
+			BotEquity:      result.BotEquity,
+			NetPnL:         result.NetPnL,
+			PeakEquity:     result.PeakEquity,
+			Drawdown:       result.Drawdown,
+			MaxDrawdown:    result.MaxDrawdown,
+			TicksServed:    replay.TicksServed,
+			SignalPackages: uint64(len(result.Signals)),
+			CyclesClosed:   uint64(len(result.Cycles)),
+			CyclesStarted:  uint64(len(result.Cycles)),
+		}},
+	}
+	var report, err = runreport.Build(input)
+	if err != nil {
+		return err
+	}
+	return Publish(path, input, report)
+}
 
 // Section 3 - Generic Helpers

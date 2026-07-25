@@ -29,7 +29,6 @@ const (
 	TakeProfit = "tp"
 	StopLoss   = "sl"
 	Exit       = "exit"
-	Close      = "close"
 	Cleanup    = "cleanup"
 	Stop       = "stop"
 
@@ -337,7 +336,7 @@ func validateInput(input Input) error {
 
 func validRole(value string) bool {
 	switch value {
-	case Entry, TakeProfit, StopLoss, Exit, Close, Cleanup, Stop:
+	case Entry, TakeProfit, StopLoss, Exit, Cleanup, Stop:
 		return true
 	default:
 		return false

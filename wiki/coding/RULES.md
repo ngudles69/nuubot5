@@ -215,9 +215,9 @@ func main() {
 	}
 
 	var botLog *logging.Logger
-	botLog, err = logging.OpenBot(sweepID, botID)
+	botLog, err = logging.OpenBotLog(sweepID, botID)
 	if err != nil {
-		log.Error(fmt.Sprintf("logging.OpenBot() failed: %v", err))
+		log.Error(fmt.Sprintf("logging.OpenBotLog() failed: %v", err))
 		os.Exit(1)
 	}
 	log = botLog

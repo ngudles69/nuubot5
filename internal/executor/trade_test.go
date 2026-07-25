@@ -19,9 +19,15 @@ import (
 
 func TestTradeExecutorRunsOneBracket(t *testing.T) {
 	var actual = newTradeExecutor(t, true, 100)
+	if actual.Telemetry().Account != nil {
+		t.Fatal("unobserved Account telemetry was reported")
+	}
 	var err error
 	if _, _, err = actual.Reconcile(3_000, false); err != nil {
 		t.Fatalf("reconcile initial Account: %v", err)
+	}
+	if actual.Telemetry().Account == nil {
+		t.Fatal("observed Account telemetry is missing")
 	}
 	if err = actual.OnRecon(3_000); err != nil {
 		t.Fatalf("submit bracket: %v", err)

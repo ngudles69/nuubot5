@@ -50,6 +50,9 @@ Before coding:
 - Update the owning `wiki/design/**` page when implementation proves a new design fact.
 - Never commit or push without explicit user authority.
 - Report confirmed facts separately from inference.
+- Verify project facts against canonical code or docs before stating them; otherwise label them unverified.
+- Define metrics by exact timer boundaries and measured work before naming or reporting them.
+- When meaning is unclear, especially to the user, identify and correct its canonical owner: working rule, durable documentation, interface, behavior, or proof.
 
 ## Orchestration Continuity
 
@@ -81,6 +84,8 @@ agent prompts.
 - Cut filler, repetition, and repeated context.
 - Do not write walls of text.
 - Expand only when the user asks.
+- When showing reports to the user, display generated fixed-width text inside a
+  code block. Do not convert reports to Markdown tables or reformat them manually.
 
 Code, commands, paths, logs, and exact quotations are exempt.
 

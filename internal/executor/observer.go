@@ -191,6 +191,16 @@ func (e *observer) ExitReason() string {
 	return e.stats.reason
 }
 
+// Telemetry returns one immutable current Observer observation.
+func (e *observer) Telemetry() Telemetry {
+	return Telemetry{
+		ID:       e.spec.ID,
+		Kind:     e.spec.Kind,
+		Resource: e.spec.Resource,
+		Status:   e.status,
+	}
+}
+
 // Result returns one terminal ObserverExecutor result.
 func (e *observer) Result() (Result, error) {
 	if e.status != Stopped {

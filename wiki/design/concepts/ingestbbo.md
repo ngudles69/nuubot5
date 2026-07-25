@@ -22,7 +22,7 @@ Controller.IngestBBO
        Simulator: match Orders
 ```
 
-Simulator changes mark the Account dirty. Simulated Order and Fill truth reaches
+Simulator changes and open-position marks make the Account dirty. Simulated Order and Fill truth reaches
 the Ledger and Executor only through the separate reconciliation process.
 
 Each owner controls only its direct child. Controller never reaches through

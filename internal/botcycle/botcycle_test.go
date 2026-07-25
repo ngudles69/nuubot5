@@ -9,6 +9,7 @@ import (
 
 	"nuubot/internal/executor"
 	"nuubot/internal/market"
+	"nuubot/internal/meta"
 	"nuubot/internal/signaler"
 	"nuubot/internal/toolkit/logging"
 )
@@ -81,6 +82,40 @@ func TestBotCycleReturnsAdmissionRejection(t *testing.T) {
 	}
 }
 
+func TestBotCycleIngestsGridBBOWhileStopping(t *testing.T) {
+	var cycle Control
+	var err = cycle.Init(
+		logging.Create(&bytes.Buffer{}),
+		1,
+		cycleSignal(t, true),
+		Inputs{LatestBBOs: map[string]market.BBO{
+			"BTC": {TimestampMS: 2_000, Price: 100},
+		}},
+		[]executor.Spec{gridSpec()},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var boundary = market.BBO{TimestampMS: 3_000, Price: 105}
+	if err = cycle.IngestBBO(boundary); err != nil {
+		t.Fatal(err)
+	}
+	cycle.OnBBO(boundary)
+	var after = market.BBO{TimestampMS: 4_000, Price: 104}
+	if err = cycle.IngestBBO(after); err != nil {
+		t.Fatal(err)
+	}
+	cycle.OnBBO(after)
+	if _, err = cycle.Stop("completed"); err != nil {
+		t.Fatal(err)
+	}
+	var result = cycle.Result()
+	var accountResult = result.Executors[0].Account
+	if accountResult == nil || accountResult.Snapshot.ObservedMS != 4_000 {
+		t.Fatalf("unexpected stopping Account result: %+v", accountResult)
+	}
+}
+
 // Section 2 - Domain Helpers
 
 func cycleSignal(t *testing.T, start bool) signaler.Package {
@@ -101,6 +136,35 @@ func cycleSignal(t *testing.T, start bool) signaler.Package {
 		t.Fatal(err)
 	}
 	return signal
+}
+
+func gridSpec() executor.Spec {
+	return executor.Spec{
+		ID:   "grid",
+		Role: "grid",
+		Kind: "grid",
+		Side: executor.Long,
+		Resource: executor.Resource{
+			Venue:             "simulator",
+			Network:           "simnet",
+			PhysicalAccountID: "sim",
+			Symbol:            "BTC",
+		},
+		CapitalUSDC:     decimal.NewFromInt(100),
+		GridLevels:      10,
+		RangePct:        decimal.RequireFromString("0.05"),
+		MinExpectedPnL:  decimal.Zero,
+		FeePct:          decimal.RequireFromString("0.05"),
+		PersistMode:     "none",
+		MinNotionalUSDC: decimal.NewFromInt(11),
+		Meta: meta.Instrument{
+			Network:       "testnet",
+			Kind:          "perp",
+			Symbol:        "BTC",
+			SizeDecimals:  5,
+			PriceDecimals: 1,
+		},
+	}
 }
 
 // Section 3 - Generic Helpers

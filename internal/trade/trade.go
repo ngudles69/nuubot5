@@ -359,7 +359,7 @@ func calculate(
 func isCloseRole(role string) bool {
 	switch role {
 	case order.TakeProfit, order.StopLoss, order.Exit,
-		order.Close, order.Cleanup, order.Stop:
+		order.Cleanup, order.Stop:
 		return true
 	default:
 		return false

@@ -19,6 +19,8 @@ hand-edited.
 
 All hand-written Go MUST pass `gofmt`.
 
+[`sample.md`](sample.md) shows the preferred readable layout.
+
 The three-section layout and lifecycle vocabulary are Nuubot's mandatory
 project-specific style.
 
@@ -70,6 +72,14 @@ Section comments MUST use exactly:
 Data-only and single-purpose files MUST retain all three section comments.
 
 Related declarations MUST be grouped for readability.
+
+Numbered subsections MAY group related functions, for example:
+
+```go
+// Section 2.1 - PnL Calculations
+```
+
+These are strong guidelines. Explicit user direction may override them.
 
 A rigid constants-before-types order is prohibited.
 
@@ -767,9 +777,9 @@ func main() {
 	}
 
 	var botLog *logging.Logger
-	botLog, err = logging.OpenBot(sweepID, botID)
+	botLog, err = logging.OpenBotLog(sweepID, botID)
 	if err != nil {
-		log.Error(fmt.Sprintf("logging.OpenBot() failed: %v", err))
+		log.Error(fmt.Sprintf("logging.OpenBotLog() failed: %v", err))
 		os.Exit(1)
 	}
 	log = botLog

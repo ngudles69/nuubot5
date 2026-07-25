@@ -47,7 +47,7 @@ PlaceOrders
   validate Venue requests
   stage recoverable Simulator mutation
   allocate staged Venue identities
-  execute staged market-like Orders
+  execute staged marketable Orders
   persist staged state when configured
   commit staged state
   return admitted SDK-shaped submit response
@@ -125,15 +125,17 @@ Parent cancellation cancels both waiting children.
 ## Matching Rules
 
 - The first BBO only warms transient market state.
-- Resting Orders cannot consume an already-processed BBO.
-- Explicit market-like IOC Orders may execute from their supplied current reference.
+- Newly submitted marketable GTC and IOC Orders may execute against the current admitted BBO.
+- Nonmarketable GTC Orders rest until a later crossing BBO.
 - Later BBOs fill crossed resting Orders.
+- Live matching remains exchange-owned.
 - Regular buy limits cross when ask is at or below requested price.
 - Regular sell limits cross when bid is at or above requested price.
 - TP and SL use trigger or requested price as Fill basis.
 - Adverse slippage applies to the Fill basis.
 - The first slice has no partial depth fills.
 - One BBO fills at most one leg per Trade.
+- Different Grid Trades may each fill one eligible leg on the same BBO.
 - Entry execution arms TP and SL children.
 - TP or SL execution cancels its sibling.
 - Reduce-only execution cannot increase or reverse exposure.
@@ -230,7 +232,8 @@ Every slice and map is newly owned. No value aliases mutable Simulator state.
 
 - Submit, cancel, Order, Fill, and account-state fixtures match admitted reference shapes.
 - First BBO warms without matching.
-- Resting Orders wait for a later BBO.
+- Nonmarketable GTC Orders wait for a later crossing BBO.
+- Marketable GTC Orders fill during submission.
 - Market-like IOC submission may fill immediately.
 - TP and SL activation and OCO behavior are correct.
 - Resting and immediate-filled batch statuses retain request order.

@@ -11,6 +11,10 @@ BotCycle initializes every Executor before any Executor submits Orders.
 If one initialization fails, BotCycle stops already initialized siblings in
 reverse order.
 
+After every Executor initializes, BotCycle starts each supported Executor.
+
+Grid submits its initial Orders only inside this start barrier.
+
 Admission rejection is nonfatal to Controller.
 
 Unexpected initialization failure is fatal.
@@ -45,6 +49,8 @@ Current BtRunner admits one replay symbol.
 
 Multi-source deterministic replay remains deferred.
 
+Stopping Executors continue Venue BBO ingestion until coordinated cleanup begins.
+
 ## Completion
 
 Flatness alone never requests exit.
@@ -54,6 +60,8 @@ An explicit Signal, Risk, Executor, or parent exit starts Stop.
 TradeExecutor Stop cancels active Orders, closes exposure, reconciles, and
 proves zero Orders and zero position.
 
+GridExecutor Stop cancels ordered active batches, closes every open Trade, and proves the same flat state.
+
 Only then does BotCycle complete.
 
 ## Result
@@ -62,3 +70,11 @@ BotCycleResult contains its cycle number and ordered ExecutorResults.
 
 ExecutorResult preserves ID, role, kind, side, resource, capital, order size,
 status, exit reason, and optional AccountResult.
+
+Grid ExecutorResult also preserves cancellation, closure, retry, round-trip, and Level evidence.
+
+## Telemetry
+
+`Telemetry()` returns the cycle number, status, and one current snapshot per Executor.
+
+It performs no reconciliation, trading action, logging, or persistence.

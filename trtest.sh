@@ -13,34 +13,38 @@ for value in "$runs" "$sweep_id" "$bot_id"; do
 done
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if ! bash "$repo_root/build.sh"; then
-    exit 1
-fi
+bash "$repo_root/build.sh" || exit 1
 suffix=""
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*) suffix=".exe" ;;
 esac
-binary="$repo_root/bin/nuubot-btrunner${suffix}"
-if [[ ! -x "$binary" ]]; then
-    echo "Go binary not found: $binary" >&2
+btrunner="$repo_root/bin/nuubot-btrunner${suffix}"
+reporter="$repo_root/bin/nuubot-report${suffix}"
+if [[ ! -x "$btrunner" || ! -x "$reporter" ]]; then
+    echo "required binary is missing" >&2
     exit 2
 fi
+if ! command -v sqlite3 >/dev/null 2>&1; then
+    echo "sqlite3 is required" >&2
+    exit 2
+fi
+
 log_dir="$repo_root/workspace/logs"
 mkdir -p "$log_dir"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 result_log="$log_dir/nuubot5-trtest-s${sweep_id}-b${bot_id}-${runs}-${stamp}.log"
-exec > >(tee -a "$result_log") 2>&1
-
-passed=0
-process_total_ms=0
-replay_total_ms=0
-suite_started_ms="$(date +%s%3N)"
-bot_log="$log_dir/bot_${sweep_id}_${bot_id}.log"
+suite_json="${result_log%.log}.json"
 result_db="$repo_root/workspace/db/sweeps/sweep_${sweep_id}/bot_${bot_id}.db"
 source_db="$repo_root/workspace/db/nuubot.db"
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*) source_db="$(cygpath -m "$source_db")" ;;
 esac
+exec > >(tee -a "$result_log") 2>&1
+
+suite_started_ms="$(date +%s%3N)"
+bot_log="$log_dir/bot_${sweep_id}_${bot_id}.log"
+attempt_records=""
+suite_failed=0
 
 for ((run = 1; run <= runs; run++)); do
     before_lines=0
@@ -48,77 +52,63 @@ for ((run = 1; run <= runs; run++)); do
         before_lines="$(wc -l < "$bot_log")"
     fi
     started_ms="$(date +%s%3N)"
-    output="$(
-        cd "$repo_root" &&
-        timeout 120s "$binary" "$sweep_id" "$bot_id" 2>&1
-    )"
+    run_json="$(cd "$repo_root" && timeout 120s "$btrunner" "$sweep_id" "$bot_id")"
     status=$?
-    process_ms=$(( $(date +%s%3N) - started_ms ))
+    elapsed_ms=$(( $(date +%s%3N) - started_ms ))
+    output=""
     if [[ -f "$bot_log" ]]; then
         output="$(tail -n "+$((before_lines + 1))" "$bot_log")"
     fi
 
-    btrunner_line="$(printf '%s\n' "$output" | grep '] btrunner stopped ' | tail -n 1)"
-    controller_line="$(printf '%s\n' "$output" | grep '] controller stopped ' | tail -n 1)"
-    replay_ms="$(printf '%s\n' "$btrunner_line" | sed -n 's/.*replay_ms=\([0-9][0-9]*\).*/\1/p')"
-    ticks="$(printf '%s\n' "$controller_line" | sed -n 's/.*ticks_accepted=\([0-9][0-9]*\).*/\1/p')"
-    controller_runs="$(printf '%s\n' "$controller_line" | sed -n 's/.*runs=\([0-9][0-9]*\).*/\1/p')"
-    cycles="$(printf '%s\n' "$controller_line" | sed -n 's/.*cycles_closed=\([0-9][0-9]*\).*/\1/p')"
-    trade_lines="$(printf '%s\n' "$output" | grep '] executor stopped .*kind=trade ' || true)"
-    trade_cycles="$(printf '%s\n' "$trade_lines" | grep -c .)"
-    trades="$(printf '%s\n' "$trade_lines" | awk '
-        { for (i = 1; i <= NF; i++) if ($i ~ /^trades=/) {
-            split($i, value, "="); total += value[2]
-        }}
-        END { print total + 0 }
-    ')"
-    fills="$(printf '%s\n' "$trade_lines" | awk '
-        { for (i = 1; i <= NF; i++) if ($i ~ /^fills=/) {
-            split($i, value, "="); total += value[2]
-        }}
-        END { print total + 0 }
-    ')"
-    forced_exits="$(printf '%s\n' "$trade_lines" | awk '
-        /stop_reason=/ && $0 !~ /stop_reason=completed$/ { total++ }
-        END { print total + 0 }
-    ')"
-    account_lines="$(printf '%s\n' "$output" | grep '] account stopped ' || true)"
-    orders="$(printf '%s\n' "$account_lines" | awk '
-        { for (i = 1; i <= NF; i++) if ($i ~ /^orders=/) {
-            split($i, value, "="); total += value[2]
-        }}
-        END { print total + 0 }
-    ')"
     integrity=""
-    foreign_keys=""
-    db_trades=""
-    db_orders=""
-    db_fills=""
-    db_states=""
+    foreign_keys="missing"
     result_spec=""
+    completed=""
+    ticks=""
+    controller_runs=""
+    cycles=""
+    trades=""
+    orders=""
+    fills=""
+    stop_order_count=""
+    telemetry_rows=""
+    report_samples=""
     result_config_match=""
     equity_carry=""
     result_equity_match=""
-    result_completed=""
-    result_ticks=""
-    result_runs=""
     result_cycles=""
     result_executors=""
-    result_pnl=""
-    result_equity=""
-    if command -v sqlite3 >/dev/null 2>&1 && [[ -f "$result_db" ]]; then
+    db_states=""
+    false_equity_samples=""
+    declining_max_drawdown=""
+    close_orders=""
+    stop_orders=""
+    if [[ -f "$result_db" ]]; then
         integrity="$(sqlite3 "$result_db" 'PRAGMA integrity_check;')"
         foreign_keys="$(sqlite3 "$result_db" 'PRAGMA foreign_key_check;')"
-        db_trades="$(sqlite3 "$result_db" 'SELECT COUNT(*) FROM account_trade;')"
-        db_orders="$(sqlite3 "$result_db" 'SELECT COUNT(*) FROM account_order;')"
-        db_fills="$(sqlite3 "$result_db" 'SELECT COUNT(*) FROM account_fill;')"
-        db_states="$(sqlite3 "$result_db" 'SELECT COUNT(*) FROM simulator_state;')"
-        IFS='|' read -r result_spec result_completed result_ticks result_runs result_pnl result_equity <<< "$(
-            sqlite3 -separator '|' "$result_db" \
-                'SELECT bot_spec_id,completed,ticks_served,runs_triggered,net_pnl,bot_equity FROM backtest_result;'
+        IFS='|' read -r result_spec completed ticks controller_runs cycles trades orders fills stop_order_count telemetry_rows report_samples <<< "$(
+            sqlite3 -separator '|' "$result_db" "
+                SELECT b.bot_spec_id,b.completed,b.ticks_served,b.runs_triggered,
+                       r.cycles_closed,r.trades,r.orders,r.fills,r.stop_orders,
+                       (SELECT COUNT(*) FROM telemetry_sample),r.telemetry_samples
+                FROM backtest_result b CROSS JOIN run_report r;
+            "
         )"
         result_cycles="$(sqlite3 "$result_db" 'SELECT COUNT(*) FROM botcycle_result;')"
         result_executors="$(sqlite3 "$result_db" 'SELECT COUNT(*) FROM executor_result;')"
+        db_states="$(sqlite3 "$result_db" 'SELECT COUNT(*) FROM simulator_state;')"
+        false_equity_samples="$(sqlite3 "$result_db" "SELECT COUNT(*) FROM telemetry_sample WHERE active_cycle>0 AND bot_equity='0';")"
+        declining_max_drawdown="$(
+            sqlite3 "$result_db" "
+                SELECT COUNT(*) FROM telemetry_sample AS later
+                JOIN telemetry_sample AS earlier
+                  ON earlier.sequence = later.sequence - 1
+                WHERE CAST(later.max_drawdown AS REAL)
+                    < CAST(earlier.max_drawdown AS REAL);
+            "
+        )"
+        close_orders="$(sqlite3 "$result_db" "SELECT COUNT(*) FROM account_order WHERE order_role='close';")"
+        stop_orders="$(sqlite3 "$result_db" "SELECT COUNT(*) FROM account_order WHERE order_role='stop';")"
         result_config_match="$(
             sqlite3 "$result_db" "
                 ATTACH DATABASE '$source_db' AS source;
@@ -138,8 +128,7 @@ for ((run = 1; run <= runs; run++)); do
                      WHERE json_extract(payload_json, '$.CycleNumber') = 2)
                     =
                     (SELECT json_extract(account_state_json, '$.AccountValue')
-                     FROM account_ledger
-                     WHERE cycle_no = 1)
+                     FROM account_ledger WHERE cycle_no = 1)
                 THEN 1 ELSE 0 END;
             "
         )"
@@ -147,48 +136,60 @@ for ((run = 1; run <= runs; run++)); do
             sqlite3 "$result_db" "
                 SELECT CASE WHEN result.bot_equity =
                     (SELECT json_extract(account_state_json, '$.AccountValue')
-                     FROM account_ledger
-                     ORDER BY cycle_no DESC LIMIT 1)
+                     FROM account_ledger ORDER BY cycle_no DESC LIMIT 1)
                 THEN 1 ELSE 0 END
                 FROM backtest_result AS result;
             "
         )"
     fi
 
-    if [[ $status -ne 0 || -z "$replay_ms" || "$ticks" != "7948800" ||
-          "$controller_runs" != "794880" || -z "$cycles" ||
-          "$trade_cycles" != "$cycles" || "$trades" != "$cycles" ||
-          "$fills" != "$((cycles * 2))" ||
-          "$orders" != "$((cycles * 3 + forced_exits))" ||
+    valid=1
+    if [[ $status -ne 0 || -z "$run_json" ||
           "$integrity" != "ok" || -n "$foreign_keys" ||
-          "$db_trades" != "$trades" || "$db_orders" != "$orders" ||
-          "$db_fills" != "$fills" || "$db_states" != "$cycles" ||
-          "$result_spec" != "macross_trade_bot" || "$result_completed" != "1" ||
-          "$result_ticks" != "$ticks" || "$result_runs" != "$controller_runs" ||
+          "$result_spec" != "macross_trade_bot" || "$completed" != "1" ||
+          "$ticks" != "7948800" || "$controller_runs" != "794880" ||
+          -z "$cycles" || "$cycles" -le 0 ||
+          "$trades" != "$cycles" || "$fills" != "$((cycles * 2))" ||
+          "$orders" != "$((cycles * 3 + stop_order_count))" ||
+          "$telemetry_rows" != "$((controller_runs + 1))" ||
+          "$report_samples" != "$telemetry_rows" ||
           "$result_cycles" != "$cycles" || "$result_executors" != "$cycles" ||
-          "$result_config_match" != "1" || "$equity_carry" != "1" ||
-          "$result_equity_match" != "1" ||
-          ! -f "$result_db" || -f "${result_db}.partial" ]]; then
-        printf '%s\n' "$output"
-        printf 'run=%d result=FAIL exit=%d process_ms=%d replay_ms=%s cycles=%s trades=%s orders=%s fills=%s\n' \
-            "$run" "$status" "$process_ms" "${replay_ms:-missing}" "${cycles:-missing}" \
-            "$trades" "$orders" "$fills"
-        exit 1
+          "$db_states" != "$cycles" || "$result_config_match" != "1" ||
+          "$equity_carry" != "1" || "$result_equity_match" != "1" ||
+          "$false_equity_samples" != "0" || "$declining_max_drawdown" != "0" ||
+          "$close_orders" != "0" || "$stop_orders" != "$stop_order_count" ||
+          -f "${result_db}.partial" ]]; then
+        valid=0
+    fi
+    if [[ $valid -eq 1 ]]; then
+        attempt_records+="$(printf \
+            '{"run":%d,"exit":0,"btrunner_elapsed_ms":%d,"report":%s}' \
+            "$run" "$elapsed_ms" "$run_json")"$'\n'
+        printf '%s\n' "$output" | grep -E '] (controller stopped|btrunner stopped)'
+        printf 'run=%d result=PASS btrunner_elapsed_ms=%d result_db=%s\n' \
+            "$run" "$elapsed_ms" "$result_db"
+        continue
     fi
 
-    process_total_ms=$((process_total_ms + process_ms))
-    replay_total_ms=$((replay_total_ms + replay_ms))
-    ((passed += 1))
-    printf '%s\n' "$controller_line"
-    printf '%s\n' "$btrunner_line"
-    printf 'run=%d result=PASS process_ms=%d replay_ms=%d ticks=%s runs=%s cycles=%s trades=%s orders=%s fills=%s result_db=%s\n' \
-        "$run" "$process_ms" "$replay_ms" "$ticks" "$controller_runs" "$cycles" \
-        "$trades" "$orders" "$fills" "$result_db"
-    printf 'run=%d result_summary bot_spec=%s net_pnl=%s bot_equity=%s forced_exits=%s integrity=%s\n' \
-        "$run" "$result_spec" "$result_pnl" "$result_equity" "$forced_exits" "$integrity"
+    if [[ $status -eq 0 ]]; then
+        status=1
+    fi
+    attempt_records+="$(printf \
+        '{"run":%d,"exit":%d,"btrunner_elapsed_ms":%d,"error":"validation failed"}' \
+        "$run" "$status" "$elapsed_ms")"$'\n'
+    printf '%s\n' "$output"
+    printf 'run=%d result=FAIL exit=%d cycles=%s trades=%s orders=%s fills=%s\n' \
+        "$run" "$status" "${cycles:-missing}" "${trades:-missing}" \
+        "${orders:-missing}" "${fills:-missing}"
+    suite_failed=1
+    break
 done
 
-printf 'requested=%d attempted=%d passed=%d failed=0 suite_ms=%d process_total_ms=%d process_average_ms=%d replay_total_ms=%d replay_average_ms=%d log=%s\n' \
-    "$runs" "$runs" "$passed" "$(( $(date +%s%3N) - suite_started_ms ))" \
-    "$process_total_ms" "$((process_total_ms / runs))" \
-    "$replay_total_ms" "$((replay_total_ms / runs))" "$result_log"
+suite_elapsed_ms=$(( $(date +%s%3N) - suite_started_ms ))
+printf '%s' "$attempt_records" |
+    "$reporter" "$runs" "$sweep_id" "$bot_id" "$suite_elapsed_ms" "$suite_json"
+report_status=$?
+printf 'suite_report=%s result_log=%s\n' "$suite_json" "$result_log"
+if [[ $suite_failed -ne 0 || $report_status -ne 0 ]]; then
+    exit 1
+fi

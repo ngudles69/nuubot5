@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"math"
 	"testing"
+	"time"
 
 	"nuubot/internal/ohlcv"
 )
@@ -19,22 +20,31 @@ func TestMacrossUsesOnlyClosedRegimeBars(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var hour = uint64(time.Hour.Milliseconds())
 	var loaded = []Series{
-		testRows(ohlcv.Hour1, []float64{10, 9, 8, 9, 10, 10}, []uint64{10, 11, 12, 13, 14, 15}),
-		testRows(ohlcv.Hour4, []float64{5, 5, 5}, []uint64{0, 1, 2}),
+		testRows(
+			ohlcv.Hour1,
+			[]float64{10, 9, 8, 9, 10, 10},
+			[]uint64{4 * hour, 5 * hour, 6 * hour, 7 * hour, 8 * hour, 9 * hour},
+		),
+		testRows(
+			ohlcv.Hour4,
+			[]float64{5, 5, 5},
+			[]uint64{0, 4 * hour, 8 * hour},
+		),
 	}
 	var packages []Package
 	packages, err = strategy.Calculate("BTC", loaded)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(packages) != 5 ||
-		packages[4].Action() != StartCycle ||
-		packages[4].TimestampMS() != 15 {
+	if len(packages) != 6 ||
+		packages[5].Action() != StartCycle ||
+		packages[5].TimestampMS() != 10*hour {
 		t.Fatalf("unexpected packages: %+v", packages)
 	}
 
-	loaded[1].StartMS[2] = 16
+	loaded[1].StartMS = []uint64{0, 12 * hour, 16 * hour}
 	packages, err = strategy.Calculate("BTC", loaded)
 	if err != nil {
 		t.Fatal(err)
@@ -56,16 +66,21 @@ func TestRSIRequiresVolumeConfirmation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var data = testRows(ohlcv.Hour1, []float64{100, 90, 80, 80}, []uint64{1, 2, 3, 4})
+	var hour = uint64(time.Hour.Milliseconds())
+	var data = testRows(
+		ohlcv.Hour1,
+		[]float64{100, 90, 80, 80},
+		[]uint64{0, hour, 2 * hour, 3 * hour},
+	)
 	data.Volume = []float64{1, 1, 2, 0}
 	var packages []Package
 	packages, err = strategy.Calculate("BTC", []Series{data})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(packages) != 3 ||
-		packages[2].Action() != StartCycle ||
-		packages[2].TimestampMS() != 4 {
+	if len(packages) != 4 ||
+		packages[3].Action() != StartCycle ||
+		packages[3].TimestampMS() != 4*hour {
 		t.Fatalf("unexpected packages: %+v", packages)
 	}
 }

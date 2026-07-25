@@ -5,8 +5,8 @@
 Nuubot5 tests whether simple, idiomatic Go can support a fast and stable trading system.
 
 Current proof covers historical replay, signals, BotCycles, ObserverExecutor,
-Simulator-backed TradeExecutor, Account reconciliation, Ledger evidence,
-result publication, and a Risk stub.
+Simulator-backed TradeExecutor, GridExecutor, Account reconciliation, Ledger
+evidence, result publication, and a Risk stub.
 
 Live trading and Server behavior remain unimplemented.
 
@@ -19,6 +19,8 @@ Canonical builds MUST use `-tags noasm`.
 Non-standard Go requires explicit prior user approval.
 
 [STYLE.md](coding/STYLE.md) owns Nuubot-specific style.
+
+[Go Code Sample](coding/sample.md) shows the preferred readable layout.
 
 [RULES.md](coding/RULES.md) owns dependencies, errors, logging, concurrency, safety, and proof.
 
@@ -52,6 +54,7 @@ Do not modify a reference repository without explicit user authority.
 - Macross and RSI signalers.
 - ObserverExecutor stop-loss behavior.
 - Simulator-backed TradeExecutor.
+- Simulator-backed arithmetic GridExecutor.
 - Account, Ledger, Trade, Order, and Fill reconciliation.
 - Simulator venue-shaped execution.
 - Per-Bot result publication.
@@ -123,6 +126,55 @@ The result stores exact BotConfig TOML and hash.
 Cycle 2 starts with Cycle 1 terminal equity.
 
 Database integrity and foreign-key checks pass.
+
+Sweep 10 Bot 14 runs the same input through Macross and GridExecutor.
+
+The initial Grid proof is invalid.
+
+Audit found re-entry sizing could exceed one capital slice.
+
+Audit also found accepted uncertain submissions could be retried.
+
+The retained invalid result produced:
+
+- 50 completed BotCycles;
+- 1,954 Trades;
+- 4,641 Orders;
+- 2,578 Fills;
+- 2,063 cancellations;
+- 733 closure Orders;
+- 554 completed Grid round trips; and
+- zero submission retries.
+
+Grid ends with 929.135352540000000000722 USDC equity.
+
+Grid maximum drawdown is 88.027421204999999999563 USDC.
+
+The dated baseline is [Macross GridBot Baselines](baselines/macross-grid-bot.md).
+
+The first corrected Grid proof is invalid because `round_trips` omitted boundary-tick TP fills.
+
+Trading behavior and financial results remained correct.
+
+That proof produces the same domain counts.
+
+Corrected net PnL is -69.766463889999999999562 USDC.
+
+Corrected ending equity is 930.233536110000000000438 USDC.
+
+Corrected maximum drawdown is 86.609100424999999999246 USDC.
+
+Corrected stability passed 2 of 2 and 10 of 10 with identical results.
+
+Final corrected proof records 556 completed round trips.
+
+The final corrected baseline is invalid.
+
+Audit found marketable Grid GTC Orders were not matched during submission.
+
+Audit found Account equity and drawdown snapshots stayed stale between Fill events.
+
+Final stability passed 2 of 2 and 10 of 10 with identical results.
 
 Fresh-process stability passed:
 

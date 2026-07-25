@@ -1,7 +1,7 @@
 # Filesystem
 
 Status: Approved — partially implemented.
-Covers: `.gitignore`, `workspace/config/config.toml`, and `internal/toolkit/logging/logging.go`
+Covers: `.gitignore`, `.audits/`, `workspace/config/config.toml`, `internal/toolkit/logging/logging.go`, `rtest.sh`, and `pptest.sh`
 Purpose: Keep every mutable Nuubot file under one portable workspace root.
 
 ## Root Contract
@@ -21,6 +21,10 @@ It validates path segments, refuses overwrite, and writes no credentials.
 
 This exception does not apply to Server, Runner, BtRunner, Controller, or Simulator.
 
+`.audits/` contains tracked engineering review evidence.
+
+Authorized development work may write reports there. Runtime programs must not.
+
 `workspace/` is the future Docker mount. The application image remains
 immutable. The exact container mount path is unresolved.
 
@@ -37,6 +41,8 @@ workspace/
 |       `-- sweep_<sweep_id>/
 |           `-- bot_<bot_id>.db
 |-- logs/
+|-- perf/
+|   `-- profiles/
 `-- data/
 ```
 
@@ -49,6 +55,7 @@ workspace/
 | `workspace/db/nuubot.db` | Shared Sweep, Bot, Meta, and future main tables. | Ignored |
 | `workspace/db/sweeps/` | Per-Bot Sweep result SQLite databases. | Ignored |
 | `workspace/logs/` | Controller, Server, Bot, and test-run logs. | Ignored |
+| `workspace/perf/profiles/` | Opt-in command performance diagnostics. Never user or account profiles. | Ignored |
 | `workspace/data/` | Market and other runtime data files. | Ignored |
 
 ## Configuration and Secrets
@@ -110,6 +117,12 @@ Logs remain under `workspace/logs/`.
 
 Current identity naming includes `server.log`, `bot_<sweep_id>_<bot_id>.log`,
 and timestamped `rtest` result logs.
+
+## Performance Diagnostics
+
+`workspace/perf/profiles/` owns disposable `pptest.sh` CPU, trace, memory, block, and mutex diagnostics.
+
+These files describe command execution. They are not user, account, identity, or configuration profiles.
 
 ## Data
 

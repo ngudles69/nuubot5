@@ -13,10 +13,19 @@ BtRunner owns:
 - one TickClock;
 - one Controller;
 - exact replay proof; and
+- ordered telemetry samples;
+- terminal RunReport construction; and
 - terminal ResultPublisher invocation.
 
 BtRunner owns no Signaler, Risk, BotCycle, Executor, Account, or Ledger
 directly.
+
+The command may profile the complete BtRunner execution boundary when explicitly requested.
+
+Profiling belongs to `cmd/nuubot-btrunner`, not this domain package.
+
+The command writes CPU, runtime trace, heap, allocations, block, and mutex artifacts.
+BtRunner receives no profiling configuration and contains no profiling lifecycle.
 
 ## Initialization
 
@@ -53,7 +62,22 @@ Failure prevents successful publication.
 `btrunner.Result` contains:
 
 - immutable `controller.Result`; and
-- replay counts, range, elapsed time, completion, and publication proof.
+- replay counts, range, historical-data-loop elapsed time, completion, and publication proof; and
+- one terminal `runreport.Run`.
+
+`btrunner_historical_data_loop_elapsed_ms` measures `BtRunner.Loop()` from entry through replay verification.
+
+It excludes `Init`, `Start`, `Stop`, result publication, and shutdown.
+
+Test scripts measure `btrunner_elapsed_ms` from fresh BtRunner process launch through exit.
+
+BtRunner samples Controller telemetry after every successful control pass.
+
+One terminal sample follows Controller shutdown.
+
+BtRunner samples Go memory before RunReport construction and result publication.
+
+The memory field names explicitly contain `before_publication`.
 
 ResultPublisher writes the same terminal hierarchy to the per-Bot SQLite
 database.

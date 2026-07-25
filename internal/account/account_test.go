@@ -2,6 +2,7 @@ package account
 
 import (
 	"database/sql"
+	"errors"
 	"io"
 	"path/filepath"
 	"testing"
@@ -100,6 +101,24 @@ func TestAccountRunsOneReconciledBracket(t *testing.T) {
 	}
 	if !snapshot.PositionQuantity.IsPositive() {
 		t.Fatalf("actual entry position %s, expected positive", snapshot.PositionQuantity)
+	}
+	var entryValue = snapshot.AccountValue
+	var mark, _ = market.CreateBBO(1500, 105)
+	if err = actual.IngestBBO(mark); err != nil {
+		t.Fatalf("ingest mark BBO: %v", err)
+	}
+	var refreshed bool
+	snapshot, refreshed, err = actual.Reconcile(1500, false)
+	if err != nil {
+		t.Fatalf("reconcile mark: %v", err)
+	}
+	if !refreshed || !snapshot.AccountValue.GreaterThan(entryValue) {
+		t.Fatalf(
+			"actual refreshed=%t Account value=%s, expected above %s",
+			refreshed,
+			snapshot.AccountValue,
+			entryValue,
+		)
 	}
 	var second, _ = market.CreateBBO(2000, 111)
 	err = actual.IngestBBO(second)
@@ -288,6 +307,9 @@ func TestAccountMaxPersistenceRecoversSimulatorSubmitFailure(t *testing.T) {
 	if err == nil {
 		t.Fatal("undurable Simulator submission was admitted")
 	}
+	if !errors.Is(err, ErrNotSubmitted) {
+		t.Fatalf("actual error %v, expected proven non-submission", err)
+	}
 	var result Result
 	result, err = first.Result()
 	if err != nil {
@@ -328,6 +350,78 @@ func TestAccountMaxPersistenceRecoversSimulatorSubmitFailure(t *testing.T) {
 	}
 	if err = restored.Stop(); err != nil {
 		t.Fatalf("stop restored Account: %v", err)
+	}
+}
+
+func TestAccountDoesNotMarkAcceptedSimulatorOrderRetriable(t *testing.T) {
+	var path = filepath.Join(t.TempDir(), "result.db")
+	var cfg = simulatorFailureConfig(path, 9)
+	var actual Account
+	var err = actual.Init(logging.Create(io.Discard), cfg)
+	if err != nil {
+		t.Fatalf("initialize Account: %v", err)
+	}
+	var warm, _ = market.CreateBBO(1000, 100)
+	if err = actual.IngestBBO(warm); err != nil {
+		t.Fatalf("warm Account: %v", err)
+	}
+	var db *sql.DB
+	db, err = sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open result database: %v", err)
+	}
+	if _, err = db.Exec(`
+		CREATE TRIGGER fail_submitted_order
+		BEFORE INSERT ON account_order
+		WHEN NEW.status = 'submitted'
+		BEGIN
+			SELECT RAISE(FAIL, 'injected Ledger failure');
+		END;`); err != nil {
+		t.Fatalf("inject Ledger failure: %v", err)
+	}
+	var price = decimal.NewFromInt(99)
+	var placed PlaceResult
+	placed, err = actual.PlaceOrders([]OrderSpec{{
+		Role:        order.Entry,
+		Side:        order.Buy,
+		Type:        order.Limit,
+		TimeInForce: order.GTC,
+		Quantity:    decimal.RequireFromString("0.12"),
+		Price:       &price,
+		TimestampMS: 1000,
+	}})
+	if err == nil {
+		t.Fatal("Ledger persistence failure was admitted")
+	}
+	if placed.TradeID == 0 || errors.Is(err, ErrNotSubmitted) {
+		t.Fatalf(
+			"actual Trade ID=%d error=%v, expected uncertain accepted outcome",
+			placed.TradeID,
+			err,
+		)
+	}
+	var result Result
+	result, err = actual.Result()
+	if err != nil {
+		t.Fatalf("read Account result: %v", err)
+	}
+	if len(result.Simulator.Orders) != 1 {
+		t.Fatalf(
+			"actual Simulator Orders=%d, expected accepted Order",
+			len(result.Simulator.Orders),
+		)
+	}
+	if _, err = db.Exec(`DROP TRIGGER fail_submitted_order`); err != nil {
+		t.Fatalf("remove Ledger failure: %v", err)
+	}
+	if err = db.Close(); err != nil {
+		t.Fatalf("close result database: %v", err)
+	}
+	if _, _, err = actual.Reconcile(1100, true); err != nil {
+		t.Fatalf("reconcile accepted Simulator Order: %v", err)
+	}
+	if err = actual.Stop(); err != nil {
+		t.Fatalf("stop Account: %v", err)
 	}
 }
 

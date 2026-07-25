@@ -18,7 +18,7 @@ type Fields struct {
 	Purpose    uint8
 	TradeNo    uint32
 	BatchNo    uint16
-	OrderPos   uint16
+	OrderLevel uint16
 	TimestampS uint32
 }
 
@@ -47,7 +47,7 @@ func Encode(fields Fields) (string, error) {
 	appendField(raw, uint64(fields.Purpose), 8)
 	appendField(raw, uint64(fields.TradeNo), 21)
 	appendField(raw, uint64(fields.BatchNo), 10)
-	appendField(raw, uint64(fields.OrderPos), 10)
+	appendField(raw, uint64(fields.OrderLevel), 10)
 	appendField(raw, uint64(fields.TimestampS), 31)
 	return fmt.Sprintf("0x%032x", raw), nil
 }
@@ -74,7 +74,7 @@ func Decode(value string) (Fields, error) {
 		Purpose:    uint8(readField(raw, 72, 8)),
 		TradeNo:    uint32(readField(raw, 51, 21)),
 		BatchNo:    uint16(readField(raw, 41, 10)),
-		OrderPos:   uint16(readField(raw, 31, 10)),
+		OrderLevel: uint16(readField(raw, 31, 10)),
 		TimestampS: uint32(readField(raw, 0, 31)),
 	}
 	var err = validateFields(fields)
@@ -99,8 +99,8 @@ func validateFields(fields Fields) error {
 	if fields.BatchNo == 0 || fields.BatchNo > 1000 {
 		return fmt.Errorf("validate cloid: batch number must be from 1 to 1000")
 	}
-	if fields.OrderPos == 0 || fields.OrderPos > 1000 {
-		return fmt.Errorf("validate cloid: order position must be from 1 to 1000")
+	if fields.OrderLevel > 0x03ff {
+		return fmt.Errorf("validate cloid: order level must be from 0 to 1023")
 	}
 	if fields.TimestampS > 0x7fffffff {
 		return fmt.Errorf("validate cloid: timestamp exceeds 31 bits")

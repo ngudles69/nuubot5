@@ -577,7 +577,10 @@ func (s *Simulator) matchAdded(
 ) {
 	var filledTrades = make(map[uint64]struct{})
 	for _, row := range added {
-		if !row.armed || row.request.TimeInForce != order.IOC {
+		if !row.armed {
+			continue
+		}
+		if row.request.TimeInForce != order.IOC && !crosses(row, s.lastPrice) {
 			continue
 		}
 		if _, filled := filledTrades[row.request.TradeID]; filled {

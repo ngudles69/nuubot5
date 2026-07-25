@@ -82,6 +82,14 @@ BalancedRisk currently always returns `Allow`. It is not protection.
 
 It retains no live child pointer.
 
+## Telemetry
+
+`Telemetry()` composes current Controller counters, capital, equity, PnL, drawdown, and active BotCycle state.
+
+It calls the active BotCycle telemetry path once.
+
+It performs no mutation, reconciliation, trading decision, logging, or persistence.
+
 ## Shutdown
 
 Controller stops the active BotCycle first.
@@ -97,4 +105,4 @@ Fatal child errors propagate to BtRunner.
 - Live cross-process Account claims.
 - Multi-source replay merging.
 - Physical Account and global risk.
-- Periodic telemetry schema and cadence.
+- Runner telemetry persistence and API queries.

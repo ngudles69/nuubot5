@@ -96,7 +96,9 @@ command
         `-- active BotCycle
             `-- Executors
                 |-- ObserverExecutor
-                `-- TradeExecutor
+                |-- TradeExecutor
+                |   `-- Account
+                `-- GridExecutor
                     `-- Account
                         |-- Simulator
                         `-- Ledger
@@ -113,6 +115,8 @@ Controller owns Signal, Risk, BotCycle, capital, drawdown, and graceful
 shutdown decisions.
 
 BotCycle coordinates Executors. Executor implementations own execution policy.
+
+GridExecutor owns arithmetic Levels, repeated Trades, boundary exits, and coordinated flattening.
 
 BalancedRisk remains a non-protective stub.
 

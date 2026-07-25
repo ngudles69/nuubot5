@@ -26,7 +26,7 @@ It retains no Account, Ledger, Trade, Order, Fill, or Simulator pointer.
 
 ## Dirty State
 
-Submission, Simulator mutation, and future user events mark Account dirty.
+Submission, Simulator mutation, open-position marks, and future user events mark Account dirty.
 
 Normal reconciliation may skip a clean Account.
 

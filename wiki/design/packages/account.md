@@ -12,7 +12,7 @@ Purpose: Give one Executor a trading boundary backed by one Venue and one local 
 
 ## Ownership
 
-TradeExecutor owns one Account.
+TradeExecutor or GridExecutor owns one Account.
 
 Account owns one selected Venue and one Ledger.
 
@@ -20,13 +20,19 @@ The current BtRunner implementation selects Simulator only.
 
 Account hides Venue selection and response translation from Executor.
 
+Executor supplies `order_level`.
+
+Account supplies Trade, batch, purpose, and remaining CLOID identity.
+
+Persisted `order_pos` remains request position inside one batch.
+
 ## Construction
 
 Account is one concrete component.
 
 It does not need a factory.
 
-TradeExecutor owns one Account value and calls `Init`.
+TradeExecutor or GridExecutor owns one Account value and calls `Init`.
 
 `Init` validates identity before opening Ledger or Venue state.
 
@@ -75,7 +81,7 @@ CancelOrders
 
 IngestBBO
   ingest Venue BBO
-  mark Account dirty when Venue changes
+  mark Account dirty when Venue or open-position marks change
 
 Recon
   claim dirty state
@@ -106,7 +112,9 @@ Account validates the complete batch before mutation.
 
 One new entry batch creates one Trade.
 
-TP, SL, exit, close, cleanup, and stop Orders attach to an existing Trade.
+TP, SL, exit, cleanup, and stop Orders attach to an existing Trade.
+
+Executor shutdown uses the canonical `stop` Order role.
 
 One entry, TP, and SL bracket creates three Orders under one Trade.
 
@@ -161,7 +169,7 @@ It advances no cursor or success timestamp.
 
 Account solely owns its reconciliation-dirty flag.
 
-Initialization, user events, submissions, and changed Simulator truth mark it dirty.
+Initialization, user events, submissions, changed Simulator truth, and open-position marks make Account dirty.
 
 Normal recon skips a clean Account.
 
@@ -192,6 +200,10 @@ The snapshot contains identity, observation time, exposure, equity, margins, PnL
 It contains no Account, Ledger, Trade, Order, Fill, or Venue pointer.
 
 See [AccountSnapshot](../concepts/account-snapshot.md).
+
+`Telemetry()` returns explicit absence until one successful Account observation.
+
+Observed telemetry returns the latest snapshot without mutation or Venue access.
 
 ## Persistence
 
@@ -250,6 +262,7 @@ The terminal result travels upward without Account, Ledger, or Simulator pointer
 - Expose raw Venue payloads to Executor.
 - Share mutable Accounts between Executors.
 - Log returned errors.
+- Persist telemetry.
 
 ## Required Proof
 
