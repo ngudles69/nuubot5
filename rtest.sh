@@ -81,31 +81,31 @@ for ((run = 1; run <= runs; run++)); do
             gc_pause_ms=*) gc_pause_ms="${field#gc_pause_ms=}" ;;
         esac
     done
-    runtime_line="$(printf '%s\n' "$output" | grep '] runtime stopped ' | tail -n 1)"
-    runtime_ok=0
-    if [[ "$runtime_line" =~ ticks_accepted=([0-9]+).*runs=([0-9]+).*signal_packages_read=([0-9]+).*entry_signals_skipped=([0-9]+).*cycles_started=([0-9]+).*cycles_rejected=([0-9]+).*cycles_closed=([0-9]+).*stop_loss_exits=([0-9]+).*stop_reason=parent_stop ]]; then
+    controller_line="$(printf '%s\n' "$output" | grep '] controller stopped ' | tail -n 1)"
+    controller_ok=0
+    if [[ "$controller_line" =~ ticks_accepted=([0-9]+).*runs=([0-9]+).*signal_packages_read=([0-9]+).*start_actions_skipped=([0-9]+).*cycles_started=([0-9]+).*cycles_rejected=([0-9]+).*cycles_closed=([0-9]+).*stop_loss_exits=([0-9]+).*stop_reason=parent_stop ]]; then
         ticks="${BASH_REMATCH[1]}"
-        runtime_runs="${BASH_REMATCH[2]}"
+        controller_runs="${BASH_REMATCH[2]}"
         signal_packages="${BASH_REMATCH[3]}"
-        entry_signals_skipped="${BASH_REMATCH[4]}"
+        start_actions_skipped="${BASH_REMATCH[4]}"
         cycles_started="${BASH_REMATCH[5]}"
         cycles_rejected="${BASH_REMATCH[6]}"
         cycles_closed="${BASH_REMATCH[7]}"
         stop_loss_exits="${BASH_REMATCH[8]}"
-        if [[ $ticks -eq 7948800 && $runtime_runs -eq 794880 &&
-              $signal_packages -eq 2207 && $entry_signals_skipped -eq 37 &&
-              $cycles_started -eq 18 && $cycles_rejected -eq 0 &&
-              $cycles_closed -eq 18 &&
+        if [[ $ticks -eq 7948800 && $controller_runs -eq 794880 &&
+              $signal_packages -eq 2207 && $start_actions_skipped -eq 724 &&
+              $cycles_started -eq 64 && $cycles_rejected -eq 0 &&
+              $cycles_closed -eq 64 &&
               $stop_loss_exits -eq 17 ]]; then
-            runtime_ok=1
+            controller_ok=1
         fi
     fi
     if [[ $status -ne 0 || -z "$replay_ms" || -z "$heap_mb" || -z "$total_alloc_mb" ||
-          -z "$gc_runs" || -z "$gc_pause_ms" || $runtime_ok -ne 1 ]]; then
+          -z "$gc_runs" || -z "$gc_pause_ms" || $controller_ok -ne 1 ]]; then
         printf '%s\n' "$output"
         if [[ $status -eq 0 ]]; then
             status=1
-            printf 'run=%d incomplete_replay=missing_completion_timing_or_runtime_stats\n' "$run"
+            printf 'run=%d incomplete_replay=missing_completion_timing_or_controller_stats\n' "$run"
         fi
         printf 'run=%d result=FAIL exit=%d elapsed_ms=%d\n' "$run" "$status" "$elapsed_ms"
         printf 'requested=%d attempted=%d passed=%d failed=1 suite_ms=%d process_total_ms=%d process_average_ms=%d process_min_ms=%d process_max_ms=%d replay_total_ms=%d replay_min_ms=%d replay_max_ms=%d log=%s\n' \
@@ -115,7 +115,7 @@ for ((run = 1; run <= runs; run++)); do
         exit "$status"
     fi
 
-    printf '%s\n' "$output" | grep -E '] (signaler initialized|runtime stopped|tick reader stopped|btrunner stopped)'
+    printf '%s\n' "$output" | grep -E '] (signaler initialized|controller stopped|tick reader stopped|btrunner stopped)'
 
     replay_total_ms=$((replay_total_ms + replay_ms))
     if [[ $replay_minimum_ms -eq 0 || $replay_ms -lt $replay_minimum_ms ]]; then
@@ -129,9 +129,9 @@ for ((run = 1; run <= runs; run++)); do
     gc_run_values+=("$gc_runs")
     gc_pause_values+=("$gc_pause_ms")
     ((passed += 1))
-    printf 'run=%d result=PASS exit=0 process_ms=%d replay_ms=%d heap_mb=%s total_alloc_mb=%s gc_runs=%s gc_pause_ms=%s ticks=%d runs=%d signal_packages=%d entry_skipped=%d cycles_started=%d cycles_rejected=%d cycles_closed=%d stop_loss=%d\n' \
+    printf 'run=%d result=PASS exit=0 process_ms=%d replay_ms=%d heap_mb=%s total_alloc_mb=%s gc_runs=%s gc_pause_ms=%s ticks=%d runs=%d signal_packages=%d start_skipped=%d cycles_started=%d cycles_rejected=%d cycles_closed=%d stop_loss=%d\n' \
         "$run" "$elapsed_ms" "$replay_ms" "$heap_mb" "$total_alloc_mb" "$gc_runs" "$gc_pause_ms" \
-        "$ticks" "$runtime_runs" "$signal_packages" "$entry_signals_skipped" \
+        "$ticks" "$controller_runs" "$signal_packages" "$start_actions_skipped" \
         "$cycles_started" "$cycles_rejected" "$cycles_closed" "$stop_loss_exits"
 done
 

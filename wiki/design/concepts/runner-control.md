@@ -33,7 +33,7 @@ RunnerService owns the in-process Runner.
 
 ## Does Not
 
-- Own Runtime.
+- Own Controller.
 - Interpret Bot configuration.
 - Implement Runner lifecycle ordering.
 - Reach through RunnerService into Runner children.

@@ -49,7 +49,7 @@ Stored Meta identity is:
 network + kind + symbol
 ```
 
-Runtime and Account network settings never select the Meta source.
+Controller and Account network settings never select the Meta source.
 
 Meta always refreshes from mainnet.
 
@@ -130,7 +130,7 @@ Nuubot5 adds caller-driven refresh after 24 hours.
 - Invalid venue responses fail validation.
 - Normalized identifiers and precision match venue truth.
 - Stored metadata reloads without information loss.
-- Setup requests mainnet regardless of Runtime network.
+- Setup requests mainnet regardless of Controller network.
 - Missing symbols become retired only after a successful full refresh.
 - Final rounded order notional respects the configured USDC 11 floor.
 

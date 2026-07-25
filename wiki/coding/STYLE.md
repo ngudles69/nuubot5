@@ -285,9 +285,9 @@ func (r *Runner) Start() error {
 	if r.started || r.stopped {
 		return fmt.Errorf("runner cannot start from current state")
 	}
-	var err = r.runtime.Start()
+	var err = r.controller.Start()
 	if err != nil {
-		return fmt.Errorf("start runtime: %w", err)
+		return fmt.Errorf("start controller: %w", err)
 	}
 	r.started = true
 	return nil
@@ -354,13 +354,13 @@ type Config struct {
 
 // Runner owns one job and its direct inputs.
 type Runner struct {
-	log     *logging.Logger
-	config  Config
-	runtime *Runtime
-	bars    []Bar
-	feed    Feed
-	started bool
-	stopped bool
+	log        *logging.Logger
+	config     Config
+	controller *Controller
+	bars       []Bar
+	feed       Feed
+	started    bool
+	stopped    bool
 }
 
 // Section 1 - Program Flow
@@ -372,16 +372,16 @@ func Create(log *logging.Logger, config Config) (*Runner, error) {
 		return nil, fmt.Errorf("create runner: %w", err)
 	}
 
-	var runtime *Runtime
-	runtime, err = runtime.Create(log, config.End)
+	var control *Controller
+	control, err = controller.Create(log, config.End)
 	if err != nil {
-		return nil, fmt.Errorf("create runtime: %w", err)
+		return nil, fmt.Errorf("create controller: %w", err)
 	}
 
 	return &Runner{
-		log:     log,
-		config:  config,
-		runtime: runtime,
+		log:        log,
+		config:     config,
+		controller: control,
 	}, nil
 }
 
@@ -397,24 +397,24 @@ func (r *Runner) Init(ctx context.Context) error {
 	}
 }
 
-// Start starts Runtime and its input.
+// Start starts Controller and its input.
 func (r *Runner) Start(ctx context.Context) error {
 	if r.started || r.stopped {
 		return fmt.Errorf("runner cannot start from current state")
 	}
 
-	var err = r.runtime.Start()
+	var err = r.controller.Start()
 	if err != nil {
-		return fmt.Errorf("start runtime: %w", err)
+		return fmt.Errorf("start controller: %w", err)
 	}
 
 	if r.feed != nil {
 		var feedErr = r.feed.Start(ctx)
 		if feedErr != nil {
-			var stopErr = r.runtime.Stop("start_error")
+			var stopErr = r.controller.Stop("start_error")
 			if stopErr != nil {
 				stopErr = fmt.Errorf(
-					"stop runtime after feed start failure: %w",
+					"stop controller after feed start failure: %w",
 					stopErr,
 				)
 			}
@@ -463,13 +463,13 @@ func (r *Runner) Stop() error {
 		}
 	}
 
-	var runtimeErr = r.runtime.Stop("parent_stop")
-	if runtimeErr != nil {
-		runtimeErr = fmt.Errorf("stop runtime: %w", runtimeErr)
+	var controllerErr = r.controller.Stop("parent_stop")
+	if controllerErr != nil {
+		controllerErr = fmt.Errorf("stop controller: %w", controllerErr)
 	}
 
 	r.log.Info("runner stopped")
-	return errors.Join(feedErr, runtimeErr)
+	return errors.Join(feedErr, controllerErr)
 }
 
 func (r *Runner) initLive(ctx context.Context) error {
@@ -511,7 +511,7 @@ func (r *Runner) loopLive(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if r.runtime.Stopped() {
+		if r.controller.Stopped() {
 			return nil
 		}
 	}
@@ -528,19 +528,19 @@ func (r *Runner) loopBacktest(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if r.runtime.Stopped() {
+		if r.controller.Stopped() {
 			return nil
 		}
 	}
-	return r.runtime.Stop("end_date")
+	return r.controller.Stop("end_date")
 }
 
 func (r *Runner) onEvent(event Event) error {
 	switch event.Kind {
 	case EventBBO:
-		return r.runtime.OnBBO(event.BBO)
+		return r.controller.OnBBO(event.BBO)
 	case EventUser:
-		r.runtime.MarkAccountDirty(event.AccountID)
+		r.controller.MarkAccountDirty(event.AccountID)
 		return nil
 	default:
 		return fmt.Errorf("accept feed event: unknown kind %q", event.Kind)
@@ -548,7 +548,7 @@ func (r *Runner) onEvent(event Event) error {
 }
 
 func (r *Runner) onBar(bar Bar) error {
-	var err = r.runtime.OnBar(bar)
+	var err = r.controller.OnBar(bar)
 	if err != nil {
 		return fmt.Errorf("accept replay bar: %w", err)
 	}
@@ -641,9 +641,9 @@ if !r.started || r.stopped {
 Every boundary MUST wrap useful internal context with `%w`:
 
 ```go
-var err = r.runtime.Start()
+var err = r.controller.Start()
 if err != nil {
-	return fmt.Errorf("start runtime: %w", err)
+	return fmt.Errorf("start controller: %w", err)
 }
 ```
 

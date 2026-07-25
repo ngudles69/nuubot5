@@ -1,68 +1,29 @@
 # ResultPublisher
 
-Status: Implemented for per-Bot SQLite result databases.
-Covers: `internal/resultpublisher/*.go`
-Purpose: Publish exactly one terminal backtest result from approved Runtime evidence.
+Status: Implemented for complete per-Bot SQLite results.
+Covers: `internal/resultpublisher`
+Purpose: Persist one successful immutable backtest hierarchy atomically.
 
-## Canonical Sources
+BtRunner calls ResultPublisher only after replay verification and Controller
+shutdown succeed.
 
-- Nuubot4 ownership: `D:/rust/nuubot4/wiki/ownership.md`
-- Nuubot3 design: `D:/rust/nuubot3/wiki/runner-lifecycle.md`
+Publication receives:
 
-## Scope
+- exact Bot identity;
+- exact admitted BotConfig TOML and hash;
+- Controller capital, PnL, equity, and drawdown;
+- Signal and changed Risk decisions;
+- BotCycle and Executor results;
+- Account, Ledger, Trade, Order, Fill, and Simulator evidence; and
+- replay counts, range, duration, and completion.
 
-ResultPublisher translates one immutable Runtime result snapshot into durable BtRunner and Sweep result evidence.
+ResultPublisher creates `.partial`, writes all evidence, commits, and renames
+to `.db`.
 
-Runtime captures descendant evidence before each BotCycle teardown.
+It writes every terminal Account result, including maximum persistence mode.
 
-## Owner and Children
+Failure removes `.partial`.
 
-BtRunner owns ResultPublisher.
+Failed replay or Controller execution never publishes completed evidence.
 
-ResultPublisher owns no Runtime descendant.
-
-## Responsibilities
-
-- Accept one terminal Runtime result snapshot.
-- Select memory-only Account results using one result path.
-- Persist supplied Ledger and Simulator evidence when `persist_mode = none`.
-- Replace the completed per-Bot result database.
-- Return publication failure to BtRunner.
-
-## Does Not
-
-- Traverse Runtime, BotCycle, Account, Ledger, Trade, Order, or Fill.
-- Calculate trading results from mutable objects.
-- Decide whether Runtime should stop.
-- Publish partial success as terminal success.
-- Define result schema in this page.
-
-## Invariants
-
-- One BtRunner publishes one terminal file.
-- Publication follows Runtime shutdown and replay verification.
-- Runtime result values alias no stopped child state.
-- Failed Runtime execution publishes no partial Ledger or Simulator evidence.
-- A failed publication does not replace the prior completed database.
-- Publication failure makes BtRunner fail.
-
-## Atomic Publication
-
-For `none`, Account opens no result database.
-
-ResultPublisher creates a temporary database beside the final path after success.
-
-It writes all evidence into that hidden file, closes every database handle, then atomically renames it.
-
-Only the final filename is completed evidence.
-
-Failure removes or leaves only an ignored temporary file.
-
-## Required Proof
-
-- Repeated publication replaces the prior completed file.
-- Incomplete replay cannot publish success.
-- Snapshot identity mismatch fails.
-- Failed publication leaves the prior completed database unchanged.
-
-Shared Sweep catalog updates remain pending.
+The publisher owns no trading descendant and makes no lifecycle decision.

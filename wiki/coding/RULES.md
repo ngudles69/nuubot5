@@ -281,7 +281,7 @@ Required:
 
 ```go
 var message = fmt.Sprintf(
-	"runtime stopped ticks_accepted=%d runs=%d",
+	"controller stopped ticks_accepted=%d runs=%d",
 	stats.ticks,
 	stats.runs,
 )
@@ -291,7 +291,7 @@ log.Info(message)
 Prohibited:
 
 ```go
-log.Info("runtime stopped", "ticks_accepted", stats.ticks)
+log.Info("controller stopped", "ticks_accepted", stats.ticks)
 ```
 
 ## 7. Concurrency
@@ -312,7 +312,7 @@ A mutex MUST NOT compensate for unclear ownership.
 
 WebSocket readers MUST publish typed events or update owned feed state.
 
-Runtime decisions MUST remain in Runtime's timed synchronous Run.
+Controller decisions MUST remain in Controller's timed synchronous Run.
 
 BBO checks MUST use the configured fast cadence.
 

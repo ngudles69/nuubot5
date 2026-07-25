@@ -2,36 +2,48 @@
 
 Status: Implemented.
 Covers: `internal/resultpublisher/*.go`
-Purpose: Publish successful memory-only BtRunner results as one completed SQLite database.
+Purpose: Atomically publish one complete successful backtest result.
 
 ## Ownership
 
-BtRunner calls ResultPublisher after replay verification and Runtime shutdown.
+BtRunner calls ResultPublisher only after replay verification and Controller
+shutdown succeed.
 
-ResultPublisher owns the temporary file and final rename.
+ResultPublisher owns the temporary database and final rename.
 
-Ledger and Simulator own their table serialization.
+Ledger and Simulator own detailed Account child serialization.
 
-## Program Flow
+ResultPublisher owns Controller, BotCycle, Executor, Signal, Risk, and replay
+summary serialization.
+
+## Output
+
+The per-Bot database contains:
+
+- `backtest_result`;
+- `botcycle_result`;
+- `executor_result`;
+- `signal_decision`;
+- `risk_decision`;
+- Account Ledger, Trade, Order, and Fill tables; and
+- Simulator state.
+
+`backtest_result` preserves the exact admitted BotConfig TOML and hash.
+
+## Atomic Flow
 
 ```text
-Publish
-  select memory-only Account results
-  prepare temporary result path
-  publish Account children
-  publish completed result
+remove stale .partial
+publish every terminal Account child
+publish Controller and replay hierarchy
+commit every summary transaction
+rename .partial to final .db
 ```
 
-`persist_mode = max` requires no terminal export.
+Maximum-mode children are re-materialized from terminal immutable results.
 
-`persist_mode = none` writes `bot_<id>.db.partial`, closes it, then replaces
-`bot_<id>.db`.
+The final rename never replaces durable children with a summary-only database.
 
-Failure removes only the partial file.
+Failure removes `.partial` and never publishes completed evidence.
 
-## Proof
-
-Sweep `9`, Bot `13` published 50 Ledgers, 50 Trades, 151 Orders, 100 Fills,
-and 50 Simulator states.
-
-SQLite integrity and foreign-key checks passed.
+Foreign-key and integrity checks belong to the TradeBot harness.

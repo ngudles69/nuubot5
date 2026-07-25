@@ -1,13 +1,17 @@
 package btrunner
 
 import (
+	"context"
 	"fmt"
 	stdruntime "runtime"
 	"time"
 
+	"github.com/shopspring/decimal"
+
+	"nuubot/internal/botspec"
+	"nuubot/internal/controller"
 	"nuubot/internal/replay"
 	"nuubot/internal/resultpublisher"
-	"nuubot/internal/runtime"
 	"nuubot/internal/setup"
 	"nuubot/internal/toolkit/clock"
 	"nuubot/internal/toolkit/logging"
@@ -26,14 +30,37 @@ type stats struct {
 	elapsed         time.Duration
 }
 
+// ReplayResult contains immutable replay and publication proof.
+type ReplayResult struct {
+	Symbol        string
+	TicksExpected uint64
+	TicksServed   uint64
+	RunsExpected  uint64
+	RunsTriggered uint64
+	FirstMS       uint64
+	LastMS        uint64
+	ReplayMS      int64
+	Completed     bool
+	Published     bool
+}
+
+// Result contains one complete immutable backtest result.
+type Result struct {
+	Controller controller.Result
+	Replay     ReplayResult
+}
+
 // BtRunner owns one bounded historical replay.
 type BtRunner struct {
 	log           *logging.Logger
 	reader        replay.Reader
 	clock         clock.Clock
-	runtime       runtime.Runtime
+	controller    controller.Controller
+	symbol        string
+	resultPath    string
 	stats         stats
 	stopRequested bool
+	published     bool
 	started       bool
 	stopped       bool
 }
@@ -41,20 +68,26 @@ type BtRunner struct {
 // Section 1 - Program Flow
 
 // Init prepares one bounded historical replay.
-func (r *BtRunner) Init(log *logging.Logger, sweepID, botID uint64) error {
+func (r *BtRunner) Init(
+	caller context.Context,
+	log *logging.Logger,
+	sweepID,
+	botID uint64,
+) error {
 	r.log = log
 
 	// prepare setup
-	var ctx, err = setup.Setup(log, sweepID, botID)
+	var admission, err = setup.Setup(caller, log, sweepID, botID)
 	if err != nil {
 		return fmt.Errorf("prepare setup: %w", err)
 	}
 
 	// set replay range
-	var start = ctx.Bot.ReplayStart
-	var end = ctx.Bot.ReplayEnd
-	if ctx.Bot.EndAt != nil && ctx.Bot.EndAt.Before(end) {
-		end = *ctx.Bot.EndAt
+	var replayInput = admission.Bot.Replay
+	var start = replayInput.ReplayStart
+	var end = replayInput.ReplayEnd
+	if replayInput.EndAt != nil && replayInput.EndAt.Before(end) {
+		end = *replayInput.EndAt
 	}
 	if !start.Before(end) {
 		return fmt.Errorf("bot end must follow replay start")
@@ -75,19 +108,19 @@ func (r *BtRunner) Init(log *logging.Logger, sweepID, botID uint64) error {
 		return fmt.Errorf("initialize clock: %w", err)
 	}
 
-	// register runtime timer
+	// register Controller timer
 	err = r.clock.RegisterTimer(clock.Timer{
-		Name:       "runtime",
-		IntervalMS: ctx.Config.BtRunner.TimerIntervalMS,
-	}, r.runtimeRun)
+		Name:       "controller",
+		IntervalMS: admission.App.BtRunner.TimerIntervalMS,
+	}, r.controllerRun)
 	if err != nil {
-		return fmt.Errorf("register runtime timer: %w", err)
+		return fmt.Errorf("register Controller timer: %w", err)
 	}
 
 	// initialize replay reader
 	err = r.reader.Init(
 		log,
-		ctx.Bot.TicksPath,
+		replayInput.TicksPath,
 		start,
 		end,
 	)
@@ -95,26 +128,50 @@ func (r *BtRunner) Init(log *logging.Logger, sweepID, botID uint64) error {
 		return fmt.Errorf("initialize replay reader: %w", err)
 	}
 
-	// initialize runtime
-	err = r.runtime.Init(log, ctx, end)
+	// build exact BotSpec
+	var definition = botspec.BuildInput{
+		Bot:  admission.Bot,
+		Meta: admission.Meta,
+		MinNotionalUSDC: decimal.NewFromInt(
+			int64(admission.App.Hyperliquid.MinOrderNotionalUSDC),
+		),
+		ResultPath: admission.ResultPath,
+	}
+	var builtDefinition, buildErr = botspec.Build(log, definition)
+	if buildErr != nil {
+		return fmt.Errorf("build BotSpec: %w", buildErr)
+	}
+
+	// initialize Controller
+	err = r.controller.Init(log, builtDefinition)
 	if err != nil {
-		return fmt.Errorf("initialize runtime: %w", err)
+		builtDefinition.Signaler.Stop()
+		for index := len(builtDefinition.Risks) - 1; index >= 0; index-- {
+			builtDefinition.Risks[index].Stop()
+		}
+		return fmt.Errorf("initialize Controller: %w", err)
 	}
 
 	// create proof
 	r.stats = stats{
 		ticksExpected: durationMS / 1000,
-		runsExpected: (durationMS + ctx.Config.BtRunner.TimerIntervalMS - 1) /
-			ctx.Config.BtRunner.TimerIntervalMS,
+		runsExpected: (durationMS + admission.App.BtRunner.TimerIntervalMS - 1) /
+			admission.App.BtRunner.TimerIntervalMS,
 		expectedFirstMS: startMS + 1000,
 		expectedLastMS:  endMS,
 	}
 
-	log.Info(fmt.Sprintf("btrunner initialized: symbol=%s", ctx.Bot.Symbol))
+	r.symbol = replayInput.Symbol
+	r.resultPath = admission.ResultPath
+	log.Info(fmt.Sprintf(
+		"btrunner initialized bot_spec=%s symbol=%s",
+		admission.Bot.BotSpecID,
+		r.symbol,
+	))
 	return nil
 }
 
-// Start starts the owned Clock and Runtime.
+// Start starts the owned Clock and Controller.
 func (r *BtRunner) Start() error {
 	if r.started || r.stopped {
 		return fmt.Errorf("btrunner cannot start from current state")
@@ -126,11 +183,11 @@ func (r *BtRunner) Start() error {
 		return fmt.Errorf("start clock: %w", err)
 	}
 
-	// start runtime
-	err = r.runtime.Start()
+	// start Controller
+	err = r.controller.Start()
 	if err != nil {
 		r.clock.Stop()
-		return fmt.Errorf("start runtime: %w", err)
+		return fmt.Errorf("start Controller: %w", err)
 	}
 	r.started = true
 	r.log.Info("btrunner started")
@@ -157,10 +214,11 @@ func (r *BtRunner) Loop() error {
 			break
 		}
 
-		// ingest runtime bbo
-		err = r.runtime.IngestBBO(bbo)
+		// ingest Controller BBO
+		bbo.Symbol = r.symbol
+		err = r.controller.IngestBBO(bbo)
 		if err != nil {
-			return fmt.Errorf("ingest runtime bbo: %w", err)
+			return fmt.Errorf("ingest Controller BBO: %w", err)
 		}
 
 		// record proof
@@ -207,24 +265,40 @@ func (r *BtRunner) Stop() error {
 		readerErr = fmt.Errorf("stop replay reader: %w", readerErr)
 	}
 
-	// stop runtime
-	var runtimeErr = r.runtime.Stop("parent_stop")
-	if runtimeErr != nil {
-		runtimeErr = fmt.Errorf("stop runtime: %w", runtimeErr)
+	// stop Controller
+	var controllerErr = r.controller.Stop("parent_stop")
+	if controllerErr != nil {
+		controllerErr = fmt.Errorf("stop Controller: %w", controllerErr)
 	}
 
 	// publish completed result
 	var publishErr error
-	if readerErr == nil && runtimeErr == nil && r.stats.replayCompleted {
-		publishErr = resultpublisher.Publish(r.runtime.Result())
+	if readerErr == nil && controllerErr == nil && r.stats.replayCompleted {
+		publishErr = resultpublisher.Publish(
+			r.resultPath,
+			r.controller.Result(),
+			resultpublisher.ReplayProof{
+				Symbol:        r.symbol,
+				TicksExpected: r.stats.ticksExpected,
+				TicksServed:   r.stats.ticksServed,
+				RunsExpected:  r.stats.runsExpected,
+				RunsTriggered: r.stats.runsTriggered,
+				FirstMS:       r.stats.firstMS,
+				LastMS:        r.stats.lastMS,
+				ReplayMS:      r.stats.elapsed.Milliseconds(),
+				Completed:     r.stats.replayCompleted,
+			},
+		)
 		if publishErr != nil {
 			publishErr = fmt.Errorf("publish result: %w", publishErr)
+		} else {
+			r.published = true
 		}
 	}
 
 	// report proof
 	var result = "failed"
-	if readerErr == nil && runtimeErr == nil && publishErr == nil &&
+	if readerErr == nil && controllerErr == nil && publishErr == nil &&
 		r.stats.replayCompleted {
 		result = "complete"
 	}
@@ -251,8 +325,8 @@ func (r *BtRunner) Stop() error {
 	))
 
 	// return stop errors
-	if runtimeErr != nil {
-		return runtimeErr
+	if controllerErr != nil {
+		return controllerErr
 	}
 	if readerErr != nil {
 		return readerErr
@@ -269,18 +343,40 @@ func (r *BtRunner) Stop() error {
 
 // Section 2 - Domain Helpers
 
-func (r *BtRunner) runtimeRun(nowMS uint64) error {
-	// run runtime
+func (r *BtRunner) controllerRun(nowMS uint64) error {
+	// run Controller
 	r.stats.runsTriggered++
-	var stop, err = r.runtime.Run(nowMS)
+	var stop, err = r.controller.Run(nowMS)
 	if err != nil {
-		return fmt.Errorf("run runtime: %w", err)
+		return fmt.Errorf("run Controller: %w", err)
 	}
 	// remember stop request
 	if stop {
 		r.stopRequested = true
 	}
 	return nil
+}
+
+// Result returns one complete terminal backtest result.
+func (r *BtRunner) Result() (Result, error) {
+	if !r.stopped || !r.stats.replayCompleted {
+		return Result{}, fmt.Errorf("btrunner result is unavailable")
+	}
+	return Result{
+		Controller: r.controller.Result(),
+		Replay: ReplayResult{
+			Symbol:        r.symbol,
+			TicksExpected: r.stats.ticksExpected,
+			TicksServed:   r.stats.ticksServed,
+			RunsExpected:  r.stats.runsExpected,
+			RunsTriggered: r.stats.runsTriggered,
+			FirstMS:       r.stats.firstMS,
+			LastMS:        r.stats.lastMS,
+			ReplayMS:      r.stats.elapsed.Milliseconds(),
+			Completed:     r.stats.replayCompleted,
+			Published:     r.published,
+		},
+	}, nil
 }
 
 func (r *BtRunner) verify() error {

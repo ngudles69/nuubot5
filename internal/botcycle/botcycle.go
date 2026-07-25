@@ -7,10 +7,8 @@ import (
 	"github.com/shopspring/decimal"
 
 	"nuubot/internal/account"
-	"nuubot/internal/config"
 	"nuubot/internal/executor"
 	"nuubot/internal/market"
-	"nuubot/internal/meta"
 	"nuubot/internal/signaler"
 	"nuubot/internal/toolkit/logging"
 )
@@ -20,16 +18,14 @@ var ErrRejected = errors.New("bot cycle rejected")
 
 // Inputs contains approved Executor inputs owned above BotCycle.
 type Inputs struct {
-	LatestBBO   market.BBO
-	Meta        meta.Instrument
-	MinNotional decimal.Decimal
-	ResultPath  string
+	LatestBBOs     map[string]market.BBO
+	ResourceEquity map[executor.Resource]decimal.Decimal
 }
 
 // Result contains one immutable terminal BotCycle result.
 type Result struct {
 	CycleNumber int
-	Accounts    []account.Result
+	Executors   []executor.Result
 }
 
 // Control owns one active BotCycle and its Executors.
@@ -54,29 +50,25 @@ type Control struct {
 func (c *Control) Init(
 	log *logging.Logger,
 	number int,
-	signals signaler.Signaler,
 	signal signaler.Package,
 	inputs Inputs,
-	configs []config.Executor,
+	specs []executor.Spec,
 ) error {
 	c.log = log
 	c.number = number
 	c.signal = signal
 
 	// create executors
-	c.executors = make([]executor.Executor, 0, len(configs))
-	for index, cfg := range configs {
+	c.executors = make([]executor.Executor, 0, len(specs))
+	for index, spec := range specs {
 		var created, err = executor.Create(executor.Context{
-			Log:            log,
-			CycleNumber:    number,
-			ExecutorNumber: index + 1,
-			Signaler:       signals,
-			Signal:         signal,
-			Config:         cfg,
-			LatestBBO:      inputs.LatestBBO,
-			Meta:           inputs.Meta,
-			MinNotional:    inputs.MinNotional,
-			ResultPath:     inputs.ResultPath,
+			Log:                log,
+			CycleNumber:        number,
+			ExecutorNumber:     index + 1,
+			SignalTimestampMS:  signal.TimestampMS(),
+			Spec:               spec,
+			LatestBBO:          inputs.LatestBBOs[spec.Resource.Symbol],
+			StartingEquityUSDC: inputs.ResourceEquity[spec.Resource],
 		})
 		if err != nil {
 			var reason = "init_error"
@@ -100,14 +92,10 @@ func (c *Control) Init(
 
 	// initialize botcycle
 	c.running = true
-	var side = signaler.Short
-	if signal.EnterLong() {
-		side = signaler.Long
-	}
 	log.Info(fmt.Sprintf(
-		"bot cycle initialized cycle=%d side=%s signal_ts_ms=%d",
+		"bot cycle initialized cycle=%d action=%s signal_ts_ms=%d",
 		number,
-		side,
+		signal.Action(),
 		signal.TimestampMS(),
 	))
 	return nil
@@ -120,16 +108,17 @@ func (c *Control) Run(_ uint64) (bool, error) {
 	}
 	c.runs++
 
-	// check completion
-	c.completed = true
-	for _, activeExecutor := range c.executors {
+	// check coordinated completion
+	for index, activeExecutor := range c.executors {
 		switch activeExecutor.Status() {
-		case executor.Stopping, executor.Stopped, executor.Error:
-		default:
-			c.completed = false
+		case executor.Error:
+			return false, fmt.Errorf("executor %d entered error state", index+1)
+		case executor.Stopping, executor.Stopped:
+			c.completed = true
+			return true, nil
 		}
 	}
-	return c.completed, nil
+	return false, nil
 }
 
 // Stop stops Executors in reverse ownership order.
@@ -142,19 +131,15 @@ func (c *Control) Stop(reason string) (string, error) {
 	// stop executors
 	var firstErr = c.stopExecutors(reason)
 
-	// collect cached Account results
+	// collect immutable Executor results
 	for index, activeExecutor := range c.executors {
-		var provider, supported = activeExecutor.(executor.AccountResultProvider)
-		if !supported {
-			continue
-		}
-		var result, err = provider.AccountResult()
+		var result, err = activeExecutor.Result()
 		if err != nil && firstErr == nil {
-			firstErr = fmt.Errorf("collect executor %d Account result: %w", index+1, err)
+			firstErr = fmt.Errorf("collect Executor %d result: %w", index+1, err)
 			continue
 		}
 		if err == nil {
-			c.result.Accounts = append(c.result.Accounts, result.Clone())
+			c.result.Executors = append(c.result.Executors, result.Clone())
 		}
 	}
 	c.result.CycleNumber = c.number
@@ -232,8 +217,8 @@ func (c *Control) OnRecon(nowMS uint64) error {
 // Result returns one independently owned terminal BotCycle result.
 func (c *Control) Result() Result {
 	var result = Result{CycleNumber: c.result.CycleNumber}
-	for _, current := range c.result.Accounts {
-		result.Accounts = append(result.Accounts, current.Clone())
+	for _, current := range c.result.Executors {
+		result.Executors = append(result.Executors, current.Clone())
 	}
 	return result
 }

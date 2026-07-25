@@ -7,7 +7,6 @@ import (
 	"sort"
 	"time"
 
-	"nuubot/internal/config"
 	"nuubot/internal/ohlcv"
 	"nuubot/internal/toolkit/logging"
 )
@@ -17,14 +16,20 @@ const (
 	Short = "short"
 )
 
+// Action reports the current Controller lifecycle request.
+type Action string
+
+const (
+	NoAction   Action = "no_action"
+	StartCycle Action = "start_cycle"
+	StopCycle  Action = "stop_cycle"
+)
+
 // Package contains one immutable, timestamped Signal result.
 type Package struct {
 	symbol       string
 	timestampMS  uint64
-	enterLong    bool
-	enterShort   bool
-	closeLong    bool
-	closeShort   bool
+	action       Action
 	regime       string
 	riskScore    float64
 	customFields map[string]any
@@ -40,6 +45,18 @@ type Series struct {
 	PriorRows int
 }
 
+// Config contains one admitted Signaler definition.
+type Config struct {
+	Kind            string
+	SignalTimeframe string
+	RegimeTimeframe string
+	FastMA          int
+	SlowMA          int
+	RSIPeriod       int
+	RegimeEMA       int
+	VolumePeriod    int
+}
+
 // Signaler exposes passive Signal history.
 type Signaler interface {
 	Signals(string, uint64, int) []Package
@@ -48,7 +65,7 @@ type Signaler interface {
 
 type implementation interface {
 	Signaler
-	Init(*logging.Logger, config.Signaler, string, string, time.Time, time.Time) error
+	Init(*logging.Logger, Config, string, string, time.Time, time.Time) error
 }
 
 type signalerState struct {
@@ -64,7 +81,7 @@ type signalerState struct {
 // Create selects and initializes the configured Signaler.
 func Create(
 	log *logging.Logger,
-	cfg config.Signaler,
+	cfg Config,
 	symbol string,
 	source string,
 	start time.Time,
@@ -93,10 +110,7 @@ func Create(
 func CreatePackage(
 	symbol string,
 	timestampMS uint64,
-	enterLong bool,
-	enterShort bool,
-	closeLong bool,
-	closeShort bool,
+	action Action,
 	regime string,
 	riskScore float64,
 	custom map[string]any,
@@ -105,8 +119,8 @@ func CreatePackage(
 	if symbol == "" || timestampMS == 0 {
 		return Package{}, fmt.Errorf("signal package requires symbol and timestamp")
 	}
-	if enterLong && enterShort {
-		return Package{}, fmt.Errorf("signal package cannot enter long and short")
+	if action != NoAction && action != StartCycle && action != StopCycle {
+		return Package{}, fmt.Errorf("signal package has invalid action: %s", action)
 	}
 	if math.IsNaN(riskScore) || math.IsInf(riskScore, 0) ||
 		riskScore < 0 || riskScore > 100 {
@@ -117,8 +131,7 @@ func CreatePackage(
 	var customFields = make(map[string]any, len(custom))
 	for name, value := range custom {
 		switch name {
-		case "symbol", "timestamp_ms", "enter_long", "enter_short",
-			"close_long", "close_short", "regime", "risk_score":
+		case "symbol", "timestamp_ms", "action", "regime", "risk_score":
 			return Package{}, fmt.Errorf("signal package custom field is reserved: %s", name)
 		}
 		customFields[name] = value
@@ -128,10 +141,7 @@ func CreatePackage(
 	return Package{
 		symbol:       symbol,
 		timestampMS:  timestampMS,
-		enterLong:    enterLong,
-		enterShort:   enterShort,
-		closeLong:    closeLong,
-		closeShort:   closeShort,
+		action:       action,
 		regime:       regime,
 		riskScore:    riskScore,
 		customFields: customFields,
@@ -172,10 +182,7 @@ func (p Package) MarshalJSON() ([]byte, error) {
 	var fields = map[string]any{
 		"symbol":       p.symbol,
 		"timestamp_ms": p.timestampMS,
-		"enter_long":   p.enterLong,
-		"enter_short":  p.enterShort,
-		"close_long":   p.closeLong,
-		"close_short":  p.closeShort,
+		"action":       p.action,
 		"regime":       p.regime,
 		"risk_score":   p.riskScore,
 	}
@@ -195,27 +202,14 @@ func (p Package) TimestampMS() uint64 {
 	return p.timestampMS
 }
 
-// EnterLong reports the standard long-entry trigger.
-func (p Package) EnterLong() bool {
-	return p.enterLong
-}
-
-// EnterShort reports the standard short-entry trigger.
-func (p Package) EnterShort() bool {
-	return p.enterShort
+// Action returns the current Controller lifecycle request.
+func (p Package) Action() Action {
+	return p.action
 }
 
 // Bool returns one Boolean field.
 func (p Package) Bool(name string) (bool, bool) {
 	switch name {
-	case "enter_long":
-		return p.enterLong, true
-	case "enter_short":
-		return p.enterShort, true
-	case "close_long":
-		return p.closeLong, true
-	case "close_short":
-		return p.closeShort, true
 	default:
 		var value, ok = p.customFields[name].(bool)
 		return value, ok
@@ -240,6 +234,8 @@ func (p Package) Text(name string) (string, bool) {
 	switch name {
 	case "symbol":
 		return p.symbol, true
+	case "action":
+		return string(p.action), true
 	case "regime":
 		return p.regime, true
 	default:

@@ -1,6 +1,6 @@
 # BalancedRisk
 
-Status: Stub.
+Status: Implemented placeholder.
 Covers: `internal/risk/balanced.go`
 Purpose: Prove the configured Risk call path without requesting an exit.
 
@@ -11,18 +11,18 @@ Purpose: Prove the configured Risk call path without requesting an exit.
 
 ## Scope
 
-BalancedRisk counts Runtime runs and always declines a stop request.
+BalancedRisk counts assessments and always returns `Allow`.
 
 ## Owner and Children
 
-Runtime owns BalancedRisk through the Risk interface.
+Controller owns BalancedRisk through the Risk interface.
 
 BalancedRisk owns no child.
 
 ## Responsibilities
 
 - Count assessment calls.
-- Return `false`.
+- Return `Allow`.
 - Report assessments and zero requested exits once.
 
 ## Does Not
@@ -39,15 +39,15 @@ Create, run repeatedly, then stop once.
 
 ## Inputs and Outputs
 
-Input is one Runtime Run call.
+Input is one immutable `RiskInput`.
 
-Output is always `false`.
+Output is always `Allow`.
 
 ## State and Invariants
 
-Exit requests MUST remain zero while this object is a stub.
+Exit decisions MUST remain zero while this object is a placeholder.
 
-Assessment count MUST match Runtime Run calls reaching it.
+Assessment count MUST match Controller assessments reaching it.
 
 ## Concurrency
 
@@ -67,8 +67,9 @@ Current construction, assessment, and stop paths return no error.
 createBalanced
   create risk
 
-Run
+Assess
   record assessment
+  return Allow
 
 Stop
   stop risk
@@ -76,7 +77,7 @@ Stop
 
 ## Required Proof
 
-- Every assessment returns false.
+- Every assessment returns Allow.
 - Assessment count increments once per call.
 - Repeated stop reports once.
 - Logs prove assessment count and zero requested exits.

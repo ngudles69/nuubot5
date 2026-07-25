@@ -2,7 +2,7 @@
 
 Status: Implemented.
 Covers: `internal/account/account.go`
-Purpose: Carry one Account's coherent post-recon state into Runtime and Risk without exposing mutable Account ownership.
+Purpose: Carry one Account's coherent post-recon state into Controller and Risk without exposing mutable Account ownership.
 
 ## Canonical Sources
 
@@ -21,11 +21,11 @@ D:\rust\nuutrader6\src\nuubot\hcbots\account.py
 
 ## Scope
 
-AccountSnapshot is an owned value containing only reconciled facts required by Runtime and Risk.
+AccountSnapshot is an owned value containing only reconciled facts required by Controller and Risk.
 
 ## Owner and Children
 
-Account creates the value. Runtime receives it through Executor and BotCycle.
+Account creates the value. Controller receives it through Executor and BotCycle.
 
 AccountSnapshot owns no mutable domain children.
 
@@ -35,7 +35,7 @@ It is not terminal Ledger or Simulator evidence.
 
 - Preserve Account identity and observation time.
 - Carry one successful recon result.
-- Remain valid for one Runtime control pass.
+- Remain valid for one Controller pass.
 
 ## Does Not
 
@@ -53,7 +53,7 @@ Account creates one snapshot after successful recon. Risk reads it during one co
 
 Input is coherent reconciled Ledger and Venue account state.
 
-Output is one immutable-by-contract value for Runtime and Risk.
+Output is one immutable-by-contract value for Controller and Risk.
 
 ## State and Invariants
 
@@ -68,6 +68,7 @@ Output is one immutable-by-contract value for Runtime and Risk.
 | `cycle_no` | Owning BotCycle number |
 | `executor_no` | Owning Executor number |
 | `account_name` | Configured non-secret Account identity |
+| `venue` | Exact Venue identity |
 | `network` | Mainnet, testnet, or simnet |
 | `symbol` | Reconciled instrument |
 | `observed_ms` | Completed reconciliation observation time |
@@ -107,15 +108,15 @@ Snapshot creation MUST fail when required reconciled facts are missing or incons
 Account reconciles Venue into Ledger
 Account creates AccountSnapshot
 Executor returns one snapshot through BotCycle
-Runtime passes snapshots to Risk
+Controller passes snapshots to Risk
 ```
 
-Runtime MUST NOT retain or own Accounts.
+Controller MUST NOT retain or own Accounts.
 
 ## Required Proof
 
 - Successful recon produces the expected snapshot.
 - Failed recon produces no snapshot.
-- Runtime and Risk receive values without Account references.
+- Controller and Risk receive values without Account references.
 
-Nuubot3's Runtime-owned Account list is rejected.
+Nuubot3's Controller-owned Account list is rejected.

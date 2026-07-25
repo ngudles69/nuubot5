@@ -1,113 +1,42 @@
-# Replay Process
+# Replay
 
-Status: Implemented.
-Covers: `internal/btrunner/btrunner.go`, `internal/replay/*.go`, `internal/runtime/runtime.go`
-Purpose: Drive one exact historical market sequence through the canonical Runtime path.
+Status: Implemented for one symbol-qualified historical stream.
+Covers: `internal/btrunner`, `internal/replay`, `internal/controller`
+Purpose: Drive one exact historical market sequence through Controller.
 
-## Canonical Sources
-
-- Nuubot4: `D:/rust/nuubot4/src/btrunner.rs`
-- Nuubot4: `D:/rust/nuubot4/src/replay.rs`
-- Nuubot4 contract: `D:/rust/nuubot4/wiki/logic/btrunner.md`
-
-## Participants
-
-- BtRunner owns orchestration and proof.
-- OHLCV owns Parquet decoding and row admission.
-- Replay Reader owns BBO conversion and iteration.
-- TickClock owns registered timer mechanics.
-- BtRunner owns the Runtime timer callback.
-- Runtime owns Bot decisions and stop.
-
-## Preconditions
-
-- Configuration and Bot specification are valid.
-- Market paths remain inside shared data.
-- Required OHLCV files exist.
-- Runtime OHLCV and Signals are prepared.
-- BtRunner and Runtime are started.
-- Replay starts at `BotSpec.ReplayStart`.
-
-`BotSpec.StartAt` may exist, but current BtRunner intentionally ignores it.
-
-## Ordered Flow
+## Flow
 
 ```text
-initialize Reader and OHLCV at ReplayStart
-open one streaming 1s OHLCV reader
-read one BBO
-send BBO to Runtime
-record tick evidence
-advance TickClock
-TickClock invokes the registered Runtime callback when scheduled
-when Runtime requests stop
-  end replay
-when Reader completes
-verify count, runs, and range
-stop BtRunner
-  stop Runtime
-    close any active BotCycle
+read validated one-second row
+create BBO
+attach ReplayInput symbol
+Controller.IngestBBO
+TickClock.Advance
+registered Controller timer runs
 ```
 
-## Decisions
+Reader exhaustion is normal completion.
 
-Reader decides whether decoded data is admissible.
+BtRunner then verifies exact tick count, control-pass count, first timestamp,
+and last timestamp.
 
-TickClock decides when its registered timers run.
+Controller stop never bypasses replay proof.
 
-BtRunner decides that the timer callback runs Runtime.
+## Ordering
 
-Runtime decides Signal acceptance, cycle lifecycle, and graceful stop.
+The current path has one stream, so file order is canonical.
 
-BtRunner decides whether replay evidence is exact.
+Each BBO is admitted before timers at the same timestamp.
 
-## State Changes
+Signaler calculations use closed OHLCV bars only.
 
-Reader advances file, batch, and row positions.
+Deterministic multi-source merging and equal-timestamp ordering remain
+deferred.
 
-BtRunner records served ticks, triggered Runtime runs, and replay boundaries.
+## Current Proof
 
-Runtime updates Signals, cycles, and stop state.
-
-`StartAt` causes no replay state change.
-
-## Failure Handling
-
-Any decode, validation, child, lifecycle, or verification error terminates `Run`.
-
-The command still calls BtRunner `Stop` after a successful `Start`.
-
-Malformed data MUST NOT be skipped, repaired, or accepted.
-
-## Recovery
-
-Replay has no in-process retry.
-
-Restart creates a fresh process and replays from the beginning.
-
-## Completion
-
-Completion requires exact expected ticks, runs, first timestamp, last timestamp, successful child teardown, and semantic terminal statistics.
-
-Exit zero alone is insufficient.
-
-## Does Not
-
-- Persist checkpoints.
-- Resume partial replay.
-- Model exchange execution.
-- Read live feeds.
-- Bypass Runtime.
-
-## Required Proof
-
-- Sweep 6 Bot 9 serves 7,948,800 ticks.
-- TickClock triggers 794,880 Runtime runs.
-- Runtime reads 2,207 packages and observes 55 entry triggers.
-- Runtime starts and closes 18 cycles with 17 stop-loss exits.
-- Reader and BtRunner ranges match expected boundaries.
-- Canonical `noasm` stability gate passes.
-
-## Open Decisions
-
-No alternate replay loader is approved.
+- 7,948,800 one-second BBO values.
+- 794,880 Controller passes.
+- 2,207 Macross packages.
+- Sweep 6 Bot 9: 64 cycles and 17 stop-loss exits.
+- Sweep 9 Bot 13: full TradeBot Account, Ledger, Simulator, and Result proof.

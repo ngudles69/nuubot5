@@ -207,7 +207,8 @@ Account receives `persist_mode` and passes it to Ledger and Simulator.
 
 `max` currently proves durable Ledger and Simulator child-state reload.
 
-Full Bot resume requires Runner, replay, Runtime, Signaler, and TradeExecutor cursor ownership.
+Full Bot resume requires Runner, replay, Controller, Signaler, and
+TradeExecutor cursor ownership.
 
 TradeExecutor rejects persisted Trades until that recovery path exists.
 

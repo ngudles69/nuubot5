@@ -5,7 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	"nuubot/internal/config"
+	"github.com/shopspring/decimal"
+
+	"nuubot/internal/executor"
 	"nuubot/internal/market"
 	"nuubot/internal/signaler"
 	"nuubot/internal/toolkit/logging"
@@ -19,10 +21,15 @@ func TestBotCycleDispatchesObserverBBO(t *testing.T) {
 	var err = cycle.Init(
 		logging.Create(&bytes.Buffer{}),
 		1,
-		nil,
 		signal,
-		Inputs{},
-		[]config.Executor{{Kind: "observer", StopLossPct: "0.01"}},
+		Inputs{LatestBBOs: map[string]market.BBO{
+			"BTC": {TimestampMS: 2_000, Price: 100},
+		}},
+		[]executor.Spec{{
+			ID: "observer", Kind: "observer", Side: executor.Long,
+			Resource:    executor.Resource{Symbol: "BTC"},
+			StopLossPct: decimal.RequireFromString("0.01"),
+		}},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -61,10 +68,13 @@ func TestBotCycleReturnsAdmissionRejection(t *testing.T) {
 	var err = cycle.Init(
 		logging.Create(&bytes.Buffer{}),
 		1,
-		nil,
 		signal,
 		Inputs{},
-		[]config.Executor{{Kind: "observer", StopLossPct: "0.01"}},
+		[]executor.Spec{{
+			ID: "observer", Kind: "observer", Side: "both",
+			Resource:    executor.Resource{Symbol: "BTC"},
+			StopLossPct: decimal.RequireFromString("0.01"),
+		}},
 	)
 	if !errors.Is(err, ErrRejected) {
 		t.Fatalf("actual error %v, expected admission rejection", err)
@@ -73,15 +83,16 @@ func TestBotCycleReturnsAdmissionRejection(t *testing.T) {
 
 // Section 2 - Domain Helpers
 
-func cycleSignal(t *testing.T, enterLong bool) signaler.Package {
+func cycleSignal(t *testing.T, start bool) signaler.Package {
 	t.Helper()
+	var action = signaler.NoAction
+	if start {
+		action = signaler.StartCycle
+	}
 	var signal, err = signaler.CreatePackage(
 		"BTC",
 		2_000,
-		enterLong,
-		false,
-		false,
-		false,
+		action,
 		"bull",
 		0,
 		map[string]any{"signal_price": 100.0},

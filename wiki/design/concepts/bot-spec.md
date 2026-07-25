@@ -1,7 +1,8 @@
 # BotSpec
 
-Status: Approved target design. Not implemented.
-Covers: Future exact BotSpec catalogue, BotConfig admission, BotDefinition, and BotGeneration.
+Status: Implemented for the Macross Observer and TradeBot replay slice.
+Covers: `internal/bot`, `internal/botspec`, stored BotConfig admission, and
+BotDefinition.
 Purpose: Define one complete configurable Bot architecture without runtime mix-and-match behavior.
 
 ## Meaning
@@ -128,7 +129,12 @@ Start strictly decodes the saved TOML through the exact BotSpec.
 
 Controller receives the resulting typed BotDefinition.
 
-Runtime code never rereads the original TOML file.
+Execution code never rereads the original TOML file.
+
+Implemented exact IDs are:
+
+- `macross_observer_bot`;
+- `macross_trade_bot`.
 
 Changing or deleting the import file changes nothing after saving.
 
@@ -150,6 +156,7 @@ It contains:
 - Account references.
 - Required market and metadata inputs.
 - Exactly one active BotCycle rule.
+- Configured total sequential cycle limit, such as `max_cycles = 999`.
 - BotCycle coordination rules.
 
 It contains no database handle.

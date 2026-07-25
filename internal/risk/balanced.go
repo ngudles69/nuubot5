@@ -21,10 +21,10 @@ func createBalanced(log *logging.Logger, number int) *balanced {
 	return &balanced{log: log, number: number}
 }
 
-func (r *balanced) AssessStop() bool {
+func (r *balanced) Assess(_ Input) Decision {
 	// record assessment
 	r.assessments++
-	return false
+	return Allow
 }
 
 func (r *balanced) Stop() {

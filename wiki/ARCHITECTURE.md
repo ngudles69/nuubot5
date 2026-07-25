@@ -18,7 +18,7 @@ This page owns system layers, ownership, flows, concurrency, persistence, and de
 
 ## Approved Target Bot Architecture
 
-Status: Approved design. Not implemented.
+Status: Implemented for standalone historical replay.
 
 One configured Bot selects one exact compiled BotSpec and stores its exact
 BotConfig TOML in the database.
@@ -78,7 +78,7 @@ BotCycle completes only after Stop and authoritative proof of zero active Orders
 and zero positions for every used Account-symbol.
 
 See [BotSpec](design/concepts/bot-spec.md),
-[Runtime and approved Controller hardcut](design/packages/runtime.md),
+[Controller](design/packages/controller.md),
 [Signaler](design/packages/signaler.md), [Risk](design/packages/risk.md), and
 [BotCycle](design/packages/botcycle.md).
 
@@ -89,43 +89,32 @@ command
 `-- BtRunner
     |-- ReplayReader
     |-- TickClock
-    `-- Runtime
+    `-- Controller
         |-- Signaler
-        |   `-- MacrossSignaler or RsiSignaler
+        |   `-- Macross or RSI
         |-- Risks
         `-- active BotCycle
             `-- Executors
-                `-- ObserverExecutor
+                |-- ObserverExecutor
+                `-- TradeExecutor
+                    `-- Account
+                        |-- Simulator
+                        `-- Ledger
 ```
 
 BtRunner owns historical orchestration and exact replay proof.
 
 ReplayReader validates Parquet values before returning BBO values.
 
-TickClock invokes BtRunner's registered Runtime callback from replay timestamps.
+TickClock invokes BtRunner's registered Controller callback from replay
+timestamps.
 
-Runtime owns signals, risk checks, BotCycle decisions, and graceful shutdown.
+Controller owns Signal, Risk, BotCycle, capital, drawdown, and graceful
+shutdown decisions.
 
 BotCycle coordinates Executors. Executor implementations own execution policy.
 
-BalancedRisk is a stub. ObserverExecutor observes BBO values and records simulated exits.
-
-## Proposed BtRunner Trading Slice
-
-This architecture is designed but unimplemented.
-
-```text
-BtRunner
-`-- Runtime
-    `-- active BotCycle
-        `-- TradeExecutor
-            `-- Account
-                |-- Simulator
-                `-- Ledger
-                    `-- Trades
-                        `-- Orders
-                            `-- Fills
-```
+BalancedRisk remains a non-protective stub.
 
 Simulator produces Hyperliquid-shaped Venue truth.
 
@@ -176,17 +165,18 @@ BtRunner init
   load BotSpec
   resolve replay end
   create and initialize TickClock
-  register Runtime timer
+  register Controller timer
   initialize Reader
-  create and initialize Runtime
+  build exact BotSpec
+  create and initialize Controller
   calculate expected proof
 
 BtRunner loop
   read one validated BBO
-  send BBO to Runtime
+  qualify and send BBO to Controller
   advance TickClock
-  registered timer callback runs Runtime
-  stop at Reader exhaustion or Runtime request
+  registered timer callback runs Controller
+  stop at Reader exhaustion or Controller request
   verify exact replay
 ```
 
@@ -292,7 +282,7 @@ Current BtRunner reads Bot configuration from SQLite and market data from Parque
 Earlier live persistence planning separates:
 
 - ProcessStore for process and manager state.
-- RuntimeStore for Controller, BotCycle, and Executor records.
+- Candidate ControllerStore for Controller, BotCycle, and Executor records.
 - Account persistence for Ledger, Trade, Order, and Fill evidence.
 - Simulator persistence for venue-shaped simulated state.
 

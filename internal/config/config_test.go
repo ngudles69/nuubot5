@@ -11,12 +11,12 @@ import (
 
 func TestLoadIsIdempotent(t *testing.T) {
 	var path = filepath.Join("..", "..", "workspace", "config", "config.toml")
-	var first, err = Load(path)
+	var first, err = LoadApp(path)
 	if err != nil {
 		t.Fatalf("first load failed: %v", err)
 	}
-	var second Config
-	second, err = Load(path)
+	var second App
+	second, err = LoadApp(path)
 	if err != nil {
 		t.Fatalf("second load failed: %v", err)
 	}

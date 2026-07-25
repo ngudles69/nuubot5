@@ -1,8 +1,8 @@
-# RuntimeStore
+# ControllerStore
 
 Status: Candidate only. Ownership and scope TBD.
 Covers: No implemented source.
-Purpose: Retain the earlier RuntimeStore candidate without approving recovery,
+Purpose: Retain the earlier ControllerStore candidate without approving recovery,
 telemetry persistence, or standalone datastore ownership.
 
 ## Canonical Sources
@@ -56,7 +56,7 @@ Possible responsibilities requiring later approval:
 
 ## Open Decisions
 
-- Whether RuntimeStore exists.
+- Whether ControllerStore exists.
 - Standalone Runner datastore ownership and writes.
 - Recovery state and policy.
 - Telemetry schema, cadence, and persistence.

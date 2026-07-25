@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -46,7 +47,7 @@ func main() {
 	var runner btrunner.BtRunner
 
 	// initialize btrunner
-	err = runner.Init(log, sweepID, botID)
+	err = runner.Init(context.Background(), log, sweepID, botID)
 	if err != nil {
 		log.Error(fmt.Sprintf("btrunner.Init() failed: %v", err))
 		os.Exit(1)

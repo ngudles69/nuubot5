@@ -6,6 +6,7 @@ import (
 )
 
 type BBO struct {
+	Symbol      string
 	TimestampMS uint64
 	Price       float64
 }

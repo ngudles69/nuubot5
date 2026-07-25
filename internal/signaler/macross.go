@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"nuubot/internal/config"
 	"nuubot/internal/ohlcv"
 	"nuubot/internal/toolkit/logging"
 )
@@ -23,7 +22,7 @@ type macross struct {
 // Init prepares Macross and its complete Signal history.
 func (m *macross) Init(
 	log *logging.Logger,
-	cfg config.Signaler,
+	cfg Config,
 	symbol string,
 	source string,
 	start time.Time,
@@ -116,23 +115,20 @@ func (m *macross) Calculate(symbol string, loaded []Series) ([]Package, error) {
 			regimeName = "bear"
 		}
 
-		var enterLong bool
-		var enterShort bool
-		if ready[row] && row > 0 && row+1 >= m.slowPeriod {
-			var previous = fast[row-1] - slow[row-1]
-			var current = fast[row] - slow[row]
-			enterLong = previous <= 0 && current > 0 && regimeName == "bull"
-			enterShort = previous >= 0 && current < 0 && regimeName == "bear"
+		var action = NoAction
+		if ready[row] && row+1 >= m.slowPeriod {
+			if fast[row] > slow[row] && regimeName == "bull" {
+				action = StartCycle
+			} else {
+				action = StopCycle
+			}
 		}
 
 		var signalPackage Package
 		signalPackage, err = CreatePackage(
 			symbol,
 			signalBars.StartMS[row+1],
-			enterLong,
-			enterShort,
-			false,
-			false,
+			action,
 			regimeName,
 			0,
 			map[string]any{
@@ -151,7 +147,7 @@ func (m *macross) Calculate(symbol string, loaded []Series) ([]Package, error) {
 	return packages, nil
 }
 
-func (m *macross) configure(cfg config.Signaler) error {
+func (m *macross) configure(cfg Config) error {
 	// parse intervals
 	var signalInterval, err = ohlcv.ParseInterval(cfg.SignalTimeframe)
 	if err != nil {

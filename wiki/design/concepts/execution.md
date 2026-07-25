@@ -13,9 +13,9 @@ Recon remains a separate preceding process.
 ## Canonical Flow
 
 ```text
-Runtime completes recon
-Runtime evaluates Risk
-Runtime delivers successful recon event
+Controller completes recon
+Controller evaluates Risk
+Controller delivers successful recon event
 Executor chooses one action
 Executor calls its Account
 Account validates the complete batch
@@ -85,7 +85,7 @@ Only successful reconciliation commits canonical Order, Fill, position, and bala
 
 ## Shutdown Execution
 
-User stop and parent stop MUST use the same graceful Runtime stop path.
+User stop and parent stop MUST use the same graceful Controller stop path.
 
 An active BotCycle MUST close through its Executors and Accounts.
 

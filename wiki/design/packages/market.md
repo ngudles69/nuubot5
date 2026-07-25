@@ -2,7 +2,8 @@
 
 Status: Implemented.
 Covers: `internal/market/market.go`
-Purpose: Carry one admitted best-price market event across the replay and Runtime boundary.
+Purpose: Carry one admitted symbol-qualified best-price market event across the
+replay and Controller boundary.
 
 ## Canonical Sources
 
@@ -16,7 +17,7 @@ Current BBO contains one normalized timestamp and one price.
 
 Replay Reader creates BBO values.
 
-BtRunner, Runtime, BotCycle, and Executors consume copies.
+BtRunner, Controller, BotCycle, and Executors consume copies.
 
 BBO owns no child.
 

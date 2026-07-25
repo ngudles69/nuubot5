@@ -2,7 +2,7 @@
 
 Each row records one fresh-process `rtest.sh` suite.
 
-## Runtime
+## Controller Replay
 
 | Commit | Change | Runs | Passed | Suite ms | Process avg [min-max] ms | Replay avg [min-max] ms | Log |
 |---|---|---:|---:|---:|---:|---:|---|
@@ -25,6 +25,20 @@ Each row records one fresh-process `rtest.sh` suite.
 | Uncommitted | Typed Signal packages | 2 | 2 | 4,641 | 2,050 [1,491-2,610] | 1,413 [1,406-1,421] | `workspace/logs/nuubot5-rtest-s6-b9-2-20260724T083008Z.log` |
 | Uncommitted | Typed Signal package stability | 20 | 20 | 34,499 | 1,478 [1,463-1,509] | 1,397 [1,377-1,426] | `workspace/logs/nuubot5-rtest-s6-b9-20-20260724T083014Z.log` |
 | Uncommitted | Direct history index experiment | 2 | 2 | 4,625 | 2,061 [1,504-2,618] | 1,420 [1,415-1,426] | `workspace/logs/nuubot5-rtest-s6-b9-2-20260724T082609Z.log` |
+| Uncommitted | BotSpec and Controller proof | 2 | 2 | 4,550 | 1,968 [1,801-2,136] | 1,859 [1,700-2,019] | `workspace/logs/nuubot5-rtest-s6-b9-2-20260724T202905Z.log` |
+| Uncommitted | BotSpec and Controller stability | 10 | 10 | 31,059 | 2,665 [1,809-2,928] | 2,475 [1,707-2,757] | `workspace/logs/nuubot5-rtest-s6-b9-10-20260724T202915Z.log` |
+| Uncommitted | Post-audit Controller proof | 1 | 1 | 2,064 | 1,788 [1,788-1,788] | 1,694 [1,694-1,694] | `workspace/logs/nuubot5-rtest-s6-b9-1-20260724T204033Z.log` |
+
+## TradeBot Replay
+
+Each row runs Sweep 9 Bot 13 through Account, Ledger, Simulator, and result
+publication.
+
+| Commit | Change | Runs | Passed | Suite ms | Process avg ms | Replay avg ms | Log |
+|---|---|---:|---:|---:|---:|---:|---|
+| Uncommitted | Exact Config and equity proof | 2 | 2 | 14,737 | 6,560 | 4,248 | `workspace/logs/nuubot5-trtest-s9-b13-2-20260724T202731Z.log` |
+| Uncommitted | Exact Config and equity stability | 10 | 10 | 67,743 | 5,986 | 4,261 | `workspace/logs/nuubot5-trtest-s9-b13-10-20260724T202751Z.log` |
+| Uncommitted | Post-audit complete result proof | 1 | 1 | 10,246 | 9,393 | 4,248 | `workspace/logs/nuubot5-trtest-s9-b13-1-20260724T204016Z.log` |
 
 ## Memory
 
@@ -49,6 +63,7 @@ Each row records one fresh-process `rtest.sh` suite.
 | Uncommitted | Typed Signal packages | 2 | 28.375 [20.967-35.782] | 976.632 [976.593-976.670] | 48.000 [48-48] | 2.038 [1.050-3.026] |
 | Uncommitted | Typed Signal package stability | 20 | 29.939 [18.070-48.305] | 976.613 [976.513-976.724] | 48.550 [47-50] | 4.242 [0.000-23.410] |
 | Uncommitted | Direct history index experiment | 2 | 34.493 [34.463-34.523] | 976.631 [976.624-976.637] | 48.500 [48-49] | 3.318 [1.730-4.906] |
+| Uncommitted | BotSpec and Controller stability | 10 | 17.852 [4.806-27.879] | 1,215.230 [1,215.112-1,215.332] | 64.500 [61-66] | 9.278 [3.131-17.918] |
 
 ## Comparison
 

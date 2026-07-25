@@ -1,19 +1,19 @@
 # IngestBBO
 
 Status: Partially implemented.
-Covers: `internal/runtime/runtime.go`, `internal/botcycle/botcycle.go`, and `internal/executor/*.go`.
+Covers: `internal/controller/controller.go`, `internal/botcycle/botcycle.go`, and `internal/executor/*.go`.
 Purpose: Drive Simulator matching from BBO values without mixing simulated Venue work with Executor `OnBBO` policy.
 
 ## Contract
 
 `IngestBBO` exists only for Simulator use.
 
-Runtime calls the common ownership path without checking the selected Venue.
+Controller calls the common ownership path without checking the selected Venue.
 Only Simulator performs matching and fill work. Observer records delivery count
 without changing simulated or domain state. A live Venue returns unchanged.
 
 ```text
-Runtime.IngestBBO
+Controller.IngestBBO
   -> BotCycle.IngestBBO
   -> supported Executor.IngestBBO
   -> Account.IngestBBO
@@ -25,7 +25,7 @@ Runtime.IngestBBO
 Simulator changes mark the Account dirty. Simulated Order and Fill truth reaches
 the Ledger and Executor only through the separate reconciliation process.
 
-Each owner controls only its direct child. Runtime never reaches through
+Each owner controls only its direct child. Controller never reaches through
 BotCycle or Executor to access Account, Venue, or Simulator.
 
 ## IngestBBO Versus OnBBO

@@ -1,190 +1,117 @@
 # Handoff
 
-Last updated: 2026-07-25 03:32:04 +08:00
+Last updated: 2026-07-25 04:30:55 +08:00
 
 ## Focus
 
-Reconcile the complete approved target design, audit it adversarially, commit
-and push the design checkpoint, then implement and prove the backtest path.
+Finish and prove the approved three-month Macross TradeBot architecture.
 
-## Published baseline
+Then inspect Nuutrader6 and prepare the requested Grid Executor plan.
 
-- Branch `main` tracks `origin/main`.
-- Closeout commit message: `Standardize Go error handling style`.
+## Published Baseline
 
-## Current closeout
+- Branch: `main`.
+- `HEAD` and `origin/main`: `da1566ea8e1a9041316485eb3bb21aa6109997b1`.
+- Message: `docs: define bot controller target architecture`.
+- Documentation adversary passed round two without material findings.
 
-- `nuubot-btrunner` uses canonical `err` when error values do not coexist.
-- Coding style owns the canonical `err` rule.
-- `wiki/vscode.md` preserves the exact global Go error-highlighting entry.
-- `audits/07-25-suggestions_v2.md` is captured for user review.
-- The audit authorizes no implementation.
+## Active Implementation
 
-## Current state
+- Exact database BotSpecID, TOML bytes, and SHA-256 are authoritative.
+- TOML remains the only persisted BotConfig representation.
+- AppConfig no longer owns Bot behavior.
+- BotSpec admits exact typed Config and builds immutable Bot definitions.
+- Implemented BotSpecs are `macross_observer_bot` and `macross_trade_bot`.
+- Controller replaced Runtime without compatibility code.
+- Controller owns persistent Signaler, Risks, and zero or one active BotCycle.
+- `max_cycles = 999` permits sequential cycles.
+- Maximum concurrent BotCycles remains structurally fixed at one.
+- Signal uses `NoAction`, `StartCycle`, and `StopCycle`.
+- Risk uses immutable RiskInput and typed decisions.
+- Executors own fixed side, capital, sizing, and distinct resources.
+- Controller carries terminal Account equity into the next cycle.
+- Every Risk assesses the same immutable input before Controller acts.
+- Stronger Risk decisions dominate weaker decisions.
+- Resource equity uses the exact Venue, network, Account, and symbol tuple.
+- ResultPublisher writes Controller, cycle, Executor, Signal, Risk, and trading evidence.
+- Results preserve exact admitted BotConfig TOML and hash.
+- Final publication preserves both none-mode and maximum-mode Account children.
+- Simulator replay loads no private credentials.
 
-- Shared database is `workspace/db/nuubot.db`.
-- Shared database contains nine Sweeps, thirteen Bots, and mainnet Meta.
-- Meta contains 232 perpetual symbols.
-- Setup refreshes mainnet Meta after 24 hours.
-- Testnet never supplies Meta.
-- Sweep 9 and Bot 13 own the TradeExecutor proof.
-- Per-Bot results use `workspace/db/sweeps/sweep_9/bot_13.db`.
-- Setup, BtRunner, Runtime, and BotCycle retain their user-vetted structures.
+## Local Database
 
-## Changed-file inventory
+- Database: `workspace/db/nuubot.db`.
+- Recoverable pre-hardcut backup: `workspace/db/nuubot.pre-botspec-20260725.db`.
+- Thirteen Bot rows contain exact TOML and valid hashes.
+- Sweep 6 Bot 9 uses `macross_observer_bot`.
+- Sweep 9 Bot 13 uses `macross_trade_bot`.
+- Stored templates now use `max_cycles = 999`.
+- Latest integrity check: `ok`.
 
-Commit: `a8be81e`
+## Verified Proof
 
-| Entity | State | Files | Change |
-|---|---|---|---|
-| Workspace and Datastore | MODIFIED | `.gitignore` (modified)<br>`wiki/design/concepts/filesystem.md` (modified)<br>`wiki/design/packages/datastore.md` (modified) | Documented and ignored the shared database, per-Bot results, credentials, and mutable workspace layout. |
-| Handoff | MODIFIED | `HANDOFF.md` (modified) | Replaced stale implementation status with current proof, review state, and next action. |
-| Design index | MODIFIED | `wiki/DESIGN.md` (modified) | Registered the new implemented packages and retained accurate user-review states. |
-| Account | NEW | `internal/account/account.go` (new)<br>`internal/account/account_test.go` (new)<br>`wiki/design/packages/account.md` (modified)<br>`wiki/design/concepts/account-snapshot.md` (modified)<br>`wiki/design/concepts/recon.md` (modified) | Added Simulator-backed submission, normalization, reconciliation, dirty state, recovery repair, persistence, terminal results, and tests. |
-| BotCycle | MODIFIED | `internal/botcycle/botcycle.go` (modified)<br>`internal/botcycle/botcycle_test.go` (modified)<br>`wiki/design/packages/botcycle.md` (modified) | Added optional Account reconciliation, BBO ingestion, and terminal Account result collection without changing lifecycle ownership. |
-| BtRunner | MODIFIED | `internal/btrunner/btrunner.go` (modified)<br>`wiki/design/packages/btrunner.md` (modified) | Added terminal result publication gated by verified replay and successful child shutdown. |
-| CLOID | NEW | `internal/cloid/cloid.go` (new)<br>`internal/cloid/cloid_test.go` (new)<br>`wiki/design/concepts/cloid.md` (modified) | Added deterministic Nuubot4-compatible 128-bit CLOID encoding, decoding, validation, documentation, and tests. |
-| Config | MODIFIED + NEW | `internal/config/config.go` (modified)<br>`wiki/design/packages/config.md` (modified)<br>`workspace/config/config.toml` (modified)<br>`workspace/config/tradeexecutor.toml` (new) | Added decimal TradeExecutor settings, persistence selection, shared database path, validation, and dedicated Sweep 9 configuration. |
-| Executor | MODIFIED | `internal/executor/executor.go` (modified)<br>`internal/executor/observer.go` (modified)<br>`internal/executor/observer_test.go` (modified)<br>`wiki/design/packages/executor.md` (modified) | Added capability interfaces and TradeExecutor factory selection while preserving Observer behavior. |
-| TradeExecutor | NEW | `internal/executor/trade.go` (new)<br>`internal/executor/trade_test.go` (new)<br>`wiki/design/concepts/trade-executor.md` (modified)<br>`wiki/design/concepts/execution.md` (modified)<br>`wiki/design/concepts/trading-state.md` (modified) | Added Simulator bracket execution, shutdown flattening, persisted-Trade rejection, flow documentation, and focused tests. |
-| Fill | NEW | `internal/fill/fill.go` (new)<br>`internal/fill/fill_test.go` (new)<br>`wiki/design/packages/fill.md` (modified) | Added immutable Fill evidence, enrichment rules, ownership validation, documentation, and tests. |
-| Meta | NEW | `internal/hyperliquid/meta.go` (new)<br>`internal/hyperliquid/meta_test.go` (new)<br>`internal/meta/meta.go` (new)<br>`internal/meta/meta_test.go` (new)<br>`wiki/design/packages/meta.md` (modified) | Added mainnet perpetual Meta fetching, normalization, 24-hour SQLite caching, active-row freshness checks, rounding, documentation, and tests. |
-| Ledger | NEW | `internal/ledger/ledger.go` (new)<br>`internal/ledger/ledger_test.go` (new)<br>`internal/ledger/publish.go` (new)<br>`internal/ledger/store.go` (new)<br>`wiki/design/packages/ledger.md` (modified)<br>`wiki/design/concepts/trading-schema.md` (modified) | Added ownership, atomic reconciliation, memory and maximum persistence, reload, terminal publication, schema documentation, and failure tests. |
-| Order | NEW | `internal/order/order.go` (new)<br>`internal/order/order_test.go` (new)<br>`wiki/design/packages/order.md` (modified) | Added canonical Order lifecycle transitions, Fill aggregation, immutable snapshots, documentation, and tests. |
-| ResultPublisher | NEW | `internal/resultpublisher/resultpublisher.go` (new)<br>`wiki/design/packages/resultpublisher.md` (new)<br>`wiki/design/concepts/result-publisher.md` (modified) | Added partial-file terminal publication for successful memory-mode results, ownership documentation, and failure-safe replacement rules. |
-| Runtime | MODIFIED | `internal/runtime/runtime.go` (modified)<br>`wiki/design/packages/runtime.md` (modified) | Added reconciliation ordering, latest-BBO propagation, BotCycle result collection, and immutable terminal Runtime results. |
-| Setup | MODIFIED | `internal/setup/setup.go` (modified)<br>`wiki/design/packages/setup.md` (modified) | Added mainnet Meta admission, shared database use, configurable test selection, and per-Bot result paths. |
-| Simulator | NEW | `internal/simulator/publish.go` (new)<br>`internal/simulator/simulator.go` (new)<br>`internal/simulator/simulator_test.go` (new)<br>`internal/simulator/store.go` (new)<br>`wiki/design/packages/simulator.md` (modified)<br>`wiki/design/concepts/simulator-parity.md` (modified) | Added BBO matching, bracket OCO, fees, PnL, staged maximum persistence, child-state reload, parity documentation, and failure tests. |
-| Trade | NEW | `internal/trade/trade.go` (new)<br>`internal/trade/trade_test.go` (new)<br>`wiki/design/packages/trade.md` (modified) | Added Trade-owned Orders, exposure and PnL calculation, terminal-state protection, documentation, and tests. |
-| TradeExecutor harness | NEW | `trtest.sh` (new) | Added a build-verified Nx TradeExecutor replay harness with exact run and performance statistics. |
+- Full Go tests and vet pass with `CGO_ENABLED=0` and `-tags noasm`.
+- TradeBot processed 7,948,800 ticks and 794,880 control passes.
+- TradeBot completed 193 cycles, 193 Trades, 626 Orders, and 386 Fills.
+- TradeBot capital was 1,000 USDC.
+- TradeBot net PnL was -3.90459332761 USDC.
+- TradeBot ending equity was 996.09540667239 USDC.
+- TradeBot maximum drawdown was 4.200462813402 USDC.
+- Cycle 2 starting equity equals Cycle 1 terminal equity.
+- Result BotConfig equals the exact stored database TOML and hash.
+- Result integrity and foreign-key checks passed.
+- TradeBot passed 2 of 2 and 10 of 10 fresh processes.
+- Observer passed 2 of 2 and 10 of 10 fresh processes.
+- TradeBot 10x log: `workspace/logs/nuubot5-trtest-s9-b13-10-20260724T202751Z.log`.
+- Observer 10x log: `workspace/logs/nuubot5-rtest-s6-b9-10-20260724T202915Z.log`.
+- Post-audit TradeBot 1x passed in 9,393 ms process and 4,248 ms replay.
+- Post-audit TradeBot log: `workspace/logs/nuubot5-trtest-s9-b13-1-20260724T204016Z.log`.
+- Post-audit Observer 1x passed in 1,788 ms process and 1,694 ms replay.
+- Post-audit Observer log: `workspace/logs/nuubot5-rtest-s6-b9-1-20260724T204033Z.log`.
+- Implementation audit round one found maximum-mode final publication data loss.
+- The accepted finding received one focused failing test and owning-path fix.
+- Implementation audit round two passed with no material finding or bloat.
 
-## Implemented
+## Completed
 
-- CLOID uses the Nuubot4 128-bit layout.
-- Account owns Simulator, Ledger, CLOID creation, normalization, and recon state.
-- Ledger owns Trade, Order, Fill, and account snapshots.
-- Simulator owns bracket matching, OCO, fees, PnL, and durable child state.
-- TradeExecutor owns one Account and one bracket Trade.
-- ResultPublisher writes completed memory-mode results through a partial database.
-- `none` persists only after successful completion.
-- `max` persists every accepted state change.
-- `max` reloads Ledger and Simulator child state only.
-- Full Bot resume remains pending Runner-owned orchestration cursors.
-- TradeExecutor fatally rejects persisted Trades until Runner recovery exists.
-- Simulator publishes memory only after successful maximum persistence.
-- Account repairs absent created or submitted Simulator Orders during recon.
-- BtRunner publishes completion only after ReplayReader and Runtime stop successfully.
-- Runtime performs recon before Executor decisions.
+- Approved TradeBot architecture implementation.
+- Full three-month TradeBot proof.
+- TradeBot and Observer 2x and 10x stability.
+- Final adversarial implementation audit.
+- Post-audit static and replay proof.
 
-## Proof
+## TODO
 
-- Full Go tests pass with `CGO_ENABLED=0` and `-tags noasm`.
-- Go vet, module tidy, formatting, diff, and wiki-link checks pass.
-- TradeExecutor stability passed 13/13 attempted runs.
-- Replay processed 7,948,800 ticks and 794,880 Runtime passes.
-- Result contains 50 closed Trades, 151 Orders, and 100 Fills.
-- Result contains 50 Simulator states at schema version 2.
-- Shared and result database integrity checks pass.
-- Result foreign-key checks pass.
-- No partial result database remains.
-- Final 1x replay took 2,696 ms; process took 4,526 ms.
-- Final 2x averaged 2,481 ms replay and 3,011 ms process.
-- Final 10x averaged 2,505 ms replay and 3,021 ms process.
-- 10x suite took 34,052 ms.
-- Audit round one found material durability and recovery-boundary issues.
-- Accepted findings were fixed with focused failure and recovery tests.
-- Audit round two passed with no material finding or bloat.
-- Global VS Code settings parse after generalizing the `if err != nil` highlight.
-- Both return and logged-exit error bodies match the generalized rule.
-- Highlight text is now `rgba(144, 144, 144, 0.40)`.
-- Coding style now requires canonical `err` unless multiple error values coexist.
-- `nuubot-btrunner` uses `err` for OpenBot and Loop failures; `stopErr` remains for joined shutdown failure.
-- Focused pre-change and post-change command tests pass with `CGO_ENABLED=0` and `-tags noasm`.
-- All ten error-nil checks in `nuubot-btrunner` match the active VS Code highlight.
-- Highlighting covers canonical `err`, necessary `*Err` values, and same-line compound conditions.
-- Full Go tests and Go vet pass with `CGO_ENABLED=0` and `-tags noasm`.
-- The documented VS Code pattern, color, and font weight exactly match global settings.
-- Final replay passed 1/1 attempted run.
-- Final replay processed 7,948,800 ticks through 794,880 Runtime passes.
-- Final replay took 1,436 ms; process total and average were 2,860 ms.
-- Final replay suite took 3,128 ms.
-- Final replay log: `workspace/logs/nuubot5-rtest-s6-b9-1-20260724T160955Z.log`.
-- 1x log: `workspace/logs/nuubot5-trtest-s9-b13-1-20260724T120251Z.log`.
-- 2x log: `workspace/logs/nuubot5-trtest-s9-b13-2-20260724T120340Z.log`.
-- 10x log: `workspace/logs/nuubot5-trtest-s9-b13-10-20260724T120354Z.log`.
-- Pre-documentation baseline was clean and synchronized at `cd553dc`.
-- `git push` confirmed `Everything up-to-date` before documentation changed.
-- Changed Markdown local-link validation passes across all 30 files.
-- Documentation diff and whitespace checks pass.
-- Documentation audit round one found four stale-page contradictions.
-- Round-one fixes made live transport owner-neutral, made RuntimeStore a
-  candidate, aligned PocketBase ownership, and corrected the proof scope.
-- Documentation audit round two passed across all 30 changed Markdown files.
-- The reviewer found no remaining material contradiction, missing proof, or
-  documentation bloat.
+- Inspect Nuutrader6 Grid behavior read-only.
+- Present the exact Nuubot5 Grid Executor design for user approval.
 
-## Active work
+## Pending User Approval
 
-- Documentation reconciliation is active.
-- Documentation reconciliation and its adversarial audit are complete.
-- Maximum three documentation audit and fix rounds.
-- No code changes begin before documentation passes and the design checkpoint
-  is committed and pushed.
+- Grid Executor implementation.
+- Final source commit and push.
 
-## Approved target design
+## Grid Executor Request
 
-- BotSpec owns one complete Controller architecture and exact TOML schema.
-- BotSpecID is opaque. No version, fallback, alias, or compatibility path exists.
-- Database TOML is authoritative after configuration.
-- Controller owns persistent Signaler and Risk across BotCycles.
-- Signaler reports strategy state. Risk reports gates and exits. Controller acts.
-- One BotCycle is one coordinated exchange-style Bot campaign.
-- Explicit exit triggers Stop. Reconciled flatness permits successful completion.
-- Main live gates cover active Bot claims, clean Venue state, capital, Meta, and symbols.
-- Controller supports exactly one active BotCycle.
-- Signal actions are NoAction, StartCycle, and StopCycle.
-- Risk decisions are Allow, BlockCycleStart, StopCycle, and StopController.
-- Each Executor owns configured capital and Order sizing.
-- Every Executor uses one distinct Account-symbol resource.
-- Runner, BtRunner, and SweepRunner remain standalone programs.
-- Server is an optional master application and process-control host.
-- BotManager launches standalone Runner. SweepManager launches standalone
-  SweepRunner.
-- SweepRunner owns expansion and bounded BtRunner workers.
-- Sweeps are reusable, have no terminal identity, and never recover partial
-  execution.
-- Static commented TOML belongs to the exact BotSpec.
-- Current implementation remains unchanged.
+- Inspect `D:\rust\nuutrader6` after TradeBot closeout.
+- Proposed range uses starting price minus 5 percent through plus 5 percent.
+- Proposed level count is 32.
+- Proposed deployed capital is 95 percent of assigned Executor capital.
+- Every level must satisfy Venue minimum order value, such as 11 USDC.
+- Every Grid Executor start logs its validated level table before order placement.
+- Each row includes level, price, side, size, notional, and intended action.
+- Present canonical ownership, sizing semantics, files, outcome, and proof before editing.
 
-## Pending user review
+## Deferred
 
-- Structure suggestions v2
-- Approved target design documentation
-- Account
-- Ledger
-- Trade
-- Order
-- Fill
-- Simulator
-- TradeExecutor
-- Meta
-- ResultPublisher
+- Live cross-process Account claims.
+- Multi-source replay merge.
+- Physical Account and global risk.
+- Periodic telemetry.
+- Server monitoring and recovery.
 
-## Pending user approval
+## Next Action
 
-- None for the authorized documentation, implementation, audit, and proof
-  sequence.
-
-## Blockers
-
-- Live cross-process Account claims, standalone status writes, exchange
-  WebSocket sharing, and Server reconnection remain TBD.
-- They do not block the authorized standalone backtest implementation.
-
-## Next action
-
-Commit and push the verified design checkpoint, then begin the approved
-backtest architecture hardcut.
+Inspect Nuutrader6 Grid behavior and prepare the approval plan.
 
 Go toolchain:
 

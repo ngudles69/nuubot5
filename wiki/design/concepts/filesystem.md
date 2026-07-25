@@ -8,7 +8,7 @@ Purpose: Keep every mutable Nuubot file under one portable workspace root.
 
 `workspace/` is the only mutable filesystem root.
 
-Source, binaries, tests, and wiki pages remain outside it. Runtime code must not
+Source, binaries, tests, and wiki pages remain outside it. Controller code must not
 write configuration, databases, logs, data, results, or temporary state outside
 `workspace/`.
 
@@ -19,7 +19,7 @@ One operator-tool exception exists.
 
 It validates path segments, refuses overwrite, and writes no credentials.
 
-This exception does not apply to Server, Runner, BtRunner, Runtime, or Simulator.
+This exception does not apply to Server, Runner, BtRunner, Controller, or Simulator.
 
 `workspace/` is the future Docker mount. The application image remains
 immutable. The exact container mount path is unresolved.
@@ -30,7 +30,6 @@ immutable. The exact container mount path is unresolved.
 workspace/
 |-- config/
 |   |-- config.toml
-|   |-- tradeexecutor.toml
 |   `-- credentials.toml
 |-- db/
 |   |-- nuubot.db
@@ -49,7 +48,7 @@ workspace/
 | `workspace/config/credentials.toml` | Local credentials and secrets. | Ignored |
 | `workspace/db/nuubot.db` | Shared Sweep, Bot, Meta, and future main tables. | Ignored |
 | `workspace/db/sweeps/` | Per-Bot Sweep result SQLite databases. | Ignored |
-| `workspace/logs/` | Runtime, Server, Bot, and test-run logs. | Ignored |
+| `workspace/logs/` | Controller, Server, Bot, and test-run logs. | Ignored |
 | `workspace/data/` | Market and other runtime data files. | Ignored |
 
 ## Configuration and Secrets
@@ -135,6 +134,6 @@ Shared market data may resolve outside this repository through
 
 - Shared configuration is trackable and contains no secrets.
 - Credentials remain ignored and untracked.
-- Runtime writes stay below `workspace/`.
+- Controller writes stay below `workspace/`.
 - Each Sweep Bot writes only its own result database.
 - Main datastore workers do not receive high-volume result writes.

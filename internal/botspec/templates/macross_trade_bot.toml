@@ -1,0 +1,33 @@
+# Exact Config form for BotSpecID macross_trade_bot.
+# Extra fields are stored and ignored. Required fields must remain.
+bot_spec = "macross_trade_bot"
+
+[controller]
+max_cycles = 999
+
+[signaler]
+signal_timeframe = "1h"
+regime_timeframe = "4h"
+fast_ma = 9
+slow_ma = 21
+regime_ema = 200
+
+[[executors]]
+id = "trade"
+role = "trade"
+kind = "trade"
+side = "long"
+venue = "simulator"
+network = "simnet"
+physical_account_id = "sbacktest"
+symbol = "BTC"
+capital_usdc = "1000"
+order_size_usdc = "11"
+take_profit_pct = "0.01"
+stop_loss_pct = "0.01"
+fee_pct = "0.05"
+slippage_pct = "0.02"
+persist_mode = "none"
+
+[[risks]]
+kind = "balanced"

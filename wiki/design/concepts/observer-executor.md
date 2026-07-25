@@ -84,7 +84,7 @@ Short stops at or above entry multiplied by one plus stop percentage.
 
 Stop loss moves Observer to stopping.
 
-Runtime closes the owning BotCycle during its next timed pass.
+Controller closes the owning BotCycle during its next timed pass.
 
 ## Logging
 
@@ -105,4 +105,4 @@ Its final summary reports:
 - Create Account, Ledger, Trade, Fill, Simulator, or Venue state.
 - Match Orders or create simulated Fills.
 - Model fees, liquidity, or slippage.
-- Directly stop Runtime.
+- Directly stop Controller.

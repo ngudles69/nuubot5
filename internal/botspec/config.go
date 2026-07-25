@@ -1,0 +1,281 @@
+// Package botspec admits exact BotSpec-specific Config and builds Bot definitions.
+package botspec
+
+import (
+	"fmt"
+
+	"github.com/BurntSushi/toml"
+	"github.com/shopspring/decimal"
+
+	"nuubot/internal/executor"
+	"nuubot/internal/signaler"
+)
+
+const (
+	MacrossObserver = "macross_observer_bot"
+	MacrossTrade    = "macross_trade_bot"
+)
+
+type admitted struct {
+	maxCycles uint64
+	signaler  signaler.Config
+	executors []executor.Spec
+	risks     []string
+}
+
+type controllerConfig struct {
+	MaxCycles uint64 `toml:"max_cycles"`
+}
+
+type macrossConfig struct {
+	SignalTimeframe string `toml:"signal_timeframe"`
+	RegimeTimeframe string `toml:"regime_timeframe"`
+	FastMA          int    `toml:"fast_ma"`
+	SlowMA          int    `toml:"slow_ma"`
+	RegimeEMA       int    `toml:"regime_ema"`
+}
+
+type riskConfig struct {
+	Kind string `toml:"kind"`
+}
+
+type tradeConfig struct {
+	BotSpec    string                `toml:"bot_spec"`
+	Controller controllerConfig      `toml:"controller"`
+	Signaler   macrossConfig         `toml:"signaler"`
+	Executors  []tradeExecutorConfig `toml:"executors"`
+	Risks      []riskConfig          `toml:"risks"`
+}
+
+type tradeExecutorConfig struct {
+	ID                string `toml:"id"`
+	Role              string `toml:"role"`
+	Kind              string `toml:"kind"`
+	Side              string `toml:"side"`
+	Venue             string `toml:"venue"`
+	Network           string `toml:"network"`
+	PhysicalAccountID string `toml:"physical_account_id"`
+	Symbol            string `toml:"symbol"`
+	CapitalUSDC       string `toml:"capital_usdc"`
+	OrderSizeUSDC     string `toml:"order_size_usdc"`
+	TakeProfitPct     string `toml:"take_profit_pct"`
+	StopLossPct       string `toml:"stop_loss_pct"`
+	FeePct            string `toml:"fee_pct"`
+	SlippagePct       string `toml:"slippage_pct"`
+	PersistMode       string `toml:"persist_mode"`
+}
+
+type observerConfig struct {
+	BotSpec    string                   `toml:"bot_spec"`
+	Controller controllerConfig         `toml:"controller"`
+	Signaler   macrossConfig            `toml:"signaler"`
+	Executors  []observerExecutorConfig `toml:"executors"`
+	Risks      []riskConfig             `toml:"risks"`
+}
+
+type observerExecutorConfig struct {
+	ID          string `toml:"id"`
+	Kind        string `toml:"kind"`
+	Side        string `toml:"side"`
+	Symbol      string `toml:"symbol"`
+	StopLossPct string `toml:"stop_loss_pct"`
+}
+
+// Section 1 - Program Flow
+
+// Validate admits one exact BotSpec Config.
+func Validate(botSpecID, configTOML string) error {
+	var _, err = admit(botSpecID, configTOML)
+	return err
+}
+
+// Section 2 - Domain Helpers
+
+func admit(botSpecID, configTOML string) (admitted, error) {
+	switch botSpecID {
+	case MacrossTrade:
+		return admitMacrossTrade(configTOML)
+	case MacrossObserver:
+		return admitMacrossObserver(configTOML)
+	default:
+		return admitted{}, fmt.Errorf("unknown BotSpecID: %s", botSpecID)
+	}
+}
+
+func admitMacrossTrade(configTOML string) (admitted, error) {
+	var cfg tradeConfig
+	if _, err := toml.Decode(configTOML, &cfg); err != nil {
+		return admitted{}, fmt.Errorf("decode %s Config: %w", MacrossTrade, err)
+	}
+	var result, err = admitMacross(
+		MacrossTrade,
+		cfg.BotSpec,
+		cfg.Controller,
+		cfg.Signaler,
+		cfg.Risks,
+	)
+	if err != nil {
+		return admitted{}, err
+	}
+	if len(cfg.Executors) == 0 {
+		return admitted{}, fmt.Errorf("%s requires at least one Executor", MacrossTrade)
+	}
+	var resources = make(map[executor.Resource]bool, len(cfg.Executors))
+	for _, raw := range cfg.Executors {
+		var spec executor.Spec
+		spec, err = admitTradeExecutor(raw)
+		if err != nil {
+			return admitted{}, err
+		}
+		if resources[spec.Resource] {
+			return admitted{}, fmt.Errorf(
+				"duplicate Executor resource: %s",
+				spec.Resource.Key(),
+			)
+		}
+		resources[spec.Resource] = true
+		result.executors = append(result.executors, spec)
+	}
+	return result, nil
+}
+
+func admitMacrossObserver(configTOML string) (admitted, error) {
+	var cfg observerConfig
+	if _, err := toml.Decode(configTOML, &cfg); err != nil {
+		return admitted{}, fmt.Errorf("decode %s Config: %w", MacrossObserver, err)
+	}
+	var result, err = admitMacross(
+		MacrossObserver,
+		cfg.BotSpec,
+		cfg.Controller,
+		cfg.Signaler,
+		cfg.Risks,
+	)
+	if err != nil {
+		return admitted{}, err
+	}
+	if len(cfg.Executors) != 1 {
+		return admitted{}, fmt.Errorf("%s requires one Observer Executor", MacrossObserver)
+	}
+	var raw = cfg.Executors[0]
+	var stopLoss decimal.Decimal
+	stopLoss, err = decimal.NewFromString(raw.StopLossPct)
+	if err != nil || raw.ID == "" || raw.Kind != "observer" ||
+		(raw.Side != executor.Long && raw.Side != executor.Short) ||
+		raw.Symbol == "" ||
+		!stopLoss.IsPositive() ||
+		stopLoss.GreaterThanOrEqual(decimal.NewFromInt(1)) {
+		return admitted{}, fmt.Errorf("invalid %s Observer Executor", MacrossObserver)
+	}
+	result.executors = []executor.Spec{{
+		ID:          raw.ID,
+		Kind:        raw.Kind,
+		Side:        raw.Side,
+		Resource:    executor.Resource{Symbol: raw.Symbol},
+		StopLossPct: stopLoss,
+	}}
+	return result, nil
+}
+
+func admitMacross(
+	botSpecID string,
+	configBotSpecID string,
+	controller controllerConfig,
+	macross macrossConfig,
+	risks []riskConfig,
+) (admitted, error) {
+	if configBotSpecID != botSpecID {
+		return admitted{}, fmt.Errorf(
+			"Config BotSpecID %q does not match %q",
+			configBotSpecID,
+			botSpecID,
+		)
+	}
+	if controller.MaxCycles == 0 ||
+		macross.SignalTimeframe == "" ||
+		macross.RegimeTimeframe == "" ||
+		macross.FastMA <= 0 ||
+		macross.FastMA >= macross.SlowMA ||
+		macross.RegimeEMA <= 0 {
+		return admitted{}, fmt.Errorf("invalid %s Controller or Signaler Config", botSpecID)
+	}
+	if len(risks) == 0 {
+		return admitted{}, fmt.Errorf("%s requires Risk Config", botSpecID)
+	}
+	var result = admitted{
+		maxCycles: controller.MaxCycles,
+		signaler: signaler.Config{
+			Kind:            "macross",
+			SignalTimeframe: macross.SignalTimeframe,
+			RegimeTimeframe: macross.RegimeTimeframe,
+			FastMA:          macross.FastMA,
+			SlowMA:          macross.SlowMA,
+			RegimeEMA:       macross.RegimeEMA,
+		},
+	}
+	for _, current := range risks {
+		if current.Kind != "balanced" {
+			return admitted{}, fmt.Errorf("unknown Risk: %s", current.Kind)
+		}
+		result.risks = append(result.risks, current.Kind)
+	}
+	return result, nil
+}
+
+func admitTradeExecutor(raw tradeExecutorConfig) (executor.Spec, error) {
+	var values = make([]decimal.Decimal, 0, 6)
+	for _, text := range []string{
+		raw.CapitalUSDC,
+		raw.OrderSizeUSDC,
+		raw.TakeProfitPct,
+		raw.StopLossPct,
+		raw.FeePct,
+		raw.SlippagePct,
+	} {
+		var value, err = decimal.NewFromString(text)
+		if err != nil {
+			return executor.Spec{}, fmt.Errorf("invalid Executor decimal: %w", err)
+		}
+		values = append(values, value)
+	}
+	var resource = executor.Resource{
+		Venue:             raw.Venue,
+		Network:           raw.Network,
+		PhysicalAccountID: raw.PhysicalAccountID,
+		Symbol:            raw.Symbol,
+	}
+	if raw.ID == "" || raw.Role == "" || raw.Kind != "trade" ||
+		(raw.Side != executor.Long && raw.Side != executor.Short) ||
+		resource.Venue != "simulator" ||
+		resource.Network != "simnet" ||
+		resource.PhysicalAccountID == "" ||
+		resource.Symbol == "" ||
+		!values[0].IsPositive() ||
+		!values[1].IsPositive() ||
+		values[1].GreaterThan(values[0]) ||
+		!values[2].IsPositive() ||
+		values[2].GreaterThanOrEqual(decimal.NewFromInt(1)) ||
+		!values[3].IsPositive() ||
+		values[3].GreaterThanOrEqual(decimal.NewFromInt(1)) ||
+		values[4].IsNegative() ||
+		values[5].IsNegative() ||
+		(raw.PersistMode != "none" && raw.PersistMode != "max") {
+		return executor.Spec{}, fmt.Errorf("invalid %s Trade Executor", MacrossTrade)
+	}
+	return executor.Spec{
+		ID:            raw.ID,
+		Role:          raw.Role,
+		Kind:          raw.Kind,
+		Side:          raw.Side,
+		Resource:      resource,
+		CapitalUSDC:   values[0],
+		OrderSizeUSDC: values[1],
+		TakeProfitPct: values[2],
+		StopLossPct:   values[3],
+		FeePct:        values[4],
+		SlippagePct:   values[5],
+		PersistMode:   raw.PersistMode,
+	}, nil
+}
+
+// Section 3 - Generic Helpers

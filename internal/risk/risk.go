@@ -3,26 +3,52 @@ package risk
 import (
 	"fmt"
 
-	"nuubot/internal/config"
+	"github.com/shopspring/decimal"
+
+	"nuubot/internal/account"
 	"nuubot/internal/toolkit/logging"
 )
 
-// Risk defines one Runtime-owned risk policy.
+// Decision reports one Controller gate or exit request.
+type Decision string
+
+const (
+	Allow           Decision = "allow"
+	BlockCycleStart Decision = "block_cycle_start"
+	StopCycle       Decision = "stop_cycle"
+	StopController  Decision = "stop_controller"
+)
+
+// Input contains one immutable Controller risk view.
+type Input struct {
+	TimestampMS     uint64
+	ActiveCycle     bool
+	CompletedCycles uint64
+	Accounts        []account.Snapshot
+	BotCapital      decimal.Decimal
+	NetPnL          decimal.Decimal
+	BotEquity       decimal.Decimal
+	PeakEquity      decimal.Decimal
+	CurrentDrawdown decimal.Decimal
+	MaximumDrawdown decimal.Decimal
+}
+
+// Risk defines one Controller-owned risk policy.
 type Risk interface {
-	AssessStop() bool
+	Assess(Input) Decision
 	Stop()
 }
 
 // Section 1 - Program Flow
 
 // Create constructs the configured Risk.
-func Create(log *logging.Logger, number int, cfg config.Risk) (Risk, error) {
+func Create(log *logging.Logger, number int, kind string) (Risk, error) {
 	// select implementation
-	switch cfg.Kind {
+	switch kind {
 	case "balanced":
 		return createBalanced(log, number), nil
 	default:
-		return nil, fmt.Errorf("unknown risk: %s", cfg.Kind)
+		return nil, fmt.Errorf("unknown risk: %s", kind)
 	}
 }
 

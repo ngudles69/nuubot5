@@ -46,4 +46,4 @@ WallClock.Stop
 - Timer callbacks receive their scheduled fire timestamp.
 - Callback failure stops the loop and remains available through `Err`.
 - WallClock serializes its own advancement.
-- WallClock owns no Runtime, Account, feed, or trading policy.
+- WallClock owns no Controller, Account, feed, or trading policy.

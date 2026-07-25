@@ -24,6 +24,7 @@ func TestAccountRunsOneReconciledBracket(t *testing.T) {
 		CycleNumber:    2,
 		ExecutorNumber: 3,
 		Name:           "sim",
+		Venue:          "simulator",
 		Network:        "simnet",
 		Symbol:         "BTC",
 		Meta: meta.Instrument{
@@ -136,6 +137,7 @@ func TestAccountMaxPersistenceRecoversDirtyVenueState(t *testing.T) {
 		CycleNumber:    2,
 		ExecutorNumber: 3,
 		Name:           "sim",
+		Venue:          "simulator",
 		Network:        "simnet",
 		Symbol:         "BTC",
 		Meta: meta.Instrument{
@@ -425,6 +427,7 @@ func simulatorFailureConfig(path string, ledgerID uint64) Config {
 		CycleNumber:    2,
 		ExecutorNumber: 3,
 		Name:           "sim",
+		Venue:          "simulator",
 		Network:        "simnet",
 		Symbol:         "BTC",
 		Meta: meta.Instrument{

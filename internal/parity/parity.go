@@ -92,7 +92,7 @@ func (p *Probe) Init(
 	}
 
 	// load shared config
-	var cfg, err = config.Load(
+	var cfg, err = config.LoadApp(
 		filepath.Join(root, "workspace", "config", "config.toml"),
 	)
 	if err != nil {

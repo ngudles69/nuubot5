@@ -92,7 +92,7 @@ Shared versus process-local WebSocket ownership remains TBD.
 
 ## Out
 
-- Bot, Runtime, BotCycle, Executor, Risk, or strategy policy.
+- Bot, Controller, BotCycle, Executor, Risk, or strategy policy.
 - Account, Ledger, Trade, Order, or Fill ownership.
 - Meta caching, refresh admission, normalization, or persistence.
 - Shared subscription policy or subscriber ownership.

@@ -24,7 +24,7 @@ nuubot-btrunner                    DONE           2026-07-24 12:55:22 +08:00
     |-- Setup                      PARTIAL        2026-07-24 13:33:22 +08:00
     |-- ReplayReader               PARTIAL        2026-07-24 12:55:22 +08:00
     |-- TickClock                  NOT REVIEWED   —
-    `-- Runtime                    DONE           2026-07-24 12:55:22 +08:00
+    `-- Controller                 DONE           2026-07-24 12:55:22 +08:00
         |-- Signaler               PARTIAL        2026-07-24 12:55:22 +08:00
         |   |-- Macross            NOT REVIEWED   —
         |   `-- RSI                NOT REVIEWED   —
@@ -98,9 +98,12 @@ Nuubot admits only required, audited code. It does not import or preserve either
 | Package | Status | Purpose |
 |---|---|---|
 | [account](design/packages/account.md) | Implemented | Coordinate venue requests and ledger evidence. |
+| [bot](design/packages/bot.md) | Implemented | Define immutable Bot identity and composition. |
 | [botcycle](design/packages/botcycle.md) | Implemented | Coordinate Executors for one admitted entry Signal. |
+| [botspec](design/packages/botspec.md) | Implemented | Admit exact BotConfig and build BotDefinition. |
 | [btrunner](design/packages/btrunner.md) | Implemented | Execute one complete historical replay. |
 | [config](design/packages/config.md) | Implemented | Decode and validate immutable settings. |
+| [controller](design/packages/controller.md) | Implemented | Own signals, risks, cycles, capital, and stop decisions. |
 | [datastore](design/packages/datastore.md) | Implemented | Load one validated BotSpec. |
 | [executor](design/packages/executor.md) | Implemented | Own execution policy boundaries. |
 | [fill](design/packages/fill.md) | Implemented | Preserve immutable execution facts. |
@@ -115,7 +118,6 @@ Nuubot admits only required, audited code. It does not import or preserve either
 | [replay](design/packages/replay.md) | Implemented | Stream validated historical market data. |
 | [resultpublisher](design/packages/resultpublisher.md) | Implemented | Publish terminal per-Bot SQLite evidence. |
 | [risk](design/packages/risk.md) | Implemented | Assess configured risk policy. |
-| [runtime](design/packages/runtime.md) | Implemented | Own signals, risks, cycles, and stop decisions. |
 | [setup](design/packages/setup.md) | Implemented | Prepare one validated BtRunner context. |
 | [signaler](design/packages/signaler.md) | Implemented | Calculate and serve ordered Signal packages. |
 | [simulator](design/packages/simulator.md) | Implemented | Provide venue-shaped simulated execution. |
@@ -125,14 +127,15 @@ Nuubot admits only required, audited code. It does not import or preserve either
 
 Package pages state their implemented and pending boundaries.
 
-## Approved Target Design
+## Approved Design
 
-These contracts are approved but not implemented.
+Backtest hardcuts are implemented. Live and process-control contracts remain
+deferred.
 
 | Target | Owner |
 |---|---|
 | Exact complete BotSpec and stored TOML BotConfig | [BotSpec](design/concepts/bot-spec.md) |
-| Runtime-to-Controller hardcut and decision ownership | [Runtime](design/packages/runtime.md) |
+| Controller decision ownership | [Controller](design/packages/controller.md) |
 | Persistent traffic-light strategy source | [Signaler](design/packages/signaler.md) |
 | Persistent Risk gates and exit source | [Risk](design/packages/risk.md) |
 | Coordinated exchange-style campaign and flat-stop proof | [BotCycle](design/packages/botcycle.md) |
@@ -175,7 +178,7 @@ hardcut is implemented and proven.
 | [RSI signaler](design/concepts/rsi-signaler.md) | RSI implementation. |
 | [Runner](design/concepts/runner.md) | Standalone live Bot supervision. |
 | [RunnerControl](design/concepts/runner-control.md) | Runner lifecycle commands. |
-| [Runtime store](design/concepts/runtime-store.md) | Runtime persistence boundary. |
+| [Controller store](design/concepts/controller-store.md) | Candidate Controller persistence boundary. |
 | [Server](design/concepts/server.md) | Optional master application host and process supervision. |
 | [Shutdown](design/concepts/shutdown.md) | Ordered resource release. |
 | [Signal](design/concepts/signal.md) | Immutable strategy decision. |

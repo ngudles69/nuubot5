@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"nuubot/internal/config"
 	"nuubot/internal/ohlcv"
 	"nuubot/internal/toolkit/logging"
 )
@@ -21,7 +20,7 @@ type rsi struct {
 // Init prepares RSI and its complete Signal history.
 func (r *rsi) Init(
 	log *logging.Logger,
-	cfg config.Signaler,
+	cfg Config,
 	symbol string,
 	source string,
 	start time.Time,
@@ -77,7 +76,7 @@ func (r *rsi) Calculate(symbol string, loaded []Series) ([]Package, error) {
 
 	// calculate signals
 	var packages = make([]Package, 0, max(0, len(data.Close)-data.PriorRows))
-	var previous string
+	var action = NoAction
 	for row := data.PriorRows; row+1 < len(data.Close); row++ {
 		var volumeRatio float64
 		if volumeAverage[row] > 0 {
@@ -85,25 +84,19 @@ func (r *rsi) Calculate(symbol string, loaded []Series) ([]Package, error) {
 		}
 		var oversold = rsiValues[row] <= 30
 		var overbought = rsiValues[row] >= 70
-		var side string
 		if row+1 >= readyAfter && volumeRatio > 1 {
 			if oversold {
-				side = Long
+				action = StartCycle
 			} else if overbought {
-				side = Short
+				action = StopCycle
 			}
 		}
-		var enterLong = side == Long && side != previous
-		var enterShort = side == Short && side != previous
 
 		var signalPackage Package
 		signalPackage, err = CreatePackage(
 			symbol,
 			data.StartMS[row+1],
-			enterLong,
-			enterShort,
-			false,
-			false,
+			action,
 			"neutral",
 			0,
 			map[string]any{
@@ -119,12 +112,11 @@ func (r *rsi) Calculate(symbol string, loaded []Series) ([]Package, error) {
 			return nil, err
 		}
 		packages = append(packages, signalPackage)
-		previous = side
 	}
 	return packages, nil
 }
 
-func (r *rsi) configure(cfg config.Signaler) error {
+func (r *rsi) configure(cfg Config) error {
 	// parse interval
 	var interval, err = ohlcv.ParseInterval(cfg.SignalTimeframe)
 	if err != nil {

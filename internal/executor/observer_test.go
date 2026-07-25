@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"nuubot/internal/config"
+	"github.com/shopspring/decimal"
+
 	"nuubot/internal/market"
-	"nuubot/internal/signaler"
 	"nuubot/internal/toolkit/logging"
 )
 
@@ -16,13 +16,16 @@ import (
 
 func TestObserverHandlesBBOAndRecordsStopLoss(t *testing.T) {
 	var output bytes.Buffer
-	var signal = testSignal(t, true, false)
 	var created, err = Create(Context{
-		Log:            logging.Create(&output),
-		CycleNumber:    1,
-		ExecutorNumber: 1,
-		Signal:         signal,
-		Config:         config.Executor{Kind: "observer", StopLossPct: "0.01"},
+		Log:               logging.Create(&output),
+		CycleNumber:       1,
+		ExecutorNumber:    1,
+		SignalTimestampMS: 2_000,
+		Spec: Spec{
+			ID: "observer", Kind: "observer", Side: Long,
+			Resource:    Resource{Symbol: "BTC"},
+			StopLossPct: decimal.RequireFromString("0.01"),
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -60,13 +63,17 @@ func TestObserverHandlesBBOAndRecordsStopLoss(t *testing.T) {
 	}
 }
 
-func TestObserverRejectsSignalWithoutOneEntry(t *testing.T) {
+func TestObserverRejectsInvalidConfiguredSide(t *testing.T) {
 	var _, err = Create(Context{
-		Log:            logging.Create(&bytes.Buffer{}),
-		CycleNumber:    1,
-		ExecutorNumber: 1,
-		Signal:         testSignal(t, false, false),
-		Config:         config.Executor{Kind: "observer", StopLossPct: "0.01"},
+		Log:               logging.Create(&bytes.Buffer{}),
+		CycleNumber:       1,
+		ExecutorNumber:    1,
+		SignalTimestampMS: 2_000,
+		Spec: Spec{
+			ID: "observer", Kind: "observer", Side: "both",
+			Resource:    Resource{Symbol: "BTC"},
+			StopLossPct: decimal.RequireFromString("0.01"),
+		},
 	})
 	if !errors.Is(err, ErrRejected) {
 		t.Fatalf("actual error %v, expected admission rejection", err)
@@ -74,24 +81,5 @@ func TestObserverRejectsSignalWithoutOneEntry(t *testing.T) {
 }
 
 // Section 2 - Domain Helpers
-
-func testSignal(t *testing.T, enterLong, enterShort bool) signaler.Package {
-	t.Helper()
-	var signal, err = signaler.CreatePackage(
-		"BTC",
-		2_000,
-		enterLong,
-		enterShort,
-		false,
-		false,
-		"bull",
-		0,
-		map[string]any{"signal_price": 100.0},
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return signal
-}
 
 // Section 3 - Generic Helpers

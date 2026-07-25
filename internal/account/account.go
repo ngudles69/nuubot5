@@ -41,6 +41,7 @@ type Config struct {
 	CycleNumber     int
 	ExecutorNumber  int
 	Name            string
+	Venue           string
 	Network         string
 	Symbol          string
 	Meta            meta.Instrument
@@ -78,6 +79,7 @@ type Snapshot struct {
 	CycleNumber      int
 	ExecutorNumber   int
 	Account          string
+	Venue            string
 	Network          string
 	Symbol           string
 	ObservedMS       uint64
@@ -97,6 +99,7 @@ type Snapshot struct {
 // Result contains one immutable terminal Account result.
 type Result struct {
 	Config
+	Snapshot  Snapshot
 	Ledger    ledger.Result
 	Simulator *simulator.Result
 }
@@ -134,8 +137,8 @@ func (a *Account) Init(log *logging.Logger, cfg Config) error {
 		cfg.ExecutorNumber <= 0 || cfg.Name == "" || cfg.Symbol == "" {
 		return fmt.Errorf("initialize Account: complete identity is required")
 	}
-	if cfg.Network != "simnet" {
-		return fmt.Errorf("initialize Account: first trading tranche requires simnet")
+	if cfg.Venue != "simulator" || cfg.Network != "simnet" {
+		return fmt.Errorf("initialize Account: first trading tranche requires simulator simnet")
 	}
 	if cfg.Meta.Symbol != cfg.Symbol || cfg.Meta.IsDelisted || cfg.Meta.Retired {
 		return fmt.Errorf("initialize Account: symbol Meta is unavailable")
@@ -428,6 +431,13 @@ func (a *Account) IngestBBO(bbo market.BBO) error {
 	if !a.started || a.stopped {
 		return fmt.Errorf("ingest Account BBO: invalid lifecycle state")
 	}
+	if bbo.Symbol != "" && bbo.Symbol != a.config.Symbol {
+		return fmt.Errorf(
+			"ingest Account BBO: symbol %s does not match %s",
+			bbo.Symbol,
+			a.config.Symbol,
+		)
+	}
 
 	// ingest Venue BBO
 	var changed, err = a.simulator.IngestBBO(bbo)
@@ -564,6 +574,7 @@ func (a *Account) Result() (Result, error) {
 	// return immutable Account result
 	return Result{
 		Config:    a.config,
+		Snapshot:  a.lastSnapshot,
 		Ledger:    ledgerResult,
 		Simulator: &simulatorResult,
 	}, nil
@@ -783,6 +794,7 @@ func accountSnapshot(
 		CycleNumber:      cfg.CycleNumber,
 		ExecutorNumber:   cfg.ExecutorNumber,
 		Account:          cfg.Name,
+		Venue:            cfg.Venue,
 		Network:          cfg.Network,
 		Symbol:           cfg.Symbol,
 		ObservedMS:       nowMS,

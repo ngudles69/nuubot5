@@ -46,7 +46,9 @@ Do not modify a reference repository without explicit user authority.
 - Read-only SQLite Bot loading.
 - Parquet tick replay and OHLCV loading.
 - Shared TickClock and WallClock timer mechanics.
-- TickClock-driven Runtime passes.
+- TickClock-driven Controller passes.
+- Exact compiled BotSpec selection and stored TOML BotConfig admission.
+- Immutable BotDefinition construction.
 - Macross and RSI signalers.
 - ObserverExecutor stop-loss behavior.
 - Simulator-backed TradeExecutor.
@@ -68,14 +70,13 @@ Do not modify a reference repository without explicit user authority.
 - ProcessStore and RunnerControl.
 - PocketBase-backed HTTP, API, authentication, administration, realtime, and
   SQLite persistence.
-- Exact BotSpec, stored TOML BotConfig, Controller hardcut, and approved Result
-  hierarchy.
+- Multi-source replay and live BotSpec admission.
 
 Only the explicitly approved implementation sequence authorizes target work.
 
 The three command shells do not prove their named systems are implemented.
 
-DataEngine and RuntimeStore remain candidates. Their ownership and final scope
+DataEngine and ControllerStore remain candidates. Their ownership and final scope
 are unresolved.
 
 ## Success Contract
@@ -85,7 +86,7 @@ BtRunner succeeds only when:
 - the process exits zero;
 - every input timestamp and value passes validation;
 - served ticks, passes, and replay range match expectations;
-- Runtime statistics remain internally consistent;
+- Controller statistics remain internally consistent;
 - any active BotCycle closes during graceful shutdown after replay completion; and
 - every direct child stops successfully.
 
@@ -95,20 +96,48 @@ Correctness and fresh-process stability take priority over speed.
 
 ## Accepted Proof
 
-Sweep 6 Bot 9 replays 7,948,800 one-second ticks through 794,880 Runtime passes.
+Sweep 6 Bot 9 replays 7,948,800 one-second ticks through 794,880 Controller
+passes.
 
-Each accepted run reports 2,207 packages and 55 standard entry triggers.
+Each accepted run reports 2,207 Signal packages and 724 skipped StartCycle
+actions.
 
-Those triggers produce 18 admitted cycles, 37 skipped entries, and 17 stop-loss exits.
+Observer produces 64 sequential cycles and 17 stop-loss exits.
 
-The passive Signaler hardcut passed 20 of 20 fresh-process runs.
+Sweep 9 Bot 13 runs the same three-month input through Macross, TradeExecutor,
+Account, Ledger, and Simulator.
 
-Process time averaged 1,478 ms. Replay time averaged 1,397 ms.
+TradeBot produces:
 
-Proof log:
+- 193 completed BotCycles;
+- 193 Trades;
+- 626 Orders;
+- 386 Fills;
+- 1,000 USDC capital;
+- -3.90459332761 USDC net PnL;
+- 996.09540667239 USDC ending equity; and
+- 4.200462813402 USDC maximum drawdown.
+
+The result stores exact BotConfig TOML and hash.
+
+Cycle 2 starts with Cycle 1 terminal equity.
+
+Database integrity and foreign-key checks pass.
+
+Fresh-process stability passed:
+
+- TradeBot 2 of 2 and 10 of 10;
+- Observer 2 of 2 and 10 of 10.
+
+Proof logs:
 
 ```text
-workspace/logs/nuubot5-rtest-s6-b9-20-20260724T083014Z.log
+workspace/logs/nuubot5-trtest-s9-b13-2-20260724T202731Z.log
+workspace/logs/nuubot5-trtest-s9-b13-10-20260724T202751Z.log
+workspace/logs/nuubot5-rtest-s6-b9-2-20260724T202905Z.log
+workspace/logs/nuubot5-rtest-s6-b9-10-20260724T202915Z.log
+workspace/logs/nuubot5-trtest-s9-b13-1-20260724T204016Z.log
+workspace/logs/nuubot5-rtest-s6-b9-1-20260724T204033Z.log
 ```
 
 Historical commit benchmarks live in [PERFORMANCE.md](PERFORMANCE.md).

@@ -24,8 +24,8 @@ status persistence must be resolved before recovery design resumes.
 - ProcessStore owns process and restart evidence.
 - BotManager selects the stored Bot.
 - Runner recreates direct children.
-- RuntimeStore returns durable Runtime and BotCycle state.
-- Runtime recreates its active domain subtree.
+- ControllerStore returns durable Controller and BotCycle state.
+- Controller recreates its active domain subtree.
 - Accounts reconcile external truth before admission.
 
 ## Ordered Flow
@@ -37,8 +37,8 @@ Server startup
   start Runner in recovery mode
 
 Runner Init
-  load stored Bot and Runtime state
-  recreate Runtime and active BotCycle
+  load stored Bot and Controller state
+  recreate Controller and active BotCycle
   recreate Account bindings
 
 Runner Start
@@ -46,7 +46,7 @@ Runner Start
   reconcile every active Account
   evaluate recovered state
   start feeds and Clock
-  open Runtime admission last
+  open Controller admission last
   mark running
 ```
 
@@ -54,9 +54,9 @@ Runner Start
 
 ProcessStore decides whether a generation may recover.
 
-RuntimeStore decides what durable domain state exists.
+ControllerStore decides what durable domain state exists.
 
-Runtime decides whether reconciled state can resume or must stop.
+Controller decides whether reconciled state can resume or must stop.
 
 ## Failure Handling
 

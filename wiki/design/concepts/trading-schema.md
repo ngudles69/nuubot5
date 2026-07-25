@@ -139,13 +139,15 @@ Every SQLite connection enables foreign keys and a 30-second busy timeout.
 | `none` | Memory, then terminal export | Memory, then terminal export | Sweeps |
 | `max` | Every accepted mutation | Every changed state | Durable child-state reload |
 
-`none` writes a complete `.partial` database only after successful Runtime shutdown.
+`none` writes a complete `.partial` database only after successful Controller
+shutdown.
 
 Closing every writer precedes the final rename.
 
 `max` reloads Ledger and Simulator state by Ledger identity.
 
-It does not resume replay, Runtime, Signaler, or TradeExecutor policy cursors.
+It does not resume replay, Controller, Signaler, or TradeExecutor policy
+cursors.
 
 Transient BBO state is never restored.
 

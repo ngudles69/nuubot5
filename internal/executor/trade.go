@@ -10,7 +10,6 @@ import (
 	"nuubot/internal/ledger"
 	"nuubot/internal/market"
 	"nuubot/internal/order"
-	"nuubot/internal/signaler"
 	"nuubot/internal/toolkit/logging"
 	"nuubot/internal/trade"
 )
@@ -18,16 +17,17 @@ import (
 type tradeExecutor struct {
 	log            *logging.Logger
 	account        account.Account
+	spec           Spec
 	cycleNumber    int
 	executorNumber int
-	signal         signaler.Package
+	signalMS       uint64
 	side           string
 	lastBBO        market.BBO
 	notional       decimal.Decimal
 	takeProfitPct  decimal.Decimal
 	stopLossPct    decimal.Decimal
 	tradeID        uint64
-	result         account.Result
+	accountResult  account.Result
 	hasResult      bool
 	status         Status
 	exitReason     string
@@ -38,57 +38,44 @@ var _ BBOHandler = (*tradeExecutor)(nil)
 var _ BBOIngestHandler = (*tradeExecutor)(nil)
 var _ AccountReconciler = (*tradeExecutor)(nil)
 var _ ReconHandler = (*tradeExecutor)(nil)
-var _ AccountResultProvider = (*tradeExecutor)(nil)
 
 // Section 1 - Program Flow
 
 // OnInit initializes TradeExecutor without submitting Orders.
 func (e *tradeExecutor) OnInit(ctx Context) error {
 	e.log = ctx.Log
+	e.spec = ctx.Spec
 	if e.status != Configured {
 		return fmt.Errorf("trade executor cannot initialize from current state")
 	}
 	e.status = Starting
 
 	// validate trade config
-	var equity, feePct, slippagePct decimal.Decimal
-	var err error
-	e.notional, err = decimal.NewFromString(ctx.Config.OrderNotionalUSDC)
-	if err == nil {
-		e.takeProfitPct, err = decimal.NewFromString(ctx.Config.TakeProfitPct)
+	e.notional = ctx.Spec.OrderSizeUSDC
+	e.takeProfitPct = ctx.Spec.TakeProfitPct
+	e.stopLossPct = ctx.Spec.StopLossPct
+	var equity = ctx.StartingEquityUSDC
+	if !equity.IsPositive() {
+		equity = ctx.Spec.CapitalUSDC
 	}
-	if err == nil {
-		e.stopLossPct, err = decimal.NewFromString(ctx.Config.StopLossPct)
-	}
-	if err == nil {
-		equity, err = decimal.NewFromString(ctx.Config.SimulatorEquityUSDC)
-	}
-	if err == nil {
-		feePct, err = decimal.NewFromString(ctx.Config.SimulatorFeePct)
-	}
-	if err == nil {
-		slippagePct, err = decimal.NewFromString(ctx.Config.SimulatorSlippagePct)
-	}
-	if err != nil || !e.notional.IsPositive() || !equity.IsPositive() ||
+	if !e.notional.IsPositive() || !equity.IsPositive() ||
 		!e.takeProfitPct.IsPositive() || e.takeProfitPct.GreaterThanOrEqual(decimal.NewFromInt(1)) ||
 		!e.stopLossPct.IsPositive() || e.stopLossPct.GreaterThanOrEqual(decimal.NewFromInt(1)) ||
-		feePct.IsNegative() || slippagePct.IsNegative() ||
-		ctx.Config.Network != "simnet" ||
-		(ctx.Config.PersistMode != ledger.None && ctx.Config.PersistMode != ledger.Max) {
+		ctx.Spec.FeePct.IsNegative() || ctx.Spec.SlippagePct.IsNegative() ||
+		ctx.Spec.Resource.Venue != "simulator" ||
+		ctx.Spec.Resource.Network != "simnet" ||
+		ctx.Spec.Resource.PhysicalAccountID == "" ||
+		ctx.Spec.Resource.Symbol == "" ||
+		(ctx.Spec.PersistMode != ledger.None && ctx.Spec.PersistMode != ledger.Max) {
 		e.status = Error
 		return fmt.Errorf("trade executor config is invalid")
 	}
 
-	// admit trigger Signal
-	var enterLong = ctx.Signal.EnterLong()
-	var enterShort = ctx.Signal.EnterShort()
-	if enterLong == enterShort {
+	// admit fixed side
+	e.side = ctx.Spec.Side
+	if e.side != Long && e.side != Short {
 		e.status = Error
-		return fmt.Errorf("%w: trade executor requires one entry trigger", ErrRejected)
-	}
-	e.side = signaler.Long
-	if enterShort {
-		e.side = signaler.Short
+		return fmt.Errorf("%w: trade executor requires one configured side", ErrRejected)
 	}
 
 	// admit current BBO
@@ -99,24 +86,25 @@ func (e *tradeExecutor) OnInit(ctx Context) error {
 	e.lastBBO = ctx.LatestBBO
 	e.cycleNumber = ctx.CycleNumber
 	e.executorNumber = ctx.ExecutorNumber
-	e.signal = ctx.Signal
+	e.signalMS = ctx.SignalTimestampMS
 
 	// initialize Account
 	var ledgerID = uint64(ctx.CycleNumber)<<32 | uint64(ctx.ExecutorNumber)
-	err = e.account.Init(ctx.Log, account.Config{
+	var err = e.account.Init(ctx.Log, account.Config{
 		LedgerID:        ledgerID,
 		CycleNumber:     ctx.CycleNumber,
 		ExecutorNumber:  ctx.ExecutorNumber,
-		Name:            ctx.Config.AccountName,
-		Network:         ctx.Config.Network,
-		Symbol:          ctx.Signal.Symbol(),
-		Meta:            ctx.Meta,
-		MinNotionalUSDC: ctx.MinNotional,
+		Name:            ctx.Spec.Resource.PhysicalAccountID,
+		Venue:           ctx.Spec.Resource.Venue,
+		Network:         ctx.Spec.Resource.Network,
+		Symbol:          ctx.Spec.Resource.Symbol,
+		Meta:            ctx.Spec.Meta,
+		MinNotionalUSDC: ctx.Spec.MinNotionalUSDC,
 		EquityUSDC:      equity,
-		FeePct:          feePct,
-		SlippagePct:     slippagePct,
-		PersistMode:     ctx.Config.PersistMode,
-		ResultPath:      ctx.ResultPath,
+		FeePct:          ctx.Spec.FeePct,
+		SlippagePct:     ctx.Spec.SlippagePct,
+		PersistMode:     ctx.Spec.PersistMode,
+		ResultPath:      ctx.Spec.ResultPath,
 	})
 	if err != nil {
 		e.status = Error
@@ -146,7 +134,7 @@ func (e *tradeExecutor) OnInit(ctx Context) error {
 		e.cycleNumber,
 		e.executorNumber,
 		e.side,
-		e.signal.TimestampMS(),
+		e.signalMS,
 	))
 	return nil
 }
@@ -239,7 +227,7 @@ func (e *tradeExecutor) OnStop(reason string) error {
 	}
 
 	// cache terminal Account result
-	e.result = result.Clone()
+	e.accountResult = result.Clone()
 	e.hasResult = true
 	e.status = Stopped
 	e.log.Info(fmt.Sprintf(
@@ -257,11 +245,17 @@ func (e *tradeExecutor) OnStop(reason string) error {
 
 // IngestBBO advances the owned Simulator before policy handling.
 func (e *tradeExecutor) IngestBBO(bbo market.BBO) error {
+	if bbo.Symbol != "" && bbo.Symbol != e.spec.Resource.Symbol {
+		return nil
+	}
 	return e.account.IngestBBO(bbo)
 }
 
 // OnBBO records the latest normal Executor BBO.
 func (e *tradeExecutor) OnBBO(bbo market.BBO) {
+	if bbo.Symbol != "" && bbo.Symbol != e.spec.Resource.Symbol {
+		return
+	}
 	e.lastBBO = bbo
 }
 
@@ -287,7 +281,7 @@ func (e *tradeExecutor) OnRecon(_ uint64) error {
 		var stopLoss = entry.Mul(decimal.NewFromInt(1).Sub(e.stopLossPct))
 		var entrySide = order.Buy
 		var exitSide = order.Sell
-		if e.side == signaler.Short {
+		if e.side == Short {
 			entrySide = order.Sell
 			exitSide = order.Buy
 			takeProfit = entry.Mul(decimal.NewFromInt(1).Sub(e.takeProfitPct))
@@ -356,12 +350,24 @@ func (e *tradeExecutor) ExitReason() string {
 	return e.exitReason
 }
 
-// AccountResult returns cached terminal Account evidence.
-func (e *tradeExecutor) AccountResult() (account.Result, error) {
+// Result returns one terminal TradeExecutor result.
+func (e *tradeExecutor) Result() (Result, error) {
 	if !e.hasResult {
-		return account.Result{}, errors.New("trade executor result is unavailable")
+		return Result{}, errors.New("trade executor result is unavailable")
 	}
-	return e.result.Clone(), nil
+	var accountResult = e.accountResult.Clone()
+	return Result{
+		ID:            e.spec.ID,
+		Role:          e.spec.Role,
+		Kind:          e.spec.Kind,
+		Side:          e.spec.Side,
+		Resource:      e.spec.Resource,
+		Status:        e.status,
+		ExitReason:    e.exitReason,
+		CapitalUSDC:   e.spec.CapitalUSDC,
+		OrderSizeUSDC: e.spec.OrderSizeUSDC,
+		Account:       &accountResult,
+	}, nil
 }
 
 // Section 3 - Generic Helpers

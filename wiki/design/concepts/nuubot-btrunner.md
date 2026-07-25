@@ -57,7 +57,7 @@ The successful terminal message includes elapsed duration.
 ## Does Not
 
 - Load configuration.
-- Know BtRunner-owned Clock, Reader, Runtime, or replay proof.
+- Know BtRunner-owned Clock, Reader, Controller, or replay proof.
 - Open log files directly.
 - Wrap `main` with `program`, command, or local Run functions.
 

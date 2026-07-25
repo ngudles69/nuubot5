@@ -40,7 +40,7 @@ Public, private, venue, network, and Account sharing boundaries remain TBD.
 
 ## Does Not
 
-- Own Runner or Runtime.
+- Own Runner or Controller.
 - Store Bot-local mutable feed state.
 - Place or cancel orders.
 - Mark domain objects dirty directly.

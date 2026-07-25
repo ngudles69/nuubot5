@@ -1,6 +1,7 @@
 package datastore
 
 import (
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -27,10 +28,10 @@ type storedBot struct {
 
 // Section 1 - Program Flow
 
-// LoadBot loads one validated Bot specification.
-func LoadBot(path string, sweepID, botID uint64) (BotSpec, error) {
+// LoadBot loads one exact stored Bot configuration and replay input.
+func LoadBot(path string, sweepID, botID uint64) (Bot, error) {
 	// open database
-	var bot BotSpec
+	var bot Bot
 	dsn := "file:" + filepath.ToSlash(path) + "?mode=ro&immutable=1"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
@@ -41,12 +42,17 @@ func LoadBot(path string, sweepID, botID uint64) (BotSpec, error) {
 	// query bot
 	var text string
 	err = db.QueryRow(
-		"SELECT config_json FROM bot WHERE sweep_id = ? AND bot_id = ?",
+		`SELECT bot_spec_id, config_toml, config_hash, config_json
+		FROM bot WHERE sweep_id = ? AND bot_id = ?`,
 		sweepID,
 		botID,
-	).Scan(&text)
+	).Scan(&bot.BotSpecID, &bot.ConfigTOML, &bot.ConfigHash, &text)
 	if err != nil {
 		return bot, fmt.Errorf("load bot sweep_id=%d bot_id=%d: %w", sweepID, botID, err)
+	}
+	var actualHash = fmt.Sprintf("%x", sha256.Sum256([]byte(bot.ConfigTOML)))
+	if bot.BotSpecID == "" || bot.ConfigTOML == "" || bot.ConfigHash != actualHash {
+		return bot, fmt.Errorf("invalid stored BotSpec identity or Config hash")
 	}
 
 	// decode bot
@@ -79,14 +85,17 @@ func LoadBot(path string, sweepID, botID uint64) (BotSpec, error) {
 		return bot, fmt.Errorf("bot start must precede end")
 	}
 	// return bot
-	return BotSpec{
+	bot.SweepID = sweepID
+	bot.BotID = botID
+	bot.Replay = ReplayInput{
 		Symbol:      stored.General.Symbol,
 		TicksPath:   filepath.Clean(stored.Data.Ticks),
 		ReplayStart: replayStart,
 		ReplayEnd:   replayEnd,
 		StartAt:     startAt,
 		EndAt:       endAt,
-	}, nil
+	}
+	return bot, nil
 }
 
 // Section 2 - Domain Helpers

@@ -3,21 +3,19 @@ package config
 import (
 	"fmt"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/BurntSushi/toml"
-	"github.com/shopspring/decimal"
 )
 
-type Config struct {
+// App contains process-wide, non-Bot configuration.
+type App struct {
 	Server      Server      `toml:"server"`
 	Network     Network     `toml:"network"`
 	Hyperliquid Hyperliquid `toml:"hyperliquid"`
 	Process     Process     `toml:"process"`
 	Paths       Paths       `toml:"paths"`
 	BtRunner    BtRunner    `toml:"btrunner"`
-	Runtime     Runtime     `toml:"runtime"`
 }
 
 // Server defines the shared server listener.
@@ -56,47 +54,12 @@ type BtRunner struct {
 	TimerIntervalMS uint64 `toml:"timer_interval_ms"`
 }
 
-type Runtime struct {
-	MaxCycles uint64     `toml:"max_cycles"`
-	Signaler  Signaler   `toml:"signaler"`
-	Executors []Executor `toml:"executors"`
-	Risks     []Risk     `toml:"risks"`
-}
-
-type Signaler struct {
-	Kind            string `toml:"kind"`
-	SignalTimeframe string `toml:"signal_timeframe"`
-	RegimeTimeframe string `toml:"regime_timeframe"`
-	FastMA          int    `toml:"fast_ma"`
-	SlowMA          int    `toml:"slow_ma"`
-	RSIPeriod       int    `toml:"rsi_period"`
-	RegimeEMA       int    `toml:"regime_ema"`
-	VolumePeriod    int    `toml:"volume_period"`
-}
-
-type Executor struct {
-	Kind                 string `toml:"kind"`
-	StopLossPct          string `toml:"stop_loss_pct"`
-	AccountName          string `toml:"account_name"`
-	Network              string `toml:"network"`
-	OrderNotionalUSDC    string `toml:"order_notional_usdc"`
-	TakeProfitPct        string `toml:"take_profit_pct"`
-	SimulatorEquityUSDC  string `toml:"simulator_equity_usdc"`
-	SimulatorFeePct      string `toml:"simulator_fee_pct"`
-	SimulatorSlippagePct string `toml:"simulator_slippage_pct"`
-	PersistMode          string `toml:"persist_mode"`
-}
-
-type Risk struct {
-	Kind string `toml:"kind"`
-}
-
 // Section 1 - Program Flow
 
-// Load decodes and validates one Config.
-func Load(path string) (Config, error) {
+// LoadApp decodes and validates one App Config.
+func LoadApp(path string) (App, error) {
 	// decode toml
-	var cfg Config
+	var cfg App
 	metadata, err := toml.DecodeFile(path, &cfg)
 	if err != nil {
 		return cfg, fmt.Errorf("load config %s: %v", path, err)
@@ -117,89 +80,12 @@ func Load(path string) (Config, error) {
 	if cfg.BtRunner.TimerIntervalMS == 0 {
 		return cfg, fmt.Errorf("btrunner.timer_interval_ms must be positive")
 	}
-	// validate runtime
-	if err := validateRuntime(cfg.Runtime); err != nil {
-		return cfg, err
-	}
 	return cfg, nil
 }
 
 // Section 2 - Domain Helpers
 
-func validateRuntime(cfg Runtime) error {
-	if cfg.MaxCycles == 0 || len(cfg.Executors) == 0 {
-		return fmt.Errorf("runtime requires max_cycles and at least one executor")
-	}
-	if cfg.Signaler.Kind != "macross" && cfg.Signaler.Kind != "rsi" {
-		return fmt.Errorf("unknown signaler: %s", cfg.Signaler.Kind)
-	}
-	if cfg.Signaler.FastMA <= 0 || cfg.Signaler.FastMA >= cfg.Signaler.SlowMA ||
-		cfg.Signaler.RSIPeriod <= 0 || cfg.Signaler.RegimeEMA <= 0 || cfg.Signaler.VolumePeriod <= 0 {
-		return fmt.Errorf("invalid signaler periods")
-	}
-	var tradeExecutors int
-	for _, executor := range cfg.Executors {
-		switch executor.Kind {
-		case "observer":
-			var stopLoss, err = strconv.ParseFloat(executor.StopLossPct, 64)
-			if err != nil || stopLoss <= 0 || stopLoss >= 1 {
-				return fmt.Errorf("observer stop_loss_pct must be between 0 and 1")
-			}
-		case "trade":
-			tradeExecutors++
-			if executor.AccountName == "" || executor.Network != "simnet" ||
-				(executor.PersistMode != "none" && executor.PersistMode != "max") {
-				return fmt.Errorf("invalid trade executor identity or persistence")
-			}
-			var notional, err = positiveDecimal(executor.OrderNotionalUSDC)
-			if err != nil {
-				return fmt.Errorf("invalid trade executor order_notional_usdc: %w", err)
-			}
-			var equity decimal.Decimal
-			equity, err = positiveDecimal(executor.SimulatorEquityUSDC)
-			if err != nil || equity.LessThan(notional) {
-				return fmt.Errorf("invalid trade executor simulator_equity_usdc")
-			}
-			for name, value := range map[string]string{
-				"take_profit_pct":        executor.TakeProfitPct,
-				"stop_loss_pct":          executor.StopLossPct,
-				"simulator_fee_pct":      executor.SimulatorFeePct,
-				"simulator_slippage_pct": executor.SimulatorSlippagePct,
-			} {
-				var parsed decimal.Decimal
-				parsed, err = decimal.NewFromString(value)
-				if err != nil || parsed.IsNegative() {
-					return fmt.Errorf("invalid trade executor %s", name)
-				}
-				if (name == "take_profit_pct" || name == "stop_loss_pct") &&
-					(!parsed.IsPositive() || parsed.GreaterThanOrEqual(decimal.NewFromInt(1))) {
-					return fmt.Errorf("trade executor %s must be between 0 and 1", name)
-				}
-			}
-		default:
-			return fmt.Errorf("unknown executor: %s", executor.Kind)
-		}
-	}
-	if tradeExecutors > 1 {
-		return fmt.Errorf("runtime supports one trade executor")
-	}
-	for _, risk := range cfg.Risks {
-		if risk.Kind != "balanced" {
-			return fmt.Errorf("unknown risk: %s", risk.Kind)
-		}
-	}
-	return nil
-}
-
 // Section 3 - Generic Helpers
-
-func positiveDecimal(value string) (decimal.Decimal, error) {
-	var parsed, err = decimal.NewFromString(value)
-	if err != nil || !parsed.IsPositive() {
-		return decimal.Zero, fmt.Errorf("expected positive decimal")
-	}
-	return parsed, nil
-}
 
 // Rooted resolves one configured path beneath root.
 func Rooted(root, path string) string {

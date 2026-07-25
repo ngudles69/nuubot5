@@ -2,7 +2,7 @@
 
 Status: Implemented.
 Covers: `internal/datastore/*.go`
-Purpose: Load one validated Bot replay specification and define datastore ownership expectations.
+Purpose: Load one exact stored BotConfig and validated ReplayInput.
 
 ## Canonical Sources
 
@@ -12,7 +12,7 @@ Purpose: Load one validated Bot replay specification and define datastore owners
 
 ## Scope
 
-Datastore reads one Bot JSON configuration by exact Sweep and Bot identity.
+Datastore reads one Bot row by exact Sweep and Bot identity.
 
 The implemented path remains read-only. Future writable datastore behavior is
 approved only at the ownership level described below.
@@ -27,11 +27,13 @@ Datastore opens one short-lived read-only SQLite connection.
 
 - Open the configured SQLite database read-only and immutable.
 - Query one exact Bot row.
-- Decode stored JSON.
+- Read exact BotSpecID, BotConfig TOML, Config SHA-256, and replay JSON.
+- Verify Config TOML against the stored SHA-256.
+- Decode replay JSON.
 - Parse replay dates and optional Bot dates.
-- Preserve optional `StartAt` and `EndAt` in `BotSpec`.
+- Preserve optional `StartAt` and `EndAt` in `ReplayInput`.
 - Validate symbol, tick path, and ordered dates.
-- Return one normalized `BotSpec`.
+- Return one normalized `datastore.Bot`.
 
 ## Does Not
 
@@ -50,7 +52,7 @@ Datastore opens one short-lived read-only SQLite connection.
 
 Inputs are database path, Sweep ID, and Bot ID.
 
-Output is one `datastore.BotSpec`.
+Output is one `datastore.Bot`.
 
 ## State and Invariants
 
@@ -154,22 +156,18 @@ LoadBot
 - Remaining main schemas, migrations, and transaction boundaries.
 - Sweep catalog and terminal-summary schema.
 - Live datastore access and write serialization.
-- Per-Bot result schema and aggregation contract.
+- Sweep aggregation contract.
 
-## Approved BotSpec Target
+## BotSpec Hardcut
 
-Status: Approved target design. Not implemented.
+Status: Implemented.
 
-The current `datastore.BotSpec` name is inaccurate.
+Replay fields use `datastore.ReplayInput`.
 
-It will become `ReplayInput` through one hard rename.
-
-BotSpec will instead mean the complete compiled Controller design described by
+BotSpec means the complete compiled Controller design described by
 [BotSpec](../concepts/bot-spec.md).
 
-No compatibility alias will remain.
-
-## Approved BotConfig Persistence
+## BotConfig Persistence
 
 One configured Bot stores:
 
@@ -181,7 +179,9 @@ config_hash
 
 TOML is the authoritative stored BotConfig representation.
 
-JSON remains an API envelope and Result format only.
+The existing replay JSON remains ReplayInput only.
+
+It owns no Bot behavior.
 
 Start copies the exact saved TOML and hash into one immutable BotGeneration.
 

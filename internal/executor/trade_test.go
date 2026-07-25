@@ -9,7 +9,6 @@ import (
 	"github.com/shopspring/decimal"
 
 	"nuubot/internal/account"
-	"nuubot/internal/config"
 	"nuubot/internal/market"
 	"nuubot/internal/meta"
 	"nuubot/internal/order"
@@ -52,11 +51,12 @@ func TestTradeExecutorRunsOneBracket(t *testing.T) {
 	if err = actual.OnStop("completed"); err != nil {
 		t.Fatalf("stop TradeExecutor: %v", err)
 	}
-	var result account.Result
-	result, err = actual.AccountResult()
+	var executorResult Result
+	executorResult, err = actual.Result()
 	if err != nil {
-		t.Fatalf("read Account result: %v", err)
+		t.Fatalf("read Executor result: %v", err)
 	}
+	var result = *executorResult.Account
 	if len(result.Ledger.Trades) != 1 ||
 		len(result.Ledger.Trades[0].Orders) != 3 ||
 		result.Ledger.Trades[0].Status != "closed" ||
@@ -86,11 +86,12 @@ func TestTradeExecutorStopClosesOpenPosition(t *testing.T) {
 	if err = actual.OnStop("parent_stop"); err != nil {
 		t.Fatalf("stop open TradeExecutor: %v", err)
 	}
-	var result account.Result
-	result, err = actual.AccountResult()
+	var executorResult Result
+	executorResult, err = actual.Result()
 	if err != nil {
-		t.Fatalf("read Account result: %v", err)
+		t.Fatalf("read Executor result: %v", err)
 	}
+	var result = *executorResult.Account
 	if len(result.Simulator.Fills) != 2 ||
 		!result.Ledger.Trades[0].OpenQuantity.IsZero() {
 		t.Fatalf("unexpected shutdown result: %+v", result)
@@ -112,11 +113,12 @@ func TestTradeExecutorStopClosesRoundedShortPosition(t *testing.T) {
 	if err = actual.OnStop("parent_stop"); err != nil {
 		t.Fatalf("stop rounded short TradeExecutor: %v", err)
 	}
-	var result account.Result
-	result, err = actual.AccountResult()
+	var executorResult Result
+	executorResult, err = actual.Result()
 	if err != nil {
-		t.Fatalf("read Account result: %v", err)
+		t.Fatalf("read Executor result: %v", err)
 	}
+	var result = *executorResult.Account
 	if len(result.Simulator.Fills) != 2 ||
 		!result.Ledger.Trades[0].OpenQuantity.IsZero() {
 		t.Fatalf("unexpected rounded short shutdown result: %+v", result)
@@ -172,33 +174,39 @@ func tradeExecutorContext(
 	t.Helper()
 	var initial = market.BBO{TimestampMS: 3_000, Price: price}
 	return Context{
-		Log:            logging.Create(&bytes.Buffer{}),
-		CycleNumber:    1,
-		ExecutorNumber: 1,
-		Signal:         testSignal(t, enterLong, !enterLong),
-		LatestBBO:      initial,
-		Meta: meta.Instrument{
-			Network:       "testnet",
-			Kind:          "perp",
-			Symbol:        "BTC",
-			AssetID:       0,
-			SizeDecimals:  5,
-			PriceDecimals: 1,
+		Log:               logging.Create(&bytes.Buffer{}),
+		CycleNumber:       1,
+		ExecutorNumber:    1,
+		SignalTimestampMS: 2_000,
+		LatestBBO:         initial,
+		Spec: Spec{
+			ID:   "trade",
+			Kind: "trade",
+			Side: map[bool]string{true: Long, false: Short}[enterLong],
+			Resource: Resource{
+				Venue:             "simulator",
+				Network:           "simnet",
+				PhysicalAccountID: "sim",
+				Symbol:            "BTC",
+			},
+			CapitalUSDC:     decimal.NewFromInt(1000),
+			OrderSizeUSDC:   decimal.NewFromInt(11),
+			TakeProfitPct:   decimal.RequireFromString("0.10"),
+			StopLossPct:     decimal.RequireFromString("0.10"),
+			FeePct:          decimal.RequireFromString("0.035"),
+			SlippagePct:     decimal.Zero,
+			PersistMode:     persistMode,
+			MinNotionalUSDC: decimal.NewFromInt(11),
+			Meta: meta.Instrument{
+				Network:       "testnet",
+				Kind:          "perp",
+				Symbol:        "BTC",
+				AssetID:       0,
+				SizeDecimals:  5,
+				PriceDecimals: 1,
+			},
+			ResultPath: resultPath,
 		},
-		MinNotional: decimal.NewFromInt(11),
-		Config: config.Executor{
-			Kind:                 "trade",
-			AccountName:          "sim",
-			Network:              "simnet",
-			OrderNotionalUSDC:    "11",
-			TakeProfitPct:        "0.10",
-			StopLossPct:          "0.10",
-			SimulatorEquityUSDC:  "1000",
-			SimulatorFeePct:      "0.035",
-			SimulatorSlippagePct: "0",
-			PersistMode:          persistMode,
-		},
-		ResultPath: resultPath,
 	}
 }
 

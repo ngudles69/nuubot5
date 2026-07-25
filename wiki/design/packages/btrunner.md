@@ -1,138 +1,67 @@
 # BtRunner Package
 
-Status: Implemented with terminal result publication.
+Status: Implemented with exact BotSpec admission and first-class results.
 Covers: `internal/btrunner/btrunner.go`
 Purpose: Run one bounded historical Bot replay and prove exact completion.
 
-## Canonical Source
+## Ownership
 
-- `D:/rust/nuubot4/src/btrunner.rs`
+BtRunner owns:
 
-## Scope & Responsibilities
+- Setup admission;
+- one ReplayReader;
+- one TickClock;
+- one Controller;
+- exact replay proof; and
+- terminal ResultPublisher invocation.
 
-BtRunner owns Setup context, TickClock, TickReader, Runtime, and replay proof.
+BtRunner owns no Signaler, Risk, BotCycle, Executor, Account, or Ledger
+directly.
 
-The trading extension gives BtRunner one ResultPublisher.
-
-- Serve every admitted tick to Runtime.
-- Register and own the Runtime timer callback.
-- Stop timer and input admission before Runtime.
-
-## Program Flow
-
-```text
-BtRunner
-
-init
-  prepare setup
-  set replay range
-  create clock
-  initialize clock
-  register runtime timer
-  initialize replay reader
-  initialize runtime
-  create proof
-
-start
-  start clock
-  start runtime
-
-loop
-  read replay
-  ingest runtime bbo
-  record proof
-  advance clock
-  check stop request
-  verify replay
-
-runtime_run(time)
-  run runtime
-  remember stop request
-
-stop
-  stop clock
-  stop replay reader
-  stop runtime
-  publish completed result
-  report proof
-  return stop errors
-
----
-
-domain
-  ticks  = expected ticks
-  runs   = expected Runtime runs
-  first  = expected first timestamp
-  last   = expected last timestamp
-```
-
-## Notes
-
-- BtRunner knows Runtime, never Runtime-owned Signaler, Risk, BotCycle, or Executor.
-- The command owns BtRunner lifecycle order; BtRunner owns each phase.
-- The command owns one BtRunner value; Init fills it and returns only an error.
-- Init binds its logger before any fallible preparation.
-- Lifecycle messages already identify BtRunner and their stage.
-- BtRunner adds no duplicate component, event, or status fields.
-- BtRunner names its explicit logger `log`.
-- BtRunner constructs each complete message before calling `log`.
-- Replay range selection, validation, and proof conversion stay together.
-- Initialization is logged only after every owned child and replay proof succeeds.
-- Failures return to the command boundary and are logged once.
-- Canonical builds and tests use `-tags noasm`.
-
-## Result Publication
-
-After replay verification, BtRunner stops Runtime.
-
-Runtime returns immutable evidence captured before every BotCycle teardown.
-
-BtRunner passes that value to ResultPublisher.
-
-ResultPublisher writes `persist_mode = none` evidence once.
-
-Any replay, ReplayReader stop, Runtime stop, result, or publication failure prevents success publication.
-
-## Approved Standalone Target
-
-Status: Approved target design. Not implemented.
-
-BtRunner remains one standalone historical execution program.
-
-It requires no Server, API, BotManager, SweepManager, live credential, or
-exchange WebSocket.
-
-It loads one stored Sweep and child Bot identity, admits one exact
-BotDefinition, and owns one Controller.
-
-## Approved Multi-Stream Target
-
-One exact BotSpec declares every required symbol, event type, and interval.
-
-Every market event carries symbol identity.
-
-BtRunner loads every required historical stream and fails admission when data
-or pinned Meta is missing.
-
-It merges streams deterministically and preserves closed-bar no-lookahead
-behavior.
-
-Equal-timestamp ordering must be explicit before implementation.
-
-Controller receives typed symbol-qualified values.
-
-It never loads files or merges streams.
-
-## Approved Result Target
-
-After replay proof and Controller shutdown, BtRunner receives:
+## Initialization
 
 ```text
-ControllerResult
-  BotCycleResults
-    ExecutorResults
+Setup loads AppConfig, stored BotConfig, ReplayInput, and Meta
+initialize TickClock and ReplayReader
+build exact compiled BotSpec
+initialize Controller from BotDefinition
+calculate expected replay proof
 ```
 
-BacktestResult adds replay, data, Meta, Config, code, and timing provenance.
+Caller context reaches Setup and Meta admission.
 
-Failed cleanup or incomplete replay cannot publish a successful BacktestResult.
+Setup creates no background context.
+
+## Loop
+
+Every admitted BBO receives its replay symbol.
+
+BtRunner sends the BBO to Controller, advances TickClock, and runs Controller
+through the registered timer.
+
+Reader exhaustion is normal completion.
+
+## Proof
+
+BtRunner verifies exact tick count, control-pass count, first timestamp, and
+last timestamp.
+
+Failure prevents successful publication.
+
+## Result
+
+`btrunner.Result` contains:
+
+- immutable `controller.Result`; and
+- replay counts, range, elapsed time, completion, and publication proof.
+
+ResultPublisher writes the same terminal hierarchy to the per-Bot SQLite
+database.
+
+## Standalone Boundary
+
+BtRunner runs with Server stopped.
+
+It reads the exact saved BotConfig from Datastore.
+
+TOML import files never select trading behavior after Bot creation.

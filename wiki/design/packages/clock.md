@@ -105,4 +105,4 @@ BtRunner advances TickClock from admitted replay ticks.
 WallClock `Start` launches its wall-time loop. The loop waits for the next
 timer and calls `Advance(NowMS())`.
 
-Clock owns timer checking. Runtime policy stays inside registered callbacks.
+Clock owns timer checking. Controller policy stays inside registered callbacks.

@@ -33,7 +33,7 @@ ProcessStore owns no operating-system process and no Runner.
 - Spawn, terminate, or signal processes.
 - Probe operating-system liveness.
 - Implement restart policy.
-- Store Runtime domain state.
+- Store Controller domain state.
 - Define database schema in this page.
 
 ## Invariants

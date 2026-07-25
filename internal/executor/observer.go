@@ -2,10 +2,8 @@ package executor
 
 import (
 	"fmt"
-	"strconv"
 
 	"nuubot/internal/market"
-	"nuubot/internal/signaler"
 	"nuubot/internal/toolkit/logging"
 )
 
@@ -24,9 +22,11 @@ type observerStats struct {
 
 type observer struct {
 	log            *logging.Logger
+	spec           Spec
 	cycleNumber    int
 	executorNumber int
-	signal         signaler.Package
+	signalMS       uint64
+	signalPrice    float64
 	side           string
 	stopLossPct    float64
 	stats          observerStats
@@ -42,33 +42,25 @@ var _ BBOIngestHandler = (*observer)(nil)
 // OnInit initializes ObserverExecutor.
 func (e *observer) OnInit(ctx Context) error {
 	e.log = ctx.Log
+	e.spec = ctx.Spec
 	if e.status != Configured {
 		return fmt.Errorf("observer executor cannot initialize from current state")
 	}
 	e.cycleNumber = ctx.CycleNumber
 	e.executorNumber = ctx.ExecutorNumber
-	e.signal = ctx.Signal
-	var err error
-	e.stopLossPct, err = strconv.ParseFloat(ctx.Config.StopLossPct, 64)
+	e.signalMS = ctx.SignalTimestampMS
+	e.side = ctx.Spec.Side
+	e.stopLossPct, _ = ctx.Spec.StopLossPct.Float64()
 	e.status = Starting
 
 	// validate config
-	if err != nil || e.stopLossPct <= 0 || e.stopLossPct >= 1 {
+	if e.stopLossPct <= 0 || e.stopLossPct >= 1 {
 		e.status = Error
 		return fmt.Errorf("observer stop_loss_pct must be between 0 and 1")
 	}
-
-	// admit signal
-	var enterLong = e.signal.EnterLong()
-	var enterShort = e.signal.EnterShort()
-	if enterLong == enterShort {
+	if e.side != Long && e.side != Short {
 		e.status = Error
-		return fmt.Errorf("%w: observer requires one entry trigger", ErrRejected)
-	}
-	if enterLong {
-		e.side = signaler.Long
-	} else {
-		e.side = signaler.Short
+		return fmt.Errorf("%w: observer requires one configured side", ErrRejected)
 	}
 
 	// initialize observer
@@ -79,7 +71,7 @@ func (e *observer) OnInit(ctx Context) error {
 		e.cycleNumber,
 		e.executorNumber,
 		e.side,
-		e.signal.TimestampMS(),
+		e.signalMS,
 		e.stopLossPct,
 	))
 	return nil
@@ -101,7 +93,7 @@ func (e *observer) OnStop(reason string) error {
 	if e.stats.endMS == 0 {
 		e.stats.endMS = e.stats.lastMS
 		if e.stats.endMS == 0 {
-			e.stats.endMS = e.signal.TimestampMS()
+			e.stats.endMS = e.signalMS
 		}
 	}
 
@@ -113,8 +105,6 @@ func (e *observer) OnStop(reason string) error {
 	if e.stats.endMS >= e.stats.startMS {
 		durationMS = e.stats.endMS - e.stats.startMS
 	}
-	var signalPrice, _ = e.signal.Number("signal_price")
-
 	// report proof
 	e.log.Info(fmt.Sprintf(
 		"executor stopped cycle=%d executor=%d side=%s signal_ts_ms=%d "+
@@ -124,8 +114,8 @@ func (e *observer) OnStop(reason string) error {
 		e.cycleNumber,
 		e.executorNumber,
 		e.side,
-		e.signal.TimestampMS(),
-		signalPrice,
+		e.signalMS,
+		e.signalPrice,
 		e.stopLossPct,
 		e.stats.startMS,
 		e.stats.endMS,
@@ -144,7 +134,10 @@ func (e *observer) OnStop(reason string) error {
 // Section 2 - Domain Helpers
 
 // IngestBBO records one Simulator-only BBO delivery.
-func (e *observer) IngestBBO(_ market.BBO) error {
+func (e *observer) IngestBBO(bbo market.BBO) error {
+	if bbo.Symbol != "" && bbo.Symbol != e.spec.Resource.Symbol {
+		return nil
+	}
 	// count ingested bbo
 	e.stats.ingestBBOCount++
 	return nil
@@ -152,6 +145,9 @@ func (e *observer) IngestBBO(_ market.BBO) error {
 
 // OnBBO observes one normal Executor BBO event.
 func (e *observer) OnBBO(bbo market.BBO) {
+	if bbo.Symbol != "" && bbo.Symbol != e.spec.Resource.Symbol {
+		return
+	}
 	// count received bbo
 	e.stats.onBBOCount++
 	if e.status != Running {
@@ -166,7 +162,8 @@ func (e *observer) OnBBO(bbo market.BBO) {
 	if e.stats.startMS == 0 {
 		e.stats.startMS = bbo.TimestampMS
 		e.stats.startPrice = bbo.Price
-		if e.side == signaler.Long {
+		e.signalPrice = bbo.Price
+		if e.side == Long {
 			e.stats.stopLossPrice = bbo.Price * (1 - e.stopLossPct)
 		} else {
 			e.stats.stopLossPrice = bbo.Price * (1 + e.stopLossPct)
@@ -174,8 +171,8 @@ func (e *observer) OnBBO(bbo market.BBO) {
 	}
 
 	// assess stop loss
-	var triggered = e.side == signaler.Long && bbo.Price <= e.stats.stopLossPrice ||
-		e.side == signaler.Short && bbo.Price >= e.stats.stopLossPrice
+	var triggered = e.side == Long && bbo.Price <= e.stats.stopLossPrice ||
+		e.side == Short && bbo.Price >= e.stats.stopLossPrice
 	if triggered {
 		e.stats.endMS = bbo.TimestampMS
 		e.stats.exitPrice = bbo.Price
@@ -192,6 +189,24 @@ func (e *observer) Status() Status {
 // ExitReason returns ObserverExecutor's terminal reason.
 func (e *observer) ExitReason() string {
 	return e.stats.reason
+}
+
+// Result returns one terminal ObserverExecutor result.
+func (e *observer) Result() (Result, error) {
+	if e.status != Stopped {
+		return Result{}, fmt.Errorf("observer executor result is unavailable")
+	}
+	return Result{
+		ID:            e.spec.ID,
+		Role:          e.spec.Role,
+		Kind:          e.spec.Kind,
+		Side:          e.spec.Side,
+		Resource:      e.spec.Resource,
+		Status:        e.status,
+		ExitReason:    e.stats.reason,
+		CapitalUSDC:   e.spec.CapitalUSDC,
+		OrderSizeUSDC: e.spec.OrderSizeUSDC,
+	}, nil
 }
 
 // Section 3 - Generic Helpers

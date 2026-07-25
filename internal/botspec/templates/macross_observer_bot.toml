@@ -1,0 +1,23 @@
+# Exact Config form for BotSpecID macross_observer_bot.
+# Extra fields are stored and ignored. Required fields must remain.
+bot_spec = "macross_observer_bot"
+
+[controller]
+max_cycles = 999
+
+[signaler]
+signal_timeframe = "1h"
+regime_timeframe = "4h"
+fast_ma = 9
+slow_ma = 21
+regime_ema = 200
+
+[[executors]]
+id = "observer"
+kind = "observer"
+side = "long"
+symbol = "BTC"
+stop_loss_pct = "0.01"
+
+[[risks]]
+kind = "balanced"

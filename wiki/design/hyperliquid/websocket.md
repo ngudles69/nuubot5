@@ -22,7 +22,7 @@ Purpose: Maintain recoverable Hyperliquid streams using `gorilla/websocket`.
 
 ## Out
 
-- Runtime decisions.
+- Controller decisions.
 - Account reconciliation.
 - Ledger mutation.
 - Order placement or cancellation.

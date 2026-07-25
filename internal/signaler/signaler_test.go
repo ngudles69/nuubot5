@@ -5,7 +5,6 @@ import (
 	"math"
 	"testing"
 
-	"nuubot/internal/config"
 	"nuubot/internal/ohlcv"
 )
 
@@ -13,7 +12,7 @@ import (
 
 func TestMacrossUsesOnlyClosedRegimeBars(t *testing.T) {
 	var strategy macross
-	var err = strategy.configure(config.Signaler{
+	var err = strategy.configure(Config{
 		SignalTimeframe: "1h", RegimeTimeframe: "4h",
 		FastMA: 2, SlowMA: 3, RegimeEMA: 2,
 	})
@@ -29,7 +28,9 @@ func TestMacrossUsesOnlyClosedRegimeBars(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(packages) != 5 || !packages[4].EnterLong() || packages[4].TimestampMS() != 15 {
+	if len(packages) != 5 ||
+		packages[4].Action() != StartCycle ||
+		packages[4].TimestampMS() != 15 {
 		t.Fatalf("unexpected packages: %+v", packages)
 	}
 
@@ -39,7 +40,7 @@ func TestMacrossUsesOnlyClosedRegimeBars(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, signalPackage := range packages {
-		if signalPackage.EnterLong() || signalPackage.EnterShort() {
+		if signalPackage.Action() == StartCycle {
 			t.Fatalf("future regime bar produced entry: %+v", signalPackage)
 		}
 	}
@@ -47,7 +48,7 @@ func TestMacrossUsesOnlyClosedRegimeBars(t *testing.T) {
 
 func TestRSIRequiresVolumeConfirmation(t *testing.T) {
 	var strategy rsi
-	var err = strategy.configure(config.Signaler{
+	var err = strategy.configure(Config{
 		SignalTimeframe: "1h",
 		RSIPeriod:       2,
 		VolumePeriod:    2,
@@ -62,14 +63,16 @@ func TestRSIRequiresVolumeConfirmation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(packages) != 3 || !packages[2].EnterLong() || packages[2].TimestampMS() != 4 {
+	if len(packages) != 3 ||
+		packages[2].Action() != StartCycle ||
+		packages[2].TimestampMS() != 4 {
 		t.Fatalf("unexpected packages: %+v", packages)
 	}
 }
 
 func TestPackageHistoryAndFlatJSON(t *testing.T) {
 	var first, err = CreatePackage(
-		"BTC", 100, false, false, false, false, "bull", 24,
+		"BTC", 100, NoAction, "bull", 24,
 		map[string]any{"vol_spike": 1.3},
 	)
 	if err != nil {
@@ -77,7 +80,7 @@ func TestPackageHistoryAndFlatJSON(t *testing.T) {
 	}
 	var second Package
 	second, err = CreatePackage(
-		"BTC", 200, true, false, false, false, "bull", 25,
+		"BTC", 200, StartCycle, "bull", 25,
 		nil,
 	)
 	if err != nil {
@@ -97,14 +100,16 @@ func TestPackageHistoryAndFlatJSON(t *testing.T) {
 	if err = json.Unmarshal(encoded, &decoded); err != nil {
 		t.Fatal(err)
 	}
-	if decoded["vol_spike"] != 1.3 || decoded["risk_score"] != 24.0 {
+	if decoded["vol_spike"] != 1.3 ||
+		decoded["risk_score"] != 24.0 ||
+		decoded["action"] != string(NoAction) {
 		t.Fatalf("unexpected flat package: %s", encoded)
 	}
 }
 
 func TestPackageRejectsInvalidRiskScore(t *testing.T) {
 	var _, err = CreatePackage(
-		"BTC", 100, false, false, false, false, "bull", math.NaN(), nil,
+		"BTC", 100, NoAction, "bull", math.NaN(), nil,
 	)
 	if err == nil {
 		t.Fatal("NaN risk score was accepted")

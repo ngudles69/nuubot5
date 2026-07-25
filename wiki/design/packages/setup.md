@@ -1,106 +1,37 @@
 # Setup Package
 
-Status: Partially reviewed.
+Status: Implemented for standalone BtRunner admission.
 Covers: `internal/setup/setup.go`
-Purpose: Return one fully admitted context before BtRunner composition.
+Purpose: Admit external App, Bot, replay, Meta, and result-path inputs.
 
-## Canonical Source
-
-- `D:/rust/nuubot4/src/setup.rs`
-
-## Scope & Responsibilities
-
-`Setup` coordinates configuration, credentials, and existing Bot admission.
-
-Config and credentials own their decoding. Datastore retains its current
-short-lived read-only Bot-loading behavior.
-
-One configured shared database owns Sweeps, Bots, and mainnet Meta.
-
-## Program Flow
+## Flow
 
 ```text
-Setup
-  resolve root
-  load config
-  load credentials
-  prepare datastore
-  validate ticks path
-  admit mainnet Meta
-  return setup
+resolve repository root
+load strict AppConfig
+load exact stored Bot by SweepID and BotID
+verify BotConfig SHA-256
+resolve replay path below shared-data root
+load fresh mainnet Meta through caller context
+return immutable Admission
 ```
 
-## Notes
+Setup loads no credentials for Simulator backtests.
 
-- Setup performs admission only. It owns no running child.
-- Setup has one function and returns one Context.
-- Config and credentials are read-only and idempotent when files are unchanged.
-- Setup performs no hot reload. Running processes retain their admitted Context.
-- Credentials receive TOML decoding only. Account validation is deferred.
-- Account validates only its selected live credential during initialization.
-- Simulator receives no private credential.
-- Meta reads freshness from the configured shared database.
-- Meta younger than 24 hours will continue without an exchange request.
-- Empty or stale Meta will refresh before Setup continues.
-- Meta always refreshes from mainnet.
-- Tests needing different Meta manually update their local SQLite database.
-- Shared WebSocket ownership remains TBD. Setup starts no background work.
-- Setup uses the existing short-lived `LoadBot` path.
+Setup never creates `context.Background()`.
 
-## Approved Admission Target
+Setup starts no goroutine or WebSocket.
 
-Status: Approved target design. Not implemented.
+## Admission
 
-Setup will stop returning the current broad mutable-behavior Context.
+The returned value contains AppConfig, stored BotConfig, ReplayInput, Meta, and
+the per-Bot result path.
 
-Target admission receives:
+BtRunner passes those values to the exact BotSpec builder.
 
-- Saved BotGeneration TOML and hash.
-- Exact BotSpecID.
-- ReplayInput or live Runner inputs.
-- Caller context.
-- AppConfig.
-- Required metadata.
+Controller never imports Setup.
 
-It returns one immutable typed BotDefinition or an error.
+## Failure
 
-Controller receives admitted values only.
-
-Controller never receives:
-
-- A database handle.
-- A TOML parser.
-- A Config file path.
-- Unselected credentials.
-- A background context created by Setup.
-
-Caller context owns cancellation and timeouts.
-
-Simulator admission loads no private credential.
-
-Live Account admission resolves only referenced credentials.
-
-Runner, BtRunner, and SweepRunner each own their process-local admission.
-
-Admission cannot require a running Server, API, BotManager, or SweepManager.
-
-See [BotSpec](../concepts/bot-spec.md).
-
-## Approved Meta Admission
-
-Live Start fails closed when required Meta:
-
-- Cannot be obtained.
-- Does not exist.
-- Is incomplete.
-- Names an inactive or unsupported symbol.
-
-No stale cache, previous generation, default precision, default margin, or
-substitute symbol is accepted.
-
-Historical replay requires its pinned Meta snapshot and matching hash.
-
-Current live Meta never substitutes for missing historical Meta.
-
-The complete Venue-specific admission checklist remains pending direct
-implementation review.
+Missing BotSpec identity, invalid Config hash, invalid replay path, missing
+Meta, delisted Meta, or caller cancellation fails before Controller admission.
