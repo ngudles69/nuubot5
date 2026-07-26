@@ -98,9 +98,9 @@ These decisions apply project-wide. Local convenience MUST NOT override them.
 - Use `-tags noasm`; the optimized decoder produced one corrupt timestamp at
   run 183.
 - When the user requests an `Nx` or `Nx test`, run
-  `./rtest.sh N 6 9`: N runs, Sweep ID 6, Bot ID 9. Report pass/fail,
-  attempted runs, total and average duration, replay timing, and the result
-  log path.
+  `./stest.sh -bot 9 -runs N`: N runs, Bot ID 9, with Sweep ID 6 resolved
+  from the datastore. Report pass/fail, attempted runs, total and average
+  duration, replay timing, and the result log path.
 - Use the simplest idiomatic Go that satisfies the current requirement.
 - Use the Go standard library before external or custom code.
 - Use an approved pure-Go library before writing custom mechanical code.

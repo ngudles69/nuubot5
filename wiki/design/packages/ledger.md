@@ -67,9 +67,10 @@ RecordSubmit
 Recon
   index active local Orders
   match incoming Venue evidence
-  validate complete recon batch
-  persist affected trees and cursor when configured
-  publish recon result
+  stage exact deltas for active Orders new Fills and touched Trades
+  validate complete Ledger candidate
+  persist dirty rows and cursor when configured
+  publish recon result without failure
 
 Result
   copy Trades Orders and Fills
@@ -110,13 +111,25 @@ Absence from a bounded Venue response changes nothing.
 
 Ledger never deletes an Order or Fill because it disappeared from Venue history.
 
+Future live comparison uses stable CLOID, OID, and TID indexes.
+
+Routine reconciliation works only on active Orders, new Fills, and touched Trades.
+
+An inconclusive exact lookup marks an active Order unresolved. It does not infer a terminal state.
+
+Unresolved-history cleanup may repair only exact CLOID, OID, or TID evidence.
+
 ## Atomicity
 
-Ledger stages the complete reconciliation result before publishing it.
+Ledger stages exact reconciliation deltas before publishing them.
 
-Under `max`, one transaction persists affected Trades, Orders, Fills, Ledger snapshot, and Fill cursor.
+It validates the complete Ledger candidate without deep-cloning the object graph.
 
-A failed transaction publishes no success cursor or snapshot.
+Under `max`, one transaction persists only dirty Trades, Orders, Fills, Ledger snapshot, and Fill cursor.
+
+A failed transaction publishes no domain state, success cursor, or snapshot.
+
+Memory publication occurs after commit and must be non-failing.
 
 External Venue calls never occur inside Ledger transactions.
 
@@ -160,6 +173,10 @@ The cursor never moves backward.
 
 The cursor never advances past an unproven capped response.
 
+Hyperliquid Fill responses cap at 2,000 rows. Account paginates them before Ledger receives a complete candidate.
+
+Repeated inclusive timestamp boundaries deduplicate by Venue TID.
+
 ## Dirty State
 
 Ledger owns no reconciliation-dirty flag.
@@ -169,6 +186,15 @@ Ledger operations report whether accepted evidence changed.
 Account owns, claims, clears, and restores its recon-dirty state.
 
 Recovery always forces reconciliation before new decisions.
+
+## Capacity
+
+Each Runner or BtBot initialization reserves container capacity for 1,000
+Trades, 2,000 Orders, and 2,000 Fills.
+
+Reusable reconciliation evidence buffers are also reserved.
+
+Reservation allocates container capacity, not domain objects. It does not impose a hard limit automatically.
 
 ## Persistence Modes
 

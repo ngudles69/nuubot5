@@ -1,10 +1,10 @@
 # Handoff
 
-Last updated: 2026-07-26 00:22:22 +08:00
+Last updated: 2026-07-26
 
 ## Focus
 
-Commit the complete validated Grid, telemetry, reporting, profiling, audit, and review work.
+Commit and push the proven BtBot, `stest.sh`, and template work, then await the new reconciliation implementation approach.
 
 ## Active Task
 
@@ -32,19 +32,19 @@ Commit the complete validated Grid, telemetry, reporting, profiling, audit, and 
 - Delegated diagnosis traced the panic below current trading logic.
 - Delegated diagnosis isolated the successful-suite divergence to cycle 40.
 - The complete generated Grid 5x report is ready for user review.
-- `rtest.sh` remains the repetitive fresh-process stress command and rejects extra arguments.
-- `pptest.sh` owns one explicit performance-profiling run.
-- `nuubot-btrunner <sweep_id> <bot_id> -pp <prefix>` enables profiling; absence of `-pp` creates no profiles.
+- `stest.sh` is the only fresh-process system, stress, and profiling command.
+- `stest.sh` rejects invalid selectors, repetitions, duplicates, profiling combinations, and extra arguments.
+- `nuubot-bt-bot <sweep_id> <bot_id> -pp <prefix>` enables profiling; absence of `-pp` creates no profiles.
 - Performance runs capture CPU, trace, heap, allocations, block, and mutex artifacts.
-- Performance artifacts live under `workspace/perf/profiles/pptest-s<sweep>-b<bot>-<timestamp>/`.
+- Performance artifacts live under `workspace/perf/profiles/stest-s<sweep>-b<bot>-<timestamp>/`.
 - Focused command tests, vet, shell syntax, diagnostics, and diff checks passed.
-- Normal `rtest.sh 1 6 9` passed in 5,604 ms.
-- `pptest.sh 6 9` passed in 7,111 ms with 2,190 ms replay timing.
+- Historical Observer one-run proof passed in 5,604 ms.
+- Historical Observer profiled proof passed in 7,111 ms with 2,190 ms replay timing.
 - All six performance artifacts are nonempty and readable by Go 1.26.5 tools.
 - Proven profile: `workspace/perf/profiles/pptest-s6-b9-20260725T152130Z/`.
-- Performance, filesystem, command, and BtRunner wiki owners are aligned.
+- Performance, filesystem, command, and BtBot wiki owners are aligned.
 - Grid profiling binary completed successfully in 81,129 ms with 76,356 ms replay timing.
-- `pptest.sh` falsely rejected Grid through inherited Observer-specific counts; generic successful-result validation replaced it.
+- The old profiling script falsely rejected Grid through inherited Observer counts. Generic successful-result validation replaced it.
 - Grid profiling allocated 144,495.70 MB versus Observer 3,726.29 MB.
 - Grid Account reconciliation owns 112,609.46 MB cumulative allocation.
 - Grid Trade Orders owns 24,999.31 MB flat allocation.
@@ -54,28 +54,156 @@ Commit the complete validated Grid, telemetry, reporting, profiling, audit, and 
 - Grid profile: `workspace/perf/profiles/pptest-s10-b14-20260725T152717Z/`.
 - All six Grid artifacts are nonempty and readable by Go 1.26.5 tools.
 - Adversarial Ledger clone audit completed at `.audits/07-25-ledger-clone-audit.md`.
+- Corrected Ledger reassessment completed at `.audits/07-26-ledger-clone-reassessment.md`.
+- Reassessment confirms failure-before-publication, dirty-only persistence, fatal first sweep error, and future live third-consecutive-failure stoppage.
 - Renamed tracked engineering evidence from `audits/` to `.audits/`.
 - Filesystem design now owns `.audits/` as development-only review evidence.
 - Added concise `wiki/coding/sample.md` and linked it from canonical style and project pages.
-- `wiki/reviews.md` contains exactly 91 Go files with explicit review state, date, and hash columns.
+- `wiki/reviews.md` contains exactly 94 current Go files with explicit review state, date, and hash columns.
 - `workspace/perf/` is ignored and excluded from the commit.
 - Full Go tests and vet pass with `CGO_ENABLED=0` and `-tags noasm`.
 - Build, stress, trade, Grid, and performance shell syntax checks pass.
 - Full diff whitespace check passes.
 - Complete durable work committed at `HEAD` with message `Add Grid telemetry and performance reports`.
+- Approved heartbeat reconciliation model documented in all five canonical design pages.
+- Ledger Chunk 2 readable oracles passed focused count-10 and the full Ledger suite.
+- Ledger Chunk 2 audit round three passed with no unresolved finding.
+- Ledger Chunk 3 Account and publication oracles passed focused and full package proof.
+- Ledger Chunk 3 audit round two passed with no unresolved finding.
+- Ledger Chunk 4 failure characterization passed combined focused and full package proof.
+- Ledger Chunk 4 adversarial audit passed with no material finding.
+- Ledger Chunk 5 SQL fault and metrics proof passed the seven-package baseline.
+- Ledger Chunk 5 adversarial audit passed with no material finding.
+- User limited production behavior changes to Recon.
+- Chunks 11–13 are stopped because they change non-Recon persistence routing.
+- All worker agents stopped.
+- Removed the interrupted, unfinished Chunk 6 `internal/ledger/ledger.go` diff.
+- Restored checkpoint passes full tests, full vet, and diff whitespace checks.
+- Traced current BotSpec admission, Bot templates, Nuubot3 Sweep expansion, replay fields, and canonical owners.
+- Implemented `internal/btsweep` loading, validation, and deterministic expansion.
+- Added one-Bot Observer, Trade, and Grid system Sweep templates.
+- Added deterministic Cartesian expansion and failure-contract tests.
+- Updated BotSpec template tests for robust project-root discovery and exact IDs.
+- Aligned requested Sweep, Bot, architecture, design, and binary documentation.
+- Focused command passed: `CGO_ENABLED=0 .../go.exe test -count=1 -tags noasm ./internal/btsweep ./internal/botspec`.
+- Focused proof passed both packages in 1.295 seconds and 1.265 seconds.
+- Diagnostics report no errors or warnings in all three changed Go files.
+- Scoped `git diff --check` passed; only existing line-ending warnings were reported.
+- `cmd/nuubot-bt-sweep/main.go` remains the pre-existing `Under Construction.` placeholder.
+- No database write, process launch, replay, dependency change, commit, or push occurred.
+- All canonical script owners now use `stest.sh`; deleted scripts remain absent.
+- Parameter-free Sweeps emit one deterministic hashed Bot per date range.
+- Sweep admission requires documentation and replay coverage for every generated Executor symbol.
+- Relative tick paths resolve from the absolute Sweep source directory.
+- `stest.sh` checks each proof log write, reporter status, and final log write.
+- Controlled `tee` failure proof returned nonzero.
+- Broken RunReport links, BtBot examples, and stale Sweep contracts are corrected.
+- Strict config proof rejects the old `[btrunner]` key.
+- Profiled Grid log, JSON, exact counts, and decimals are cited in `wiki/PERFORMANCE.md`.
+- Reserved root path `nul` is absent.
+- Focused tests passed: btsweep 1.861s, botspec 1.784s, config 0.151s.
+- Full Go tests and vet passed with Go 1.26.5, `CGO_ENABLED=0`, and `-tags noasm`.
+- Every changed Go file has zero `gofmt -d` output.
+- Shell syntax, direct argument rejection, stale-name, inventory, filesystem, and diff checks passed.
+- Observer `stest.sh -bot 9` passed 1/1 in 5,835 ms; replay was 2,155 ms.
+- Observer proof: `workspace/logs/nuubot5-stest-s6-b9-1-20260726T110832Z.log` and matching JSON.
+- Grid Baseline 1 passed through `./stest.sh -sweep 10`: 1,982 Trades, 4,697 Orders, 2,636 Fills, and exact accepted finance.
+- Grid Baseline 1 measured BtBot 80,225 ms, loop 75,049 ms, and 142,471.675 MB allocation.
+- Profiled Grid passed through `./stest.sh -bot 14 -pp` with all six nonempty profile artifacts and exact accepted finance.
+- Profiled Grid measured BtBot 82,880 ms, loop 77,930 ms, and 142,514.548 MB allocation.
+- Final direct full tests, full vet, shell syntax, diagnostics, stale-name, and diff checks passed.
+- Commit and push are authorized and next.
 
 ### TODO
 
-- None.
+- Commit the complete proven worktree. IN PROGRESS.
+- Push `main`.
+- Stand by for the user's new reconciliation implementation instructions.
 
 ### PENDING USER APPROVAL
 
+- New reconciliation implementation approach after current script/template work.
 - Add the chief-of-staff delegation rule to `AGENTS.md`.
 - Fail stability when deterministic results differ.
 - Preserve every stability-attempt database.
 - Add one rolling replay-input checksum.
 - Compare replay proof under Go 1.26.5 and Go 1.25.12.
-- Push the committed current worktree.
+- Design the deferred equity/balance snapshot issue: configurable tiered retention and rollups.
+
+## Ledger Orchestrator Restart Contract
+
+- User explicitly approved the complete planning, implementation, testing, profiling, audit, and fixing workflow.
+- Do not ask for further permission inside this scope.
+- Do not commit or push.
+- The orchestrator is not running.
+- No implementation source change was completed by the failed orchestrator launches.
+- Two orchestrator launches were canceled when new user messages arrived during startup.
+- Launch the orchestrator before doing any implementation work.
+
+Cleared plan:
+
+```text
+.audits/07-26-ledger-chunk-plan.md
+```
+
+Plan reviews:
+
+```text
+.audits/07-26-ledger-chunk-plan-review-1.md
+.audits/07-26-ledger-chunk-plan-review-2.md
+.audits/07-26-ledger-chunk-plan-review-3.md
+```
+
+The third review found one startup deadlock. The planner corrected it after the review cap:
+
+- Chunk 1 is inventory-only.
+- Chunk 2 repairs the known `ledger_test.go` placeholder and finishes green.
+- Chunk 5 repairs known `store.go` hook formatting before SQL proof.
+- Chunks 2–5 must establish the first fully green baseline.
+- Root verified these corrections directly in the final plan.
+
+Required orchestrator workflow for every chunk:
+
+1. Spawn one coder with only that chunk.
+2. Coder implements and runs focused proof.
+3. Spawn one adversarial implementation auditor against exact chunk intent.
+4. Spawn a fixer for accepted blockers.
+5. Re-audit after fixes, maximum three audit rounds per chunk.
+6. Advance only when all blockers are cleared or a genuine external blocker is proven.
+7. Update `HANDOFF.md` after every completed chunk.
+8. Update `.audits/07-26-ledger-orchestration.md` after every completed chunk.
+9. Send the user a status update after every completed chunk.
+
+After all chunks:
+
+1. Run exact behavior, finance, Trade, Order, Fill, stability, and performance proof.
+2. Use `CGO_ENABLED=0` and `-tags noasm`.
+3. Spawn an overall adversarial implementation auditor.
+4. Fix accepted blockers and re-audit, maximum three rounds.
+5. Reject fake, incomplete, or incomparable proof.
+6. Report exact before-and-after allocation, runtime, finance, and domain counts.
+
+Implementation boundaries:
+
+- Preserve exact trading logic and accepted financial results.
+- This is a performance redesign.
+- Do not redesign Simulator.
+- Do not implement deferred future Runner heartbeat, live cleanup, grace, or telemetry persistence scope.
+- Preserve unrelated uncommitted work.
+- Keep existing ResultPublisher and BtBot rename-related files frozen where the plan requires it.
+
+## Heartbeat Reconciliation Documentation Proof
+
+- Canonical reconciliation, Account, Ledger, Runner, and telemetry pages now separate current implementation from approved live targets.
+- Runner owns one drift-free ten-second heartbeat and reads time once per heartbeat.
+- Every future live heartbeat appends one cheap JSON liveness and reconciliation row.
+- Normal recon, unresolved cleanup, failure handling, atomic publication, and capacity reserves are documented.
+- Hyperliquid Fill and Order history boundaries are documented without adding routine `historicalOrders` use.
+- Decision-critical Account state remains synchronous; observability-only cadence changes require proof.
+- Historical telemetry retention, downsampling, cleanup default, safety boundary, and escalation thresholds remain deferred.
+- Documentation-only change touched the six authorized canonical files.
+- No source, audit report, command, replay, or test changed or ran.
+- Next step: reassess Ledger changes in execution order against these canonical contracts.
 
 ## Codex Paste Diagnosis
 
@@ -99,12 +227,23 @@ Commit the complete validated Grid, telemetry, reporting, profiling, audit, and 
 - The open Windows bug predates the `0.144` line.
 - No Codex configuration or repository source was changed.
 
+## Deferred Equity/Balance Snapshot Issue
+
+- Keep decision-critical Account state current and synchronous.
+- Keep reconciliation telemetry minimal: work counts, dirty identities, rows written, duration, and errors.
+- Separate historical equity and balance snapshots from the reconciliation mutation path.
+- Use configurable retention tiers, initially `1m -> 5m -> 15m -> 1h`.
+- Retain recent high-resolution values and progressively lower-resolution older values.
+- Rollups should preserve open, close, minimum, maximum, average, and sample count.
+- Calculate current Account values once, then retain or roll them up when tier timers become due.
+- Tune and implement this later. It is outside the current Ledger reconciliation redesign.
+
 ## Telemetry and RunReport
 
 - Telemetry and RunReport are separate features.
 - Every participating object owns custom private State.
 - `Telemetry()` reads State without mutation and composes child telemetry once.
-- BtRunner collects telemetry in memory and publishes it terminally.
+- BtBot collects telemetry in memory and publishes it terminally.
 - Runner will persist the same telemetry periodically.
 - RunReport consumes existing Results and telemetry.
 - RunReport remains one top-level bolt-on with no domain-package dependency.
@@ -113,9 +252,9 @@ Commit the complete validated Grid, telemetry, reporting, profiling, audit, and 
 - Design audit round one failed with three accepted material blockers.
 - Terminal ordering, memory sampling, and child-to-suite transport were corrected.
 - Design audit round two passed with no material finding or bloat.
-- Account, Executor, BotCycle, Controller, and BtRunner own one pull-only telemetry path.
-- BtRunner retains telemetry in memory and publishes once after shutdown.
-- `internal/runreport` builds RunReport and SuiteReport without domain Report methods.
+- Account, Executor, BotCycle, Controller, and BtBot own one pull-only telemetry path.
+- BtBot retains telemetry in memory and publishes once after shutdown.
+- `internal/report` builds RunReport and SuiteReport without domain Report methods.
 - `nuubot-report` renders standardized tables and writes one SuiteReport JSON.
 - ResultPublisher atomically stores telemetry, RunReport, Results, Ledger, and Simulator evidence.
 - Implementation audit round one found false pre-recon equity and obsolete Grid `close` Orders.
@@ -196,7 +335,7 @@ Commit the complete validated Grid, telemetry, reporting, profiling, audit, and 
 - Maximum-drawdown decreases: zero.
 - Legacy `close` Orders: zero.
 - Grid stability passed 2 of 2 and 10 of 10.
-- Grid 10x BtRunner average was 76,688.2 ms.
+- Grid 10x BtBot average was 76,688.2 ms.
 - Grid 10x historical-data-loop average was 72,237.3 ms.
 - Grid 10x report: `workspace/logs/nuubot5-grtest-s10-b14-10-20260725T093515Z.json`.
 
@@ -243,7 +382,7 @@ Commit the complete validated Grid, telemetry, reporting, profiling, audit, and 
 - TradeExecutor continues using Level zero.
 - Persisted Order `order_pos` remains batch-local.
 - ResultPublisher stores `grid_level_result`.
-- `grtest.sh` verifies complete Grid replay evidence.
+- `stest.sh -bot 14` verifies complete Grid replay evidence.
 
 ## Grid Initial Baseline
 
@@ -262,8 +401,8 @@ Commit the complete validated Grid, telemetry, reporting, profiling, audit, and 
 - Closure Orders: 733.
 - Retries: 0.
 - Round trips: 554.
-- BtRunner elapsed time: 25,848 ms.
-- BtRunner historical-data loop elapsed time: 23,908 ms.
+- BtBot elapsed time: 25,848 ms.
+- BtBot historical-data loop elapsed time: 23,908 ms.
 - Net PnL: -70.864647459999999999278 USDC.
 - Ending equity: 929.135352540000000000722 USDC.
 - Maximum drawdown: 88.027421204999999999563 USDC.
@@ -291,8 +430,8 @@ Commit the complete validated Grid, telemetry, reporting, profiling, audit, and 
 - Closure Orders: 733.
 - Retries: 0.
 - Round trips: 554.
-- BtRunner elapsed time: 26,007 ms.
-- BtRunner historical-data loop elapsed time: 24,066 ms.
+- BtBot elapsed time: 26,007 ms.
+- BtBot historical-data loop elapsed time: 24,066 ms.
 - Net PnL: -69.766463889999999999562 USDC.
 - Ending equity: 930.233536110000000000438 USDC.
 - Maximum drawdown: 86.609100424999999999246 USDC.
@@ -319,8 +458,8 @@ Commit the complete validated Grid, telemetry, reporting, profiling, audit, and 
 - Closure Orders: 733.
 - Retries: 0.
 - Round trips: 556.
-- BtRunner elapsed time: 25,397 ms.
-- BtRunner historical-data loop elapsed time: 23,533 ms.
+- BtBot elapsed time: 25,397 ms.
+- BtBot historical-data loop elapsed time: 23,533 ms.
 - Net PnL: -69.766463889999999999562 USDC.
 - Ending equity: 930.233536110000000000438 USDC.
 - Maximum drawdown: 86.609100424999999999246 USDC.
@@ -360,7 +499,7 @@ Commit the complete validated Grid, telemetry, reporting, profiling, audit, and 
 
 ## Next Action
 
-User chooses whether to test another workaround or leave Codex paste handling unchanged.
+User reviews the completed Sweep template work. Do not resume unrelated implementation, commit, or push.
 
 Commit and push require explicit user approval.
 

@@ -13,7 +13,7 @@ Purpose: Load process-wide AppConfig and local credentials.
 - Hyperliquid shared policy;
 - process timeouts;
 - workspace paths; and
-- BtRunner cadence.
+- BtBot cadence.
 
 AppConfig contains no BotSpec, Signaler, Risk, Executor, capital, or order
 settings.

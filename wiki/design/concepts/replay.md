@@ -1,7 +1,7 @@
 # Replay
 
 Status: Implemented for one symbol-qualified historical stream.
-Covers: `internal/btrunner`, `internal/replay`, `internal/controller`
+Covers: `internal/btbot`, `internal/replay`, `internal/controller`
 Purpose: Drive one exact historical market sequence through Controller.
 
 ## Flow
@@ -17,7 +17,7 @@ registered Controller timer runs
 
 Reader exhaustion is normal completion.
 
-BtRunner then verifies exact tick count, control-pass count, first timestamp,
+BtBot then verifies exact tick count, control-pass count, first timestamp,
 and last timestamp.
 
 Controller stop never bypasses replay proof.

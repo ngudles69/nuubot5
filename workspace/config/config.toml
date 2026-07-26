@@ -25,5 +25,5 @@ restart_interval_seconds = 600
 shared_data = "D:/workspace/data"
 database = "workspace/db/nuubot.db"
 
-[btrunner]
+[btbot]
 timer_interval_ms = 10000

@@ -6,7 +6,7 @@ Covers: `internal/controller`, `internal/botcycle`, `internal/executor`,
 Purpose: Define the complete current trading ownership path.
 
 ```text
-BtRunner
+BtBot
 `-- Controller
     `-- BotCycle
         `-- Executor

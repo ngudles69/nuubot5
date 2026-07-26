@@ -19,8 +19,8 @@ Last updated: 2026-07-24 13:33:22 +08:00
 
 ```text
 Component                          Review         Last reviewed
-nuubot-btrunner                    DONE           2026-07-24 12:55:22 +08:00
-`-- BtRunner                       DONE           2026-07-24 12:55:22 +08:00
+nuubot-bt-bot                    DONE           2026-07-24 12:55:22 +08:00
+`-- BtBot                       DONE           2026-07-24 12:55:22 +08:00
     |-- Setup                      PARTIAL        2026-07-24 13:33:22 +08:00
     |-- ReplayReader               PARTIAL        2026-07-24 12:55:22 +08:00
     |-- TickClock                  NOT REVIEWED   —
@@ -51,7 +51,7 @@ The user owns these checklist states: `DONE`, `PARTIAL`, `NOT REVIEWED`, and
 | Trade | NOT REVIEWED | — | Implemented. |
 | Order | NOT REVIEWED | — | Implemented. |
 | Fill | NOT REVIEWED | — | Implemented. |
-| Simulator | NOT REVIEWED | — | Implemented for BtRunner. |
+| Simulator | NOT REVIEWED | — | Implemented for BtBot. |
 | TradeExecutor | NOT REVIEWED | — | Simulator-first vertical slice implemented. |
 | GridExecutor | NOT REVIEWED | — | Arithmetic, equal-capital Simulator slice implemented. |
 | PocketBase | TO CODE | — | Approved design; implementation deferred. |
@@ -102,7 +102,8 @@ Nuubot admits only required, audited code. It does not import or preserve either
 | [bot](design/packages/bot.md) | Implemented | Define immutable Bot identity and composition. |
 | [botcycle](design/packages/botcycle.md) | Implemented | Coordinate Executors for one admitted entry Signal. |
 | [botspec](design/packages/botspec.md) | Implemented | Admit exact BotConfig and build BotDefinition. |
-| [btrunner](design/packages/btrunner.md) | Implemented | Execute one complete historical replay. |
+| [btbot](design/packages/btbot.md) | Implemented | Execute one complete historical replay. |
+| [btsweep](design/packages/btsweep.md) | Partial | Validate and expand Sweep templates; persistence and execution remain deferred. |
 | [config](design/packages/config.md) | Implemented | Decode and validate immutable settings. |
 | [controller](design/packages/controller.md) | Implemented | Own signals, risks, cycles, capital, and stop decisions. |
 | [datastore](design/packages/datastore.md) | Implemented | Load one validated BotSpec. |
@@ -119,7 +120,7 @@ Nuubot admits only required, audited code. It does not import or preserve either
 | [replay](design/packages/replay.md) | Implemented | Stream validated historical market data. |
 | [resultpublisher](design/packages/resultpublisher.md) | Implemented | Publish terminal per-Bot SQLite evidence. |
 | [risk](design/packages/risk.md) | Implemented | Assess configured risk policy. |
-| [setup](design/packages/setup.md) | Implemented | Prepare one validated BtRunner context. |
+| [setup](design/packages/setup.md) | Implemented | Prepare one validated BtBot context. |
 | [signaler](design/packages/signaler.md) | Implemented | Calculate and serve ordered Signal packages. |
 | [simulator](design/packages/simulator.md) | Implemented | Provide venue-shaped simulated execution. |
 | [trade](design/packages/trade.md) | Implemented | Own strategy-level orders and evidence. |
@@ -145,9 +146,10 @@ deferred.
 | AppConfig, BotConfig, ReplayInput, and Credentials split | [Config](design/packages/config.md) |
 | Typed saved-Config and fail-closed Meta admission | [Setup](design/packages/setup.md) |
 | Stored TOML and active Account-symbol claims | [Datastore](design/packages/datastore.md) |
-| Standalone Runner, BtRunner, and SweepRunner execution | [Runner](design/concepts/runner.md) |
+| Standalone Runner, BtBot, and BtSweep execution | [Runner](design/concepts/runner.md) |
 | Thin Server API and Manager-to-process boundaries | [Server](design/concepts/server.md) |
-| Reusable Sweep definition and standalone execution | [SweepManager](design/concepts/sweep-manager.md) |
+| Implemented Sweep template validation and expansion | [BtSweep package](design/packages/btsweep.md) |
+| Reusable Sweep records and standalone execution | [SweepManager](design/concepts/sweep-manager.md) |
 | ControllerResult, BotCycleResult, and ExecutorResult hierarchy | [BotCycle](design/packages/botcycle.md) |
 | Arithmetic Grid levels, lifecycle, flattening, and proof | [GridExecutor](design/concepts/grid-executor.md) |
 
@@ -173,7 +175,7 @@ hardcut is implemented and proven.
 | [IngestBBO](design/concepts/ingestbbo.md) | Simulator-only BBO matching input. |
 | [Live events](design/concepts/live-events.md) | Live event routing. |
 | [Macross signaler](design/concepts/macross-signaler.md) | EMA crossover implementation. |
-| [nuubot-btrunner](design/concepts/nuubot-btrunner.md) | Standalone historical replay command. |
+| [nuubot-bt-bot](design/concepts/nuubot-bt-bot.md) | Standalone historical replay command. |
 | [Observer executor](design/concepts/observer-executor.md) | Observer execution implementation. |
 | [PocketBase](design/concepts/pocketbase.md) | Server-owned web, API, authentication, realtime, and SQLite framework. |
 | [Process store](design/concepts/process-store.md) | Process persistence boundary. |
@@ -189,7 +191,7 @@ hardcut is implemented and proven.
 | [Shutdown](design/concepts/shutdown.md) | Ordered resource release. |
 | [Signal](design/concepts/signal.md) | Immutable strategy decision. |
 | [Simulator parity](design/concepts/simulator-parity.md) | Exchange behavior and response parity boundary. |
-| [SweepManager](design/concepts/sweep-manager.md) | Server-side Sweep requests and standalone SweepRunner control. |
+| [SweepManager](design/concepts/sweep-manager.md) | Server-side Sweep requests and standalone BtSweep control. |
 | [Toolkit](design/concepts/toolkit.md) | Portable package rules. |
 | [TradeExecutor](design/concepts/trade-executor.md) | First Account-owning Executor design. |
 | [GridExecutor](design/concepts/grid-executor.md) | Arithmetic Grid calculations, Orders, re-entry, boundaries, and flattening. |

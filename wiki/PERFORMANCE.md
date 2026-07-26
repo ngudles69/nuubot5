@@ -1,25 +1,24 @@
 # Performance History
 
-Each row records one fresh-process `rtest.sh` suite.
+Each row records one fresh-process system-test suite.
 
 ## Performance Profiles
 
-`rtest.sh` owns repetitive fresh-process stress proof:
+`stest.sh` owns fresh-process system, stress, and profiling proof:
 
 ```text
-./rtest.sh N 6 9
+./stest.sh -bot <bot_id>
+./stest.sh -sweep <sweep_id>
+./stest.sh -bot <bot_id> -runs N
+./stest.sh -bot <bot_id> -pp
 ```
 
-`pptest.sh` owns one explicit performance-profiling run:
-
-```text
-./pptest.sh 6 9
-```
+`-pp` requires one run.
 
 One session writes under:
 
 ```text
-workspace/perf/profiles/pptest-s6-b9-<UTC timestamp>/
+workspace/perf/profiles/stest-s<sweep>-b<bot>-<UTC timestamp>/
 ```
 
 The run writes `run-001.cpu.pprof`, `.trace`, `.heap.pprof`,
@@ -45,9 +44,82 @@ Use the same `go tool pprof` commands with `.heap.pprof`, `.allocs.pprof`,
 Profiling adds CPU, memory, synchronization, trace, GC, and file-write overhead.
 Profiled timing is diagnostic, not a normal performance baseline.
 
+## Escalating Test Ladder
+
+```text
+Level  Command                       Purpose
+1      ./stest.sh -bot 9             Basic runtime, Parquet, loop, telemetry, Report, publication
+2      ./stest.sh -bot 9 -pp         Performance-profile pipeline
+3      ./stest.sh -bot 13            Account, Ledger, Simulator, Orders, Fills, PnL
+4      ./stest.sh -bot 15            Planned one-month Grid smoke and state-growth stress
+5      ./stest.sh -bot 14            Three-month Grid baseline proof
+6      ./stest.sh -sweep 10 -runs 10 Fresh-process deterministic stability
+7      Planned six-month Grid Extended state-growth stability
+8      Planned 2025 full year Long-run lifecycle and strategy proof
+```
+
+Run Levels 1 through 3 after ordinary trading changes.
+Run Level 4 after its Sweep exists.
+Run expensive stability levels only after lower levels pass.
+
+### Expected Baselines
+
+```text
+Level  BtBot ms  Replay ms  Expected outcome
+1      5,604        2,152      7,948,800 ticks; 794,880 runs; 64 cycles; report complete
+2      7,111        2,190      Level 1 plus six readable performance artifacts
+3      14,250       7,972      193 cycles; 193 Trades; 626 Orders; 386 Fills
+4      Pending      Pending    Establish after Sweep 11 Bot 15 exists
+5      76,688 avg   72,237 avg 50 cycles; 1,982 Trades; 4,697 Orders; 2,636 Fills
+```
+
+Deterministic semantic results must match their accepted baseline.
+Timing is observational but must remain explainable.
+A material speedup or slowdown requires investigation.
+Replace a timing baseline only after the changed cost and result remain proven.
+
+### Grid Baseline 1 — Post-Rollback
+
+The first post-Chunk rollback baseline used unchanged reconciliation logic.
+
+```text
+Command             ./stest.sh -sweep 10
+BtBot                80,225 ms
+Historical loop      75,049 ms
+Total allocation     142,471.675 MB
+Trades               1,982
+Orders               4,697
+Fills                2,636
+Net PnL              -57.420074089999999993851 USDC
+Ending equity        942.579925910000000006149 USDC
+Maximum drawdown     75.791979199999999992245 USDC
+Result log           workspace/logs/nuubot5-stest-s10-b14-1-20260726T104521Z.log
+Suite report         workspace/logs/nuubot5-stest-s10-b14-1-20260726T104521Z.json
+```
+
+Profiled proof preserves the same semantic result:
+
+```text
+Command             ./stest.sh -bot 14 -pp
+BtBot                82,880 ms
+Historical loop      77,930 ms
+Total allocation     142,514.548286438 MB
+Trades               1,982
+Orders               4,697
+Fills                 2,636
+Net PnL              -57.420074089999999993851 USDC
+Ending equity        942.579925910000000006149 USDC
+Maximum drawdown     75.791979199999999992245 USDC
+Result log           workspace/logs/nuubot5-stest-s10-b14-1-20260726T104650Z.log
+Suite report         workspace/logs/nuubot5-stest-s10-b14-1-20260726T104650Z.json
+Profile directory    workspace/perf/profiles/stest-s10-b14-20260726T104650Z/
+```
+
+Profiled timing is not the normal timing baseline.
+
 ## Controller Replay
 
-| Commit | Change | Runs | Passed | Suite ms | BtRunner avg [min-max] ms | Historical-data loop avg [min-max] ms | Log |
+| Commit | Change | Runs | Passed | Suite ms | BtBot avg [min-max] ms | Historical-data loop avg [min-max] ms | Log |
 |---|---|---:|---:|---:|---:|---:|---|
 | `b088e98` | Two-column stream baseline | 10 | 10 | 5,662 | 454 [447-464] | 375 [371-382] | `workspace/logs/nuubot5-rtest-s6-b9-10-20260723T105957Z.log` |
 | `b088e98` | Two-column stream stability | 500 | 500 | 291,614 | 463 [444-531] | 382 [364-442] | `workspace/logs/nuubot5-rtest-s6-b9-500-20260723T110542Z.log` |
@@ -59,10 +131,10 @@ Profiled timing is diagnostic, not a normal performance baseline.
 | Uncommitted | Six-column Stream stability | 500 | 500 | 706,950 | 1,204 [1,165-1,475] | 1,124 [1,090-1,338] | `workspace/logs/nuubot5-rtest-s6-b9-500-20260723T143429Z.log` |
 | Uncommitted | Six-column Stream, 122,880 batch | 2 | 2 | 3,994 | 1,773 [1,189-2,358] | 1,110 [1,110-1,111] | `workspace/logs/nuubot5-rtest-s6-b9-2-20260723T144936Z.log` |
 | Uncommitted | Six-column Stream, 122,880 batch stability | 500 | 500 | 728,463 | 1,219 [1,177-1,530] | 1,134 [1,098-1,445] | `workspace/logs/nuubot5-rtest-s6-b9-500-20260723T145016Z.log` |
-| Uncommitted | Simple BtRunner logs | 2 | 2 | 4,011 | 1,754 [1,186-2,322] | 1,112 [1,109-1,116] | `workspace/logs/nuubot5-rtest-s6-b9-2-20260723T154011Z.log` |
-| Uncommitted | BtRunner review cleanup | 2 | 2 | 4,025 | 1,771 [1,191-2,351] | 1,111 [1,110-1,113] | `workspace/logs/nuubot5-rtest-s6-b9-2-20260723T154808Z.log` |
+| Uncommitted | Simple BtBot logs | 2 | 2 | 4,011 | 1,754 [1,186-2,322] | 1,112 [1,109-1,116] | `workspace/logs/nuubot5-rtest-s6-b9-2-20260723T154011Z.log` |
+| Uncommitted | BtBot review cleanup | 2 | 2 | 4,025 | 1,771 [1,191-2,351] | 1,111 [1,110-1,113] | `workspace/logs/nuubot5-rtest-s6-b9-2-20260723T154808Z.log` |
 | Uncommitted | Exact-format Logger | 2 | 2 | 4,049 | 1,776 [1,204-2,349] | 1,117 [1,114-1,120] | `workspace/logs/nuubot5-rtest-s6-b9-2-20260723T161651Z.log` |
-| Uncommitted | BtRunner Loop and direct errors | 2 | 2 | 4,010 | 1,762 [1,194-2,331] | 1,115 [1,114-1,117] | `workspace/logs/nuubot5-rtest-s6-b9-2-20260723T163450Z.log` |
+| Uncommitted | BtBot Loop and direct errors | 2 | 2 | 4,010 | 1,762 [1,194-2,331] | 1,115 [1,114-1,117] | `workspace/logs/nuubot5-rtest-s6-b9-2-20260723T163450Z.log` |
 | `5011d91` | Release-driven Signaler | 20 | 20 | 35,788 | 1,542 [1,488-1,626] | 1,456 [1,410-1,542] | `workspace/logs/nuubot5-rtest-s6-b9-20-20260724T035217Z.log` |
 | Uncommitted | Flat-map Signal packages | 2 | 2 | 4,731 | 2,112 [1,562-2,663] | 1,483 [1,482-1,484] | `workspace/logs/nuubot5-rtest-s6-b9-2-20260724T082230Z.log` |
 | Uncommitted | Typed Signal packages | 2 | 2 | 4,641 | 2,050 [1,491-2,610] | 1,413 [1,406-1,421] | `workspace/logs/nuubot5-rtest-s6-b9-2-20260724T083008Z.log` |
@@ -78,7 +150,7 @@ Profiled timing is diagnostic, not a normal performance baseline.
 Each row runs Sweep 9 Bot 13 through Account, Ledger, Simulator, and result
 publication.
 
-| Commit | Change | Runs | Passed | Suite ms | BtRunner avg ms | Historical-data loop avg ms | Log |
+| Commit | Change | Runs | Passed | Suite ms | BtBot avg ms | Historical-data loop avg ms | Log |
 |---|---|---:|---:|---:|---:|---:|---|
 | Uncommitted | Exact Config and equity proof | 2 | 2 | 14,737 | 6,560 | 4,248 | `workspace/logs/nuubot5-trtest-s9-b13-2-20260724T202731Z.log` |
 | Uncommitted | Exact Config and equity stability | 10 | 10 | 67,743 | 5,986 | 4,261 | `workspace/logs/nuubot5-trtest-s9-b13-10-20260724T202751Z.log` |
@@ -89,7 +161,7 @@ publication.
 
 Each row runs Sweep 10 Bot 14 through GridExecutor, Account, Ledger, Simulator, and result publication.
 
-| Commit | Change | Runs | Passed | Suite ms | BtRunner avg ms | Historical-data loop avg ms | Log |
+| Commit | Change | Runs | Passed | Suite ms | BtBot avg ms | Historical-data loop avg ms | Log |
 |---|---|---:|---:|---:|---:|---:|---|
 | `ff63826` + Grid | INVALID: initial Grid sizing defect | 1 | 1 | 27,006 | 25,848 | 23,908 | `workspace/logs/nuubot5-grtest-s10-b14-1-20260725T064809Z.log` |
 | `ff63826` + Grid | INVALID: initial Grid sizing defect | 2 | 2 | 51,072 | 24,381 | 23,622 | `workspace/logs/nuubot5-grtest-s10-b14-2-20260725T065218Z.log` |
@@ -117,10 +189,10 @@ Each row runs Sweep 10 Bot 14 through GridExecutor, Account, Ledger, Simulator, 
 | Uncommitted | Six-column Stream stability | 500 | 28.604 [13.189-41.045] | 1,321.159 [1,321.016-1,321.325] | 63.722 [62-66] | 5.090 [0.000-18.856] |
 | Uncommitted | Six-column Stream, 122,880 batch | 2 | 33.604 [33.420-33.789] | 975.720 [975.673-975.766] | 50.000 [50-50] | 2.877 [2.629-3.126] |
 | Uncommitted | Six-column Stream, 122,880 batch stability | 500 | 31.792 [13.197-47.537] | 975.697 [975.524-975.912] | 49.880 [48-52] | 5.011 [0.000-15.789] |
-| Uncommitted | Simple BtRunner logs | 2 | 35.913 [35.641-36.185] | 975.692 [975.657-975.726] | 49.000 [49-49] | 3.399 [3.014-3.783] |
-| Uncommitted | BtRunner review cleanup | 2 | 35.833 [33.424-38.243] | 975.703 [975.679-975.726] | 49.500 [49-50] | 3.013 [3.005-3.020] |
+| Uncommitted | Simple BtBot logs | 2 | 35.913 [35.641-36.185] | 975.692 [975.657-975.726] | 49.000 [49-49] | 3.399 [3.014-3.783] |
+| Uncommitted | BtBot review cleanup | 2 | 35.833 [33.424-38.243] | 975.703 [975.679-975.726] | 49.500 [49-50] | 3.013 [3.005-3.020] |
 | Uncommitted | Exact-format Logger | 2 | 34.548 [34.383-34.712] | 975.697 [975.675-975.719] | 50.000 [50-50] | 7.098 [4.099-10.097] |
-| Uncommitted | BtRunner Loop and direct errors | 2 | 40.306 [33.423-47.189] | 975.742 [975.687-975.796] | 49.500 [49-50] | 3.170 [3.116-3.224] |
+| Uncommitted | BtBot Loop and direct errors | 2 | 40.306 [33.423-47.189] | 975.742 [975.687-975.796] | 49.500 [49-50] | 3.170 [3.116-3.224] |
 | `5011d91` | Release-driven Signaler | 20 | 34.064 [21.146-47.183] | 975.698 [975.599-975.872] | 49.750 [48-51] | 5.634 [1.000-18.778] |
 | Uncommitted | Flat-map Signal packages | 2 | 37.873 [27.085-48.662] | 977.862 [977.840-977.884] | 47.500 [47-48] | 7.651 [1.706-13.596] |
 | Uncommitted | Typed Signal packages | 2 | 28.375 [20.967-35.782] | 976.632 [976.593-976.670] | 48.000 [48-48] | 2.038 [1.050-3.026] |
@@ -146,7 +218,7 @@ Six-column Stream versus seven-column Stream:
 Passive Signaler hardcut versus release-driven Signaler:
 
 - Typed packages improved 20x historical-data-loop average 4.1 percent.
-- Typed packages improved 20x BtRunner average 4.2 percent.
+- Typed packages improved 20x BtBot average 4.2 percent.
 - Total allocation increased 0.094 percent.
 - Direct regular-history indexing showed no improvement and was removed.
 

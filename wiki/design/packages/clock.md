@@ -100,7 +100,7 @@ stop
 
 ## Trigger Ownership
 
-BtRunner advances TickClock from admitted replay ticks.
+BtBot advances TickClock from admitted replay ticks.
 
 WallClock `Start` launches its wall-time loop. The loop waits for the next
 timer and calls `Advance(NowMS())`.

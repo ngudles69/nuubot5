@@ -1,12 +1,12 @@
-# BtRunner Package
+# BtBot Package
 
 Status: Implemented with exact BotSpec admission and first-class results.
-Covers: `internal/btrunner/btrunner.go`
+Covers: `internal/btbot/btbot.go`
 Purpose: Run one bounded historical Bot replay and prove exact completion.
 
 ## Ownership
 
-BtRunner owns:
+BtBot owns:
 
 - Setup admission;
 - one ReplayReader;
@@ -17,15 +17,15 @@ BtRunner owns:
 - terminal RunReport construction; and
 - terminal ResultPublisher invocation.
 
-BtRunner owns no Signaler, Risk, BotCycle, Executor, Account, or Ledger
+BtBot owns no Signaler, Risk, BotCycle, Executor, Account, or Ledger
 directly.
 
-The command may profile the complete BtRunner execution boundary when explicitly requested.
+The command may profile the complete BtBot execution boundary when explicitly requested.
 
-Profiling belongs to `cmd/nuubot-btrunner`, not this domain package.
+Profiling belongs to `cmd/nuubot-bt-bot`, not this domain package.
 
 The command writes CPU, runtime trace, heap, allocations, block, and mutex artifacts.
-BtRunner receives no profiling configuration and contains no profiling lifecycle.
+BtBot receives no profiling configuration and contains no profiling lifecycle.
 
 ## Initialization
 
@@ -45,37 +45,37 @@ Setup creates no background context.
 
 Every admitted BBO receives its replay symbol.
 
-BtRunner sends the BBO to Controller, advances TickClock, and runs Controller
+BtBot sends the BBO to Controller, advances TickClock, and runs Controller
 through the registered timer.
 
 Reader exhaustion is normal completion.
 
 ## Proof
 
-BtRunner verifies exact tick count, control-pass count, first timestamp, and
+BtBot verifies exact tick count, control-pass count, first timestamp, and
 last timestamp.
 
 Failure prevents successful publication.
 
 ## Result
 
-`btrunner.Result` contains:
+`btbot.Result` contains:
 
 - immutable `controller.Result`; and
 - replay counts, range, historical-data-loop elapsed time, completion, and publication proof; and
-- one terminal `runreport.Run`.
+- one terminal `report.Run`.
 
-`btrunner_historical_data_loop_elapsed_ms` measures `BtRunner.Loop()` from entry through replay verification.
+`btbot_historical_data_loop_elapsed_ms` measures `BtBot.Loop()` from entry through replay verification.
 
 It excludes `Init`, `Start`, `Stop`, result publication, and shutdown.
 
-Test scripts measure `btrunner_elapsed_ms` from fresh BtRunner process launch through exit.
+Test scripts measure `btbot_elapsed_ms` from fresh BtBot process launch through exit.
 
-BtRunner samples Controller telemetry after every successful control pass.
+BtBot samples Controller telemetry after every successful control pass.
 
 One terminal sample follows Controller shutdown.
 
-BtRunner samples Go memory before RunReport construction and result publication.
+BtBot samples Go memory before RunReport construction and result publication.
 
 The memory field names explicitly contain `before_publication`.
 
@@ -84,7 +84,7 @@ database.
 
 ## Standalone Boundary
 
-BtRunner runs with Server stopped.
+BtBot runs with Server stopped.
 
 It reads the exact saved BotConfig from Datastore.
 

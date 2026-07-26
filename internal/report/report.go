@@ -1,5 +1,5 @@
-// Package runreport builds terminal run and suite reports.
-package runreport
+// Package report builds terminal run and suite reports.
+package report
 
 import (
 	"fmt"
@@ -40,7 +40,7 @@ type Input struct {
 	Memory     Memory
 }
 
-// Run contains one exact terminal BtRunner report.
+// Run contains one exact terminal BtBot report.
 type Run struct {
 	SweepID                     uint64          `json:"sweep_id"`
 	BotID                       uint64          `json:"bot_id"`
@@ -77,11 +77,11 @@ type Run struct {
 
 // Attempt contains one suite-owned fresh-process outcome.
 type Attempt struct {
-	Run               int    `json:"run"`
-	Exit              int    `json:"exit"`
-	BtRunnerElapsedMS int64  `json:"btrunner_elapsed_ms"`
-	Report            *Run   `json:"report,omitempty"`
-	Error             string `json:"error,omitempty"`
+	Run            int    `json:"run"`
+	Exit           int    `json:"exit"`
+	BtBotElapsedMS int64  `json:"btbot_elapsed_ms"`
+	Report         *Run   `json:"report,omitempty"`
+	Error          string `json:"error,omitempty"`
 }
 
 // SuiteInput contains one complete suite aggregation request.
@@ -222,7 +222,7 @@ func BuildSuite(input SuiteInput) (Suite, error) {
 	var passed int
 	var botSpecID string
 	var symbol string
-	var btrunnerValues []float64
+	var btbotValues []float64
 	var loopValues []float64
 	var heapValues []float64
 	var allocationValues []float64
@@ -250,12 +250,12 @@ func BuildSuite(input SuiteInput) (Suite, error) {
 	var endingEquity []float64
 	var maxDrawdown []float64
 	for _, attempt := range input.Attempts {
-		if attempt.Run <= 0 || attempt.BtRunnerElapsedMS < 0 {
+		if attempt.Run <= 0 || attempt.BtBotElapsedMS < 0 {
 			return Suite{}, fmt.Errorf("build SuiteReport: attempt is invalid")
 		}
-		btrunnerValues = append(
-			btrunnerValues,
-			float64(attempt.BtRunnerElapsedMS),
+		btbotValues = append(
+			btbotValues,
+			float64(attempt.BtBotElapsedMS),
 		)
 		if attempt.Exit != 0 || attempt.Report == nil {
 			continue
@@ -326,7 +326,7 @@ func BuildSuite(input SuiteInput) (Suite, error) {
 		Status:    status,
 		Timing: []Metric{
 			singleMetric("Suite (total)", "ms", suiteValue),
-			summarizeMetric("BtRunner", "ms", btrunnerValues, true),
+			summarizeMetric("BtBot", "ms", btbotValues, true),
 			summarizeMetric(
 				"Historical Data Loop",
 				"ms",

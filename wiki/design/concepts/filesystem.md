@@ -1,7 +1,7 @@
 # Filesystem
 
 Status: Approved — partially implemented.
-Covers: `.gitignore`, `.audits/`, `workspace/config/config.toml`, `internal/toolkit/logging/logging.go`, `rtest.sh`, and `pptest.sh`
+Covers: `.gitignore`, `.audits/`, `workspace/config/config.toml`, `internal/toolkit/logging/logging.go`, and `stest.sh`
 Purpose: Keep every mutable Nuubot file under one portable workspace root.
 
 ## Root Contract
@@ -19,7 +19,7 @@ One operator-tool exception exists.
 
 It validates path segments, refuses overwrite, and writes no credentials.
 
-This exception does not apply to Server, Runner, BtRunner, Controller, or Simulator.
+This exception does not apply to Server, Runner, BtBot, Controller, or Simulator.
 
 `.audits/` contains tracked engineering review evidence.
 
@@ -105,7 +105,7 @@ Failed runs retain no recoverable partial state and are rerun.
 
 PocketBase-owned SQLite is approved for optional Server persistence.
 
-Runner, BtRunner, and SweepRunner remain independently executable while Server
+Runner, BtBot, and BtSweep remain independently executable while Server
 is stopped.
 
 Standalone saved-Config reads, status writes, physical schemas, migrations,
@@ -116,11 +116,11 @@ and database access paths remain unresolved.
 Logs remain under `workspace/logs/`.
 
 Current identity naming includes `server.log`, `bot_<sweep_id>_<bot_id>.log`,
-and timestamped `rtest` result logs.
+and timestamped `stest` result logs.
 
 ## Performance Diagnostics
 
-`workspace/perf/profiles/` owns disposable `pptest.sh` CPU, trace, memory, block, and mutex diagnostics.
+`workspace/perf/profiles/` owns disposable `stest.sh -pp` CPU, trace, memory, block, and mutex diagnostics.
 
 These files describe command execution. They are not user, account, identity, or configuration profiles.
 

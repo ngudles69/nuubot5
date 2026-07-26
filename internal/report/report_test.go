@@ -1,4 +1,4 @@
-package runreport
+package report
 
 import (
 	"bytes"
@@ -102,8 +102,8 @@ func TestBuildAndRenderSuite(t *testing.T) {
 		BotID:          2,
 		SuiteElapsedMS: 120,
 		Attempts: []Attempt{
-			{Run: 1, BtRunnerElapsedMS: 60, Report: &report},
-			{Run: 2, BtRunnerElapsedMS: 70, Report: &report},
+			{Run: 1, BtBotElapsedMS: 60, Report: &report},
+			{Run: 2, BtBotElapsedMS: 70, Report: &report},
 		},
 	})
 	if err != nil {
@@ -114,7 +114,7 @@ func TestBuildAndRenderSuite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var expected = `2x BtRunner — Sweep 1, Bot 2
+	var expected = `2x BtBot — Sweep 1, Bot 2
 
 BotSpec: test_bot             Symbol: BTC
 Status: PASS                  Requested: 2
@@ -123,7 +123,7 @@ Attempted: 2                  Passed: 2    Failed: 0
 Timing (ms)
 Item                  #  Cumulative  Avg  Min  Max
 Suite (total)         1         120    —    —    —
-BtRunner              2         130   65   60   70
+BtBot                 2         130   65   60   70
 Historical Data Loop  2         100   50   50   50
 
 Memory (MB)

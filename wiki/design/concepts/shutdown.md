@@ -1,14 +1,14 @@
 # Shutdown
 
-Status: Implemented for BtRunner and Simulator TradeBot.
-Covers: `internal/btrunner`, `internal/controller`, `internal/botcycle`,
+Status: Implemented for BtBot and Simulator TradeBot.
+Covers: `internal/btbot`, `internal/controller`, `internal/botcycle`,
 `internal/executor`, and `internal/account`
 Purpose: Stop admission, flatten trading state, and preserve terminal evidence.
 
 ## Order
 
 ```text
-BtRunner Stop
+BtBot Stop
   stop TickClock
   stop ReplayReader
   stop Controller
@@ -35,7 +35,7 @@ Every Stop is idempotent.
 
 The first Controller stop reason wins.
 
-BtRunner publishes only when Reader stop, Controller stop, and replay proof all
+BtBot publishes only when Reader stop, Controller stop, and replay proof all
 succeed.
 
 Fatal cleanup errors propagate to the command.

@@ -17,7 +17,7 @@ Current BBO contains one normalized timestamp and one price.
 
 Replay Reader creates BBO values.
 
-BtRunner, Controller, BotCycle, and Executors consume copies.
+BtBot, Controller, BotCycle, and Executors consume copies.
 
 BBO owns no child.
 

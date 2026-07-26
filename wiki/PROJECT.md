@@ -24,6 +24,8 @@ Non-standard Go requires explicit prior user approval.
 
 [RULES.md](coding/RULES.md) owns dependencies, errors, logging, concurrency, safety, and proof.
 
+[Binaries](bin.md) owns executable names, roles, status, and internal package boundaries.
+
 Idiomatic Go governs everything those contracts do not specify.
 
 ## Reference Order
@@ -44,7 +46,7 @@ Do not modify a reference repository without explicit user authority.
 
 ## Implemented Scope
 
-- Go BtRunner command and configuration.
+- Go BtBot command and configuration.
 - Read-only SQLite Bot loading.
 - Parquet tick replay and OHLCV loading.
 - Shared TickClock and WallClock timer mechanics.
@@ -59,7 +61,7 @@ Do not modify a reference repository without explicit user authority.
 - Simulator venue-shaped execution.
 - Per-Bot result publication.
 - BalancedRisk stub.
-- Reader-exhaustion shutdown through BtRunner.
+- Reader-exhaustion shutdown through BtBot.
 - Exact replay and semantic completion checks.
 
 ## Approved Unimplemented Scope
@@ -68,7 +70,7 @@ Do not modify a reference repository without explicit user authority.
   canonical executable names and print `Under Construction.`.
 - Live Runner and live event handling.
 - Server, API, web server, BotManager, and SweepManager.
-- Standalone SweepRunner.
+- Standalone BtSweep.
 - Live Venue execution, recovery, and CLOID handling.
 - ProcessStore and RunnerControl.
 - PocketBase-backed HTTP, API, authentication, administration, realtime, and
@@ -84,7 +86,7 @@ are unresolved.
 
 ## Success Contract
 
-BtRunner succeeds only when:
+BtBot succeeds only when:
 
 - the process exits zero;
 - every input timestamp and value passes validation;
@@ -214,7 +216,7 @@ database, web server, API, authentication, administration, and realtime.
 Nuubot owns the trading interface, operational dashboards, analytics, and
 reports.
 
-Runner, BtRunner, and SweepRunner must remain independently executable while
+Runner, BtBot, and BtSweep must remain independently executable while
 Server is stopped.
 
 Standalone saved-Config reads, status writes, physical schemas, and migrations
@@ -222,7 +224,7 @@ remain unresolved.
 
 Writable output MUST remain inside this repository or an explicitly approved datastore.
 
-Windows BtRunner execution is proven.
+Windows BtBot execution is proven.
 
 Ubuntu 24 is the intended VPS target. Linux runtime behavior remains unproven.
 

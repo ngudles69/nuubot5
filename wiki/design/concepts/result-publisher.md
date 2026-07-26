@@ -4,7 +4,7 @@ Status: Implemented for complete per-Bot SQLite results.
 Covers: `internal/resultpublisher`
 Purpose: Persist one successful immutable backtest hierarchy atomically.
 
-BtRunner calls ResultPublisher only after replay verification and Controller
+BtBot calls ResultPublisher only after replay verification and Controller
 shutdown succeed.
 
 Publication receives:

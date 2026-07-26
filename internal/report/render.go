@@ -1,4 +1,4 @@
-package runreport
+package report
 
 import (
 	"bufio"
@@ -87,7 +87,7 @@ func WriteTable(output io.Writer, report Suite) error {
 	var err error
 	_, err = fmt.Fprintf(
 		output,
-		"%dx BtRunner — Sweep %d, Bot %d\n\n"+
+		"%dx BtBot — Sweep %d, Bot %d\n\n"+
 			"BotSpec: %-20s Symbol: %s\n"+
 			"Status: %-21s Requested: %d\n"+
 			"Attempted: %-18d Passed: %d    Failed: %d\n\n",

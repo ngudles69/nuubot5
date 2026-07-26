@@ -14,7 +14,7 @@ import (
 	"nuubot/internal/controller"
 	"nuubot/internal/executor"
 	"nuubot/internal/ledger"
-	"nuubot/internal/runreport"
+	"nuubot/internal/report"
 	"nuubot/internal/simulator"
 	"nuubot/internal/telemetry"
 )
@@ -33,7 +33,7 @@ func TestPublishWritesControllerAndReplayResult(t *testing.T) {
 		BotCapital: decimal.NewFromInt(1000),
 		NetPnL:     decimal.NewFromInt(25),
 		BotEquity:  decimal.NewFromInt(1025),
-	}, runreport.Replay{
+	}, report.Replay{
 		Symbol: "BTC", TicksServed: 10, RunsTriggered: 1,
 		HistoricalDataLoopElapsedMS: 123,
 		Completed:                   true,
@@ -56,7 +56,7 @@ func TestPublishWritesControllerAndReplayResult(t *testing.T) {
 	var storedReportSamples int
 	err = db.QueryRow(`
 		SELECT bot_spec_id, config_toml, bot_equity, ticks_served,
-		       btrunner_historical_data_loop_elapsed_ms,
+		btbot_historical_data_loop_elapsed_ms,
 		       (SELECT COUNT(*) FROM telemetry_sample),
 		       (SELECT telemetry_samples FROM run_report)
 		FROM backtest_result
@@ -138,7 +138,7 @@ func TestPublishPreservesMaximumAccountEvidence(t *testing.T) {
 		ExitReason: "parent_stop",
 		BotCapital: decimal.NewFromInt(1000),
 		BotEquity:  decimal.NewFromInt(1000),
-	}, runreport.Replay{Symbol: "BTC", Completed: true})
+	}, report.Replay{Symbol: "BTC", Completed: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,7 +204,7 @@ func TestPublishWritesGridLevels(t *testing.T) {
 			}},
 		}},
 		ExitReason: "parent_stop",
-	}, runreport.Replay{Symbol: "BTC", Completed: true})
+	}, report.Replay{Symbol: "BTC", Completed: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -234,10 +234,10 @@ func publishTestResult(
 	t *testing.T,
 	path string,
 	result controller.Result,
-	replay runreport.Replay,
+	replay report.Replay,
 ) error {
 	t.Helper()
-	var input = runreport.Input{
+	var input = report.Input{
 		Controller: result,
 		Replay:     replay,
 		Telemetry: []telemetry.Sample{{
@@ -257,7 +257,7 @@ func publishTestResult(
 			CyclesStarted:  uint64(len(result.Cycles)),
 		}},
 	}
-	var report, err = runreport.Build(input)
+	var report, err = report.Build(input)
 	if err != nil {
 		return err
 	}

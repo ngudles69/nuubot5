@@ -29,5 +29,5 @@ Legacy process pages remain in [`logic/**`](logic/) until separately migrated.
 ## Current Implementation
 
 - Go source: `cmd/**` and `internal/**`
-- Canonical proof harness: `rtest.sh`
+- Canonical proof harness: `stest.sh`
 - Canonical build tag: `-tags noasm`

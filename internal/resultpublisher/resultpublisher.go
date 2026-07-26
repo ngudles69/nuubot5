@@ -1,4 +1,4 @@
-// Package resultpublisher atomically publishes successful BtRunner evidence.
+// Package resultpublisher atomically publishes successful BtBot evidence.
 package resultpublisher
 
 import (
@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 
 	"nuubot/internal/ledger"
-	"nuubot/internal/runreport"
+	"nuubot/internal/report"
 	"nuubot/internal/simulator"
 
 	_ "modernc.org/sqlite"
@@ -17,7 +17,7 @@ import (
 // Section 1 - Program Flow
 
 // Publish writes one complete backtest result atomically.
-func Publish(path string, input runreport.Input, report runreport.Run) error {
+func Publish(path string, input report.Input, report report.Run) error {
 	if path == "" {
 		return fmt.Errorf("publish result: path is empty")
 	}
@@ -90,8 +90,8 @@ func Publish(path string, input runreport.Input, report runreport.Run) error {
 
 func publishResult(
 	path string,
-	input runreport.Input,
-	report runreport.Run,
+	input report.Input,
+	report report.Run,
 ) error {
 	var result = input.Controller
 	var replay = input.Replay
@@ -121,7 +121,7 @@ func publishResult(
 			runs_triggered INTEGER NOT NULL,
 			first_ms INTEGER NOT NULL,
 			last_ms INTEGER NOT NULL,
-			btrunner_historical_data_loop_elapsed_ms INTEGER NOT NULL,
+			btbot_historical_data_loop_elapsed_ms INTEGER NOT NULL,
 			completed INTEGER NOT NULL,
 			bot_capital TEXT NOT NULL,
 			net_pnl TEXT NOT NULL,

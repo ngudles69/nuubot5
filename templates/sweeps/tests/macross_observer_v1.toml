@@ -1,0 +1,12 @@
+[sweep]
+doc = "One-Bot Macross Observer replay validation Sweep."
+template = "../../bots/macross_observer_v1.toml"
+symbol = "BTC"
+ticks = "D:/workspace/data/binance/parquet/spot/monthly/klines/BTCUSDT/1s"
+
+[[sweep.date_ranges]]
+name = "BTCUSDT-2026-Q1"
+start = "2026-03-01"
+end = "2026-06-01"
+
+[sweep.parameters]

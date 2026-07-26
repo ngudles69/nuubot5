@@ -26,7 +26,7 @@ BotConfig TOML in the database.
 Start creates one immutable BotGeneration and admitted BotDefinition.
 
 ```text
-Runner or BtRunner
+Runner or BtBot
 `-- Controller
     |-- Signaler
     |-- Risk
@@ -34,7 +34,7 @@ Runner or BtRunner
         `-- coordinated Executors
 ```
 
-Runner, BtRunner, and SweepRunner are standalone programs.
+Runner, BtBot, and BtSweep are standalone programs.
 
 Server may launch and supervise them, but execution never requires Server.
 
@@ -82,11 +82,11 @@ See [BotSpec](design/concepts/bot-spec.md),
 [Signaler](design/packages/signaler.md), [Risk](design/packages/risk.md), and
 [BotCycle](design/packages/botcycle.md).
 
-## Implemented BtRunner
+## Implemented BtBot
 
 ```text
 command
-`-- BtRunner
+`-- BtBot
     |-- ReplayReader
     |-- TickClock
     `-- Controller
@@ -104,11 +104,11 @@ command
                         `-- Ledger
 ```
 
-BtRunner owns historical orchestration and exact replay proof.
+BtBot owns historical orchestration and exact replay proof.
 
 ReplayReader validates Parquet values before returning BBO values.
 
-TickClock invokes BtRunner's registered Controller callback from replay
+TickClock invokes BtBot's registered Controller callback from replay
 timestamps.
 
 Controller owns Signal, Risk, BotCycle, capital, drawdown, and graceful
@@ -150,21 +150,21 @@ Simnet activates after Simulator implements real clearinghouse behavior.
 
 See [Hyperliquid Parity Probe](design/hyperliquid/parity.md).
 
-## Canonical BtRunner Flow
+## Canonical BtBot Flow
 
 ```text
 main
   open Server logger
   parse identities
   open Bot logger
-  create BtRunner
+  create BtBot
   initialize
   start
   loop
   stop
   log one result
 
-BtRunner init
+BtBot init
   initialize Setup
   load BotSpec
   resolve replay end
@@ -175,7 +175,7 @@ BtRunner init
   create and initialize Controller
   calculate expected proof
 
-BtRunner loop
+BtBot loop
   read one validated BBO
   qualify and send BBO to Controller
   advance TickClock
@@ -184,19 +184,39 @@ BtRunner loop
   verify exact replay
 ```
 
-Detailed behavior remains in [BtRunner](design/packages/btrunner.md) and [Replay](design/concepts/replay.md).
+Detailed behavior remains in [BtBot](design/packages/btbot.md) and [Replay](design/concepts/replay.md).
+
+## Implemented Sweep Template Admission
+
+```text
+Sweep template
+  -> internal/btsweep
+  -> referenced Bot template
+  -> exact botspec.Validate
+  -> ordered generated Bot Config values
+```
+
+`internal/btsweep` validates replay inputs, ordered date ranges, optional
+explicit parameter dimensions, exact parameter paths, and generated Configs.
+
+It sorts parameter paths, preserves list and date-range order, emits complete
+TOML, and hashes the exact emitted bytes.
+
+It creates no Sweep or Bot record, writes no database, and launches no process.
+
+`cmd/nuubot-bt-sweep` remains an `Under Construction.` placeholder.
 
 ## Approved Process Boundaries
 
 ```text
 direct
   Runner -> Controller
-  BtRunner -> Controller
-  SweepRunner -> bounded BtRunner workers
+  BtBot -> Controller
+  BtSweep -> bounded BtBot workers
 
 optional Server
   API -> BotManager -> process supervision -> Runner
-  API -> SweepManager -> process supervision -> SweepRunner
+  API -> SweepManager -> process supervision -> BtSweep
 ```
 
 Server is the master PocketBase-style application process.
@@ -210,11 +230,15 @@ Managers own domain validation and choose their data sources.
 
 BotManager never constructs Controller.
 
-SweepManager never expands permutations or imports BtRunner.
+SweepManager never expands permutations or imports BtBot.
 
-SweepRunner owns expansion, cancellation, bounded workers, and aggregation.
+Implemented `internal/btsweep` owns template validation and deterministic
+expansion.
 
-BtRunner owns one child Bot replay.
+Future BtSweep composes that package and owns record loading, cancellation,
+bounded workers, and aggregation.
+
+BtBot owns one child Bot replay.
 
 Server failure does not automatically stop healthy standalone execution.
 
@@ -254,7 +278,7 @@ Order, or Fill state.
 
 ## Concurrency
 
-Current BtRunner execution is synchronous.
+Current BtBot execution is synchronous.
 
 Future live transport readers may use owned goroutines for external
 connections.
@@ -281,7 +305,7 @@ Venue normalizes external outcomes. Account reconciles them into Ledger evidence
 
 ## Persistence Boundaries
 
-Current BtRunner reads Bot configuration from SQLite and market data from Parquet.
+Current BtBot reads Bot configuration from SQLite and market data from Parquet.
 
 Earlier live persistence planning separates:
 
@@ -318,10 +342,13 @@ database.
 PocketBase queues writes through one write connection. SQLite WAL permits
 concurrent reads while a write transaction runs.
 
-Runner, BtRunner, and SweepRunner must remain independently executable while
+Runner, BtBot, and BtSweep must remain independently executable while
 Server is stopped.
 
-Their exact saved-Config reads and status writes remain TBD.
+Sweep template validation and expansion are implemented without persistence.
+
+Immutable Sweep and Bot creation, saved-Config writes, status writes, and
+unchanged-rerun ID reuse remain TBD.
 
 Nuubot owns domain transactions, conditional transitions, generations,
 idempotency, and unique trading identities.
@@ -333,7 +360,7 @@ Physical tables, keys, migrations, and transaction boundaries require later appr
 
 ## Deployment
 
-Windows BtRunner execution is proven.
+Windows BtBot execution is proven.
 
 Ubuntu 24 is the intended VPS target.
 

@@ -11,12 +11,12 @@ import (
 	"strconv"
 	"time"
 
-	"nuubot/internal/btrunner"
-	"nuubot/internal/runreport"
+	"nuubot/internal/btbot"
+	"nuubot/internal/report"
 	"nuubot/internal/toolkit/logging"
 )
 
-const program = "nuubot-btrunner"
+const program = "nuubot-bt-bot"
 
 type performanceProfile struct {
 	prefix                string
@@ -67,55 +67,55 @@ func main() {
 		os.Exit(1)
 	}
 
-	// create btrunner
-	var runner btrunner.BtRunner
+	// create btbot
+	var runner btbot.BtBot
 
-	// initialize btrunner
+	// initialize btbot
 	err = runner.Init(context.Background(), log, sweepID, botID)
 	if err != nil {
 		err = errors.Join(err, profile.Stop())
-		log.Error(fmt.Sprintf("btrunner.Init() failed: %v", err))
+		log.Error(fmt.Sprintf("btbot.Init() failed: %v", err))
 		os.Exit(1)
 	}
 
-	// start btrunner
+	// start btbot
 	err = runner.Start()
 	if err != nil {
 		err = errors.Join(err, runner.Stop(), profile.Stop())
-		log.Error(fmt.Sprintf("btrunner.Start() failed: %v", err))
+		log.Error(fmt.Sprintf("btbot.Start() failed: %v", err))
 		os.Exit(1)
 	}
 
-	// loop btrunner
+	// loop btbot
 	err = runner.Loop()
 
-	// stop btrunner
+	// stop btbot
 	var stopErr = runner.Stop()
 	if err != nil {
 		err = errors.Join(err, stopErr, profile.Stop())
-		log.Error(fmt.Sprintf("btrunner.Loop() failed: %v", err))
+		log.Error(fmt.Sprintf("btbot.Loop() failed: %v", err))
 		os.Exit(1)
 	}
 	if stopErr != nil {
 		stopErr = errors.Join(stopErr, profile.Stop())
-		log.Error(fmt.Sprintf("btrunner.Stop() failed: %v", stopErr))
+		log.Error(fmt.Sprintf("btbot.Stop() failed: %v", stopErr))
 		os.Exit(1)
 	}
 
 	// get result
-	var result btrunner.Result
+	var result btbot.Result
 	result, err = runner.Result()
 	if err != nil {
 		err = errors.Join(err, profile.Stop())
-		log.Error(fmt.Sprintf("btrunner.Result() failed: %v", err))
+		log.Error(fmt.Sprintf("btbot.Result() failed: %v", err))
 		os.Exit(1)
 	}
 
 	// write run report
-	err = runreport.WriteRunJSON(os.Stdout, result.Report)
+	err = report.WriteRunJSON(os.Stdout, result.Report)
 	if err != nil {
 		err = errors.Join(err, profile.Stop())
-		log.Error(fmt.Sprintf("runreport.WriteRunJSON() failed: %v", err))
+		log.Error(fmt.Sprintf("report.WriteRunJSON() failed: %v", err))
 		os.Exit(1)
 	}
 
@@ -127,7 +127,7 @@ func main() {
 	}
 
 	// log result
-	log.Info(fmt.Sprintf("btrunner completed successfully in %s", time.Since(started)))
+	log.Info(fmt.Sprintf("btbot completed successfully in %s", time.Since(started)))
 }
 
 // Section 2 - Domain Helpers

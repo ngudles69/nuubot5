@@ -6,7 +6,7 @@ Purpose: Atomically publish one complete successful backtest result.
 
 ## Ownership
 
-BtRunner calls ResultPublisher only after replay verification and Controller
+BtBot calls ResultPublisher only after replay verification and Controller
 shutdown succeed.
 
 ResultPublisher owns the temporary database and final rename.

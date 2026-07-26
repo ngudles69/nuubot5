@@ -64,7 +64,7 @@ When both exist, Bot start MUST precede Bot end.
 
 Optional Bot dates accept RFC3339 or `YYYY-MM-DD`.
 
-Datastore parses and returns `StartAt`. Current BtRunner intentionally ignores it.
+Datastore parses and returns `StartAt`. Current BtBot intentionally ignores it.
 
 ## Concurrency
 
@@ -120,7 +120,7 @@ PocketBase is approved for future Server persistence.
 
 Server owns that PocketBase application and its writable SQLite database.
 
-Runner, BtRunner, and SweepRunner must remain independently executable while
+Runner, BtBot, and BtSweep must remain independently executable while
 Server is stopped.
 
 How standalone processes read saved Config and publish current status while

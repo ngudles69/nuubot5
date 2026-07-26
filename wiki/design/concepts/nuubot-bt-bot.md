@@ -1,8 +1,8 @@
-# nuubot-btrunner
+# nuubot-bt-bot
 
 Status: Implemented.
-Covers: `cmd/nuubot-btrunner/main.go`
-Purpose: Parse identity and optional profiling, run BtRunner lifecycle, and log the terminal result with elapsed time.
+Covers: `cmd/nuubot-bt-bot/main.go`
+Purpose: Parse identity and optional profiling, run BtBot lifecycle, and log the terminal result with elapsed time.
 
 ## Responsibilities
 
@@ -10,17 +10,17 @@ Purpose: Parse identity and optional profiling, run BtRunner lifecycle, and log 
 
 1. Parse the input.
 2. Own optional command profiling.
-3. Run BtRunner.
+3. Run BtBot.
 4. Log success or failure and elapsed time.
 
 Every line in `main.go` MUST contribute directly to one responsibility.
 
 Parsing stays in Section 2 of `main.go`.
 
-BtRunner owns lifecycle behavior. The command calls each lifecycle phase.
+BtBot owns lifecycle behavior. The command calls each lifecycle phase.
 
 The command owns opt-in CPU, trace, heap, allocations, block, and mutex profiling.
-Profiling surrounds initialization through terminal result emission without entering the BtRunner package.
+Profiling surrounds initialization through terminal result emission without entering the BtBot package.
 
 Operational log paths belong in `internal/toolkit/logging`.
 Profiling files use the explicit internal prefix supplied by the invoking script.
@@ -33,11 +33,11 @@ main
   parse input
   open bot log
   start performance profile
-  create btrunner
-  initialize btrunner
-  start btrunner
-  loop btrunner
-  stop btrunner
+  create btbot
+  initialize btbot
+  start btbot
+  loop btbot
+  stop btbot
   get result
   write run report
   stop performance profile
@@ -54,7 +54,7 @@ parseInput
 Normal invocation keeps exactly two positional identities.
 
 Performance invocation appends `-pp` and one output prefix.
-The invoking `pptest.sh` owns its session directory and the `run-001` prefix.
+The invoking `stest.sh -pp` path owns its session directory and the `run-001` prefix.
 
 Shutdown stops streaming trace and CPU collectors before snapshots.
 It forces GC before heap, allocations, block, and mutex profiles are written.
@@ -79,9 +79,9 @@ The successful terminal message includes elapsed duration.
 ## Does Not
 
 - Load configuration.
-- Know BtRunner-owned Clock, Reader, Controller, or replay proof.
+- Know BtBot-owned Clock, Reader, Controller, or replay proof.
 - Open operational log files directly.
-- Put profiling policy or mechanics in the BtRunner package.
+- Put profiling policy or mechanics in the BtBot package.
 - Wrap `main` with `program`, command, or local Run functions.
 
 ## Required Proof

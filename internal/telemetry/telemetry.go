@@ -3,7 +3,7 @@ package telemetry
 
 import "github.com/shopspring/decimal"
 
-// Sample contains one compact BtRunner telemetry observation.
+// Sample contains one compact BtBot telemetry observation.
 type Sample struct {
 	Sequence            uint64          `json:"sequence"`
 	TimestampMS         uint64          `json:"timestamp_ms"`

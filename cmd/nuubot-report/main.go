@@ -5,7 +5,7 @@ import (
 	"os"
 	"strconv"
 
-	"nuubot/internal/runreport"
+	"nuubot/internal/report"
 )
 
 const program = "nuubot-report"
@@ -46,13 +46,13 @@ func run(args []string) error {
 	if err != nil || suiteElapsedMS < 0 {
 		return fmt.Errorf("parse suite elapsed: invalid non-negative integer")
 	}
-	var attempts []runreport.Attempt
-	attempts, err = runreport.ReadAttempts(os.Stdin)
+	var attempts []report.Attempt
+	attempts, err = report.ReadAttempts(os.Stdin)
 	if err != nil {
 		return err
 	}
-	var report runreport.Suite
-	report, err = runreport.BuildSuite(runreport.SuiteInput{
+	var suite report.Suite
+	suite, err = report.BuildSuite(report.SuiteInput{
 		Requested:      requested,
 		SweepID:        sweepID,
 		BotID:          botID,
@@ -62,15 +62,15 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
-	err = runreport.WriteSuiteJSON(args[4], report)
+	err = report.WriteSuiteJSON(args[4], suite)
 	if err != nil {
 		return err
 	}
-	err = runreport.WriteTable(os.Stdout, report)
+	err = report.WriteTable(os.Stdout, suite)
 	if err != nil {
 		return err
 	}
-	if report.Status != "pass" {
+	if suite.Status != "pass" {
 		return fmt.Errorf("SuiteReport failed")
 	}
 	return nil

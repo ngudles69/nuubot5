@@ -4,7 +4,7 @@ This page shows the expected Nuubot Go layout and coding style.
 
 The purpose is readability. The user should know where each kind of code normally lives.
 
-Canonical example: [`cmd/nuubot-btrunner/main.go`](../../cmd/nuubot-btrunner/main.go).
+Canonical example: [`cmd/nuubot-bt-bot/main.go`](../../cmd/nuubot-bt-bot/main.go).
 
 The three section markers are mandatory, even when one section has no functions.
 Other guidance is strong by default and may bend when required or directed by the user.

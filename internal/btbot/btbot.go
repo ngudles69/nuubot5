@@ -1,4 +1,4 @@
-package btrunner
+package btbot
 
 import (
 	"context"
@@ -11,8 +11,8 @@ import (
 	"nuubot/internal/botspec"
 	"nuubot/internal/controller"
 	"nuubot/internal/replay"
+	"nuubot/internal/report"
 	"nuubot/internal/resultpublisher"
-	"nuubot/internal/runreport"
 	"nuubot/internal/setup"
 	"nuubot/internal/telemetry"
 	"nuubot/internal/toolkit/clock"
@@ -50,11 +50,11 @@ type ReplayResult struct {
 type Result struct {
 	Controller controller.Result
 	Replay     ReplayResult
-	Report     runreport.Run
+	Report     report.Run
 }
 
-// BtRunner owns one bounded historical replay.
-type BtRunner struct {
+// BtBot owns one bounded historical replay.
+type BtBot struct {
 	log           *logging.Logger
 	reader        replay.Reader
 	clock         clock.Clock
@@ -63,7 +63,7 @@ type BtRunner struct {
 	resultPath    string
 	stats         stats
 	telemetry     []telemetry.Sample
-	report        runreport.Run
+	report        report.Run
 	stopRequested bool
 	published     bool
 	started       bool
@@ -73,7 +73,7 @@ type BtRunner struct {
 // Section 1 - Program Flow
 
 // Init prepares one bounded historical replay.
-func (r *BtRunner) Init(
+func (r *BtBot) Init(
 	caller context.Context,
 	log *logging.Logger,
 	sweepID,
@@ -116,7 +116,7 @@ func (r *BtRunner) Init(
 	// register Controller timer
 	err = r.clock.RegisterTimer(clock.Timer{
 		Name:       "controller",
-		IntervalMS: admission.App.BtRunner.TimerIntervalMS,
+		IntervalMS: admission.App.BtBot.TimerIntervalMS,
 	}, r.controllerRun)
 	if err != nil {
 		return fmt.Errorf("register Controller timer: %w", err)
@@ -160,8 +160,8 @@ func (r *BtRunner) Init(
 	// create proof
 	r.stats = stats{
 		ticksExpected: durationMS / 1000,
-		runsExpected: (durationMS + admission.App.BtRunner.TimerIntervalMS - 1) /
-			admission.App.BtRunner.TimerIntervalMS,
+		runsExpected: (durationMS + admission.App.BtBot.TimerIntervalMS - 1) /
+			admission.App.BtBot.TimerIntervalMS,
 		expectedFirstMS: startMS + 1000,
 		expectedLastMS:  endMS,
 	}
@@ -169,7 +169,7 @@ func (r *BtRunner) Init(
 	r.symbol = replayInput.Symbol
 	r.resultPath = admission.ResultPath
 	log.Info(fmt.Sprintf(
-		"btrunner initialized bot_spec=%s symbol=%s",
+		"btbot initialized bot_spec=%s symbol=%s",
 		admission.Bot.BotSpecID,
 		r.symbol,
 	))
@@ -177,9 +177,9 @@ func (r *BtRunner) Init(
 }
 
 // Start starts the owned Clock and Controller.
-func (r *BtRunner) Start() error {
+func (r *BtBot) Start() error {
 	if r.started || r.stopped {
-		return fmt.Errorf("btrunner cannot start from current state")
+		return fmt.Errorf("btbot cannot start from current state")
 	}
 
 	// start clock
@@ -195,16 +195,16 @@ func (r *BtRunner) Start() error {
 		return fmt.Errorf("start Controller: %w", err)
 	}
 	r.started = true
-	r.log.Info("btrunner started")
+	r.log.Info("btbot started")
 	return nil
 }
 
 // Loop executes the complete bounded replay loop.
-func (r *BtRunner) Loop() error {
+func (r *BtBot) Loop() error {
 	if !r.started || r.stopped {
-		return fmt.Errorf("btrunner cannot loop from current state")
+		return fmt.Errorf("btbot cannot loop from current state")
 	}
-	r.log.Info("btrunner loop started")
+	r.log.Info("btbot loop started")
 	var started = time.Now()
 	defer func() {
 		r.stats.historicalDataLoopElapsed = time.Since(started)
@@ -256,7 +256,7 @@ func (r *BtRunner) Loop() error {
 }
 
 // Stop releases owned resources and reports final proof.
-func (r *BtRunner) Stop() error {
+func (r *BtBot) Stop() error {
 	if r.stopped {
 		return nil
 	}
@@ -284,9 +284,9 @@ func (r *BtRunner) Stop() error {
 		r.collectTelemetry(r.stats.lastMS, true)
 		var memory stdruntime.MemStats
 		stdruntime.ReadMemStats(&memory)
-		var input = runreport.Input{
+		var input = report.Input{
 			Controller: r.controller.Result(),
-			Replay: runreport.Replay{
+			Replay: report.Replay{
 				Symbol:                      r.symbol,
 				TicksExpected:               r.stats.ticksExpected,
 				TicksServed:                 r.stats.ticksServed,
@@ -298,14 +298,14 @@ func (r *BtRunner) Stop() error {
 				Completed:                   r.stats.replayCompleted,
 			},
 			Telemetry: append([]telemetry.Sample(nil), r.telemetry...),
-			Memory: runreport.Memory{
+			Memory: report.Memory{
 				HeapMB:       float64(memory.HeapAlloc) / (1 << 20),
 				TotalAllocMB: float64(memory.TotalAlloc) / (1 << 20),
 				GCRuns:       memory.NumGC,
 				GCPauseMS:    float64(memory.PauseTotalNs) / 1e6,
 			},
 		}
-		r.report, publishErr = runreport.Build(input)
+		r.report, publishErr = report.Build(input)
 		if publishErr == nil {
 			publishErr = resultpublisher.Publish(r.resultPath, input, r.report)
 		}
@@ -323,9 +323,9 @@ func (r *BtRunner) Stop() error {
 		result = "complete"
 	}
 	r.log.Info(fmt.Sprintf(
-		"btrunner stopped loader=parquet ticks_served=%d ticks_expected=%d "+
+		"btbot stopped loader=parquet ticks_served=%d ticks_expected=%d "+
 			"runs_triggered=%d runs_expected=%d first_ts_ms=%d last_ts_ms=%d "+
-			"replay_completed=%t btrunner_historical_data_loop_elapsed_ms=%d "+
+			"replay_completed=%t btbot_historical_data_loop_elapsed_ms=%d "+
 			"heap_before_publication_mb=%f total_alloc_before_publication_mb=%f "+
 			"gc_runs_before_publication=%d gc_pause_before_publication_ms=%f "+
 			"result=%s",
@@ -355,7 +355,7 @@ func (r *BtRunner) Stop() error {
 		return publishErr
 	}
 	if !r.stats.replayCompleted {
-		return fmt.Errorf("btrunner replay did not complete")
+		return fmt.Errorf("btbot replay did not complete")
 	}
 
 	return nil
@@ -363,7 +363,7 @@ func (r *BtRunner) Stop() error {
 
 // Section 2 - Domain Helpers
 
-func (r *BtRunner) controllerRun(nowMS uint64) error {
+func (r *BtBot) controllerRun(nowMS uint64) error {
 	// run Controller
 	r.stats.runsTriggered++
 	var stop, err = r.controller.Run(nowMS)
@@ -379,9 +379,9 @@ func (r *BtRunner) controllerRun(nowMS uint64) error {
 }
 
 // Result returns one complete terminal backtest result.
-func (r *BtRunner) Result() (Result, error) {
+func (r *BtBot) Result() (Result, error) {
 	if !r.stopped || !r.stats.replayCompleted {
-		return Result{}, fmt.Errorf("btrunner result is unavailable")
+		return Result{}, fmt.Errorf("btbot result is unavailable")
 	}
 	return Result{
 		Controller: r.controller.Result(),
@@ -401,7 +401,7 @@ func (r *BtRunner) Result() (Result, error) {
 	}, nil
 }
 
-func (r *BtRunner) collectTelemetry(nowMS uint64, terminal bool) {
+func (r *BtBot) collectTelemetry(nowMS uint64, terminal bool) {
 	var current = r.controller.Telemetry()
 	r.telemetry = append(r.telemetry, telemetry.Sample{
 		Sequence:            uint64(len(r.telemetry) + 1),
@@ -425,7 +425,7 @@ func (r *BtRunner) collectTelemetry(nowMS uint64, terminal bool) {
 	})
 }
 
-func (r *BtRunner) verify() error {
+func (r *BtBot) verify() error {
 	if r.stats.ticksServed != r.stats.ticksExpected ||
 		r.stats.runsTriggered != r.stats.runsExpected ||
 		r.stats.firstMS != r.stats.expectedFirstMS ||

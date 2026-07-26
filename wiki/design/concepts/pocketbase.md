@@ -34,14 +34,14 @@ Server owns one PocketBase application.
 
 That PocketBase application owns the writable SQLite database.
 
-Runner, BtRunner, and SweepRunner remain independently executable while Server
+Runner, BtBot, and BtSweep remain independently executable while Server
 is stopped.
 
 The exact standalone read and status-publication boundary remains TBD.
 
 Controller never receives a PocketBase or database handle.
 
-The existing BtRunner Sweep database remains separate, read-only, and immutable.
+The existing BtBot Sweep database remains separate, read-only, and immutable.
 
 ## Write Flow
 

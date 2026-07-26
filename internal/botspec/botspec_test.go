@@ -3,8 +3,11 @@ package botspec
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/BurntSushi/toml"
 )
 
 // Section 1 - Program Flow
@@ -54,19 +57,33 @@ persist_mode = "none"
 }
 
 func TestCanonicalTemplatesValidate(t *testing.T) {
-	for _, botSpecID := range []string{MacrossObserver, MacrossTrade, MacrossGrid} {
-		var content, err = os.ReadFile(filepath.Join("templates", botSpecID+".toml"))
+	var templates = map[string]string{
+		"macross_observer_v1.toml": MacrossObserver,
+		"macross_trade_v1.toml":    MacrossTrade,
+		"macross_grid_v1.toml":     MacrossGrid,
+	}
+	for name, botSpecID := range templates {
+		var content, err = os.ReadFile(botTemplatePath(t, name))
 		if err != nil {
-			t.Fatalf("read %s template: %v", botSpecID, err)
+			t.Fatalf("read %s template: %v", name, err)
+		}
+		var identity struct {
+			BotSpec string `toml:"bot_spec"`
+		}
+		if _, err = toml.Decode(string(content), &identity); err != nil {
+			t.Fatalf("decode %s template identity: %v", name, err)
+		}
+		if identity.BotSpec != botSpecID {
+			t.Fatalf("%s BotSpecID = %q, want %q", name, identity.BotSpec, botSpecID)
 		}
 		if err = Validate(botSpecID, string(content)); err != nil {
-			t.Fatalf("validate %s template: %v", botSpecID, err)
+			t.Fatalf("validate %s template: %v", name, err)
 		}
 	}
 }
 
 func TestGridLevelCountUsesCompleteTenBitRange(t *testing.T) {
-	var content, err = os.ReadFile(filepath.Join("templates", MacrossGrid+".toml"))
+	var content, err = os.ReadFile(botTemplatePath(t, "macross_grid_v1.toml"))
 	if err != nil {
 		t.Fatalf("read Grid template: %v", err)
 	}
@@ -119,3 +136,13 @@ kind = "balanced"
 }
 
 // Section 3 - Generic Helpers
+
+func botTemplatePath(t *testing.T, name string) string {
+	t.Helper()
+	var _, file, _, valid = runtime.Caller(0)
+	if !valid {
+		t.Fatal("locate test source")
+	}
+	var root = filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
+	return filepath.Join(root, "templates", "bots", name)
+}

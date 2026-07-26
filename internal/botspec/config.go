@@ -116,6 +116,24 @@ func Validate(botSpecID, configTOML string) error {
 	return err
 }
 
+// ValidateReplaySymbol requires replay input for every admitted Executor symbol.
+func ValidateReplaySymbol(botSpecID, configTOML, replaySymbol string) error {
+	var cfg, err = admit(botSpecID, configTOML)
+	if err != nil {
+		return err
+	}
+	for _, current := range cfg.executors {
+		if current.Resource.Symbol != replaySymbol {
+			return fmt.Errorf(
+				"executor symbol %s lacks replay input %s",
+				current.Resource.Symbol,
+				replaySymbol,
+			)
+		}
+	}
+	return nil
+}
+
 // Section 2 - Domain Helpers
 
 func admit(botSpecID, configTOML string) (admitted, error) {

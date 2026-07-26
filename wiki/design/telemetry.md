@@ -1,7 +1,7 @@
 # Telemetry
 
-Status: Implemented for the initial BtRunner slice.
-Covers: Object `Telemetry()` functions, BtRunner collection, Runner
+Status: Implemented for the initial BtBot slice.
+Covers: Object `Telemetry()` functions, BtBot collection, Runner
 persistence, and API query boundaries.
 Purpose: Capture ongoing operational state without coupling observation to
 trading behavior.
@@ -25,13 +25,12 @@ ownership level, root collection, and telemetry persistence.
 
 Telemetry must not scatter update calls through trading behavior.
 
-BtRunner collects telemetry in memory and writes it during one terminal result
+BtBot collects telemetry in memory and writes it during one terminal result
 publication.
 
-Runner will collect the same telemetry on WallClock time and persist it
-periodically.
+Runner will append live operational telemetry on its Runner-owned ten-second heartbeat.
 
-The existing Controller cadence, currently ten seconds, should drive collection.
+That heartbeat is the only live scheduler timer.
 
 The website will call the API.
 
@@ -74,7 +73,7 @@ Risk continues to consume its exact immutable RiskInput.
 | Sample | One timestamped root telemetry observation. |
 | Current | The latest completed sample. |
 | Run playback | Displaying a stored run from ordered samples and domain evidence. |
-| Historical replay | BtRunner's historical-data loop. It is not run playback. |
+| Historical replay | BtBot's historical-data loop. It is not run playback. |
 
 ## Ownership
 
@@ -95,7 +94,7 @@ Each `Telemetry()` function reads only its owner and direct children.
 
 Each parent composes owned child telemetry.
 
-Only BtRunner or Runner decides when collection occurs.
+Only BtBot or Runner decides when collection occurs.
 
 Only the top process owner decides persistence.
 
@@ -127,7 +126,7 @@ Controller retains carried resource equity while that Account is absent.
 ## Ownership Flow
 
 ```text
-BtRunner.Telemetry
+BtBot.Telemetry
   -> Controller.Telemetry
      -> active BotCycle.Telemetry, when present
         -> Executor.Telemetry
@@ -144,7 +143,7 @@ Periodic telemetry must not duplicate their complete trees.
 
 ## Collection Timing
 
-BtRunner uses the existing registered Controller callback.
+BtBot uses the existing registered Controller callback.
 
 It does not register a second competing telemetry timer.
 
@@ -152,18 +151,20 @@ One successful callback runs:
 
 ```text
 Controller.Run(now_ms)
-collect BtRunner.Telemetry(now_ms)
+collect BtBot.Telemetry(now_ms)
 append one sample
 ```
 
 Collection occurs after reconciliation, Risk, BotCycle, Signaler, and execution
 work complete successfully.
 
-Failed Controller work produces no normal sample.
+Failed Controller work produces no successful BtBot sample.
 
 Terminal failure remains explicit in process and result evidence.
 
-BtRunner timestamps samples with TickClock historical time.
+Future Runner behavior differs: every heartbeat appends one operational row, success or failure.
+
+BtBot timestamps samples with TickClock historical time.
 
 Runner will timestamp samples with WallClock time.
 
@@ -210,15 +211,15 @@ Account, Trade, Order, Fill, or Grid Level trees in every sample.
 
 Those fields or child series are added only when required.
 
-## BtRunner Persistence
+## BtBot Persistence
 
-BtRunner retains compact samples in memory.
+BtBot retains compact samples in memory.
 
-BtRunner performs no periodic telemetry file write.
+BtBot performs no periodic telemetry file write.
 
 Successful replay verification and Controller shutdown produce terminal Results.
 
-BtRunner then:
+BtBot then:
 
 1. collects the final Controller Result;
 2. appends the final telemetry sample;
@@ -266,27 +267,36 @@ Exact fresh-process elapsed time still includes both operations.
 
 ## Runner Persistence
 
-Runner remains unimplemented.
+Runner remains unimplemented. This section defines approved future live behavior.
 
-Its future telemetry uses the same snapshot contracts.
+Runner owns one ten-second heartbeat and reads time once per heartbeat.
 
-Runner collects after its successful Controller cadence.
+Every heartbeat appends exactly one cheap JSON telemetry row, whether due work succeeds or fails.
 
-Runner persists periodically because monitoring must continue while the process
-runs.
+The row combines liveness with reconciliation outcome.
 
-Live persistence must not block the Controller decision path.
+Failed reconciliation writes operational telemetry but writes no domain state, Fill cursor, or successful generation.
 
-The future writer receives immutable samples and writes bounded batches.
+The hot path reads primitive counters and timestamps only. It performs no Trade,
+Order, Fill, Grid Level, or child-graph traversal.
 
-One Runner remains the only writer for its run database.
+Balance and equity include separate freshness timestamps.
 
-Server and BotManager are readers.
+Decision-critical Account state remains synchronous.
 
-Live SQLite must support concurrent readers without changing trading ownership.
+Balance and equity cadence may become configurable only after proof that those values are observability-only.
 
-The exact live batching, WAL, retention, and failure policy remain deferred
-until Runner implementation.
+JSON fields may evolve additively.
+
+Indexed identity, heartbeat time, sequence, and schema-version columns remain stable.
+
+The current live display reads the latest indexed row.
+
+One Runner remains the only writer for its run database. Server and BotManager are readers.
+
+Historical retention and downsampling remain deferred.
+
+Live persistence must not block Controller decisions.
 
 ## API and Website
 
@@ -298,17 +308,17 @@ The API remains thin and forwards Bot telemetry requests to BotManager.
 
 BotManager resolves the owning run database and performs the query.
 
-Required query shapes are:
+The approved current live query shape is the latest indexed row.
 
-- latest completed sample;
-- ordered samples between two timestamps; and
-- downsampled samples for charts.
+Future historical query shapes may include ordered timestamp ranges and downsampled chart samples.
+
+Historical retention and downsampling remain deferred.
 
 The API returns typed data, not rendered terminal tables.
 
 The monitor polls latest telemetry.
 
-Run playback requests an ordered historical range.
+Live historical range requests remain deferred with retention design.
 
 Market price data remains owned by its market-data source.
 
@@ -324,12 +334,23 @@ The initial sample must remain compact.
 
 Periodic snapshots must not embed complete child evidence.
 
-The website must not receive every sample for a large chart.
+Future chart delivery must not return every sample for a large range.
 
-BotManager or its query layer downsamples by requested window and point limit.
+Its retention and downsampling design remains deferred.
 
 Implementation proof records telemetry rows, database size, publication time,
-BtRunner elapsed time, loop time, and memory.
+BtBot elapsed time, loop time, and memory.
+
+## Live Reconciliation Fields
+
+Each future Runner row carries cheap reconciliation fields such as success,
+failure stage, consecutive failures, work counts, dirty identities, rows written,
+duration, unresolved count, unresolved high-water count, oldest unresolved age,
+and cleanup attempts.
+
+These are primitive values collected during owned work. Telemetry does not derive them by traversing Ledger evidence.
+
+The exact JSON field set may evolve without replacing stable indexed columns.
 
 ## Growth
 
@@ -373,7 +394,7 @@ unchanged.
 - One successful Controller callback creates one ordered sample.
 - Failed Controller work creates no normal sample.
 - Terminal cleanup creates the final sample.
-- Three-month BtRunner writes telemetry only during terminal publication.
+- Three-month BtBot writes telemetry only during terminal publication.
 - Result SQLite integrity and foreign keys pass.
 - Stored sample count and boundaries match the collection contract.
 - Latest and range queries return ordered values.

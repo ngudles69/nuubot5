@@ -18,7 +18,7 @@ Server is Nuubot's PocketBase-style application host.
 It owns application startup, shared infrastructure, managers, API assembly,
 web serving, readiness, and graceful service shutdown.
 
-Runner, BtRunner, and SweepRunner remain standalone programs.
+Runner, BtBot, and BtSweep remain standalone programs.
 
 Their execution never requires Server to be running.
 
@@ -52,7 +52,7 @@ Runner depend on it.
 - Expose thin API and web routes.
 - Supervise service failures.
 - Stop admission before unwinding services.
-- Launch and supervise standalone Runner and SweepRunner processes through
+- Launch and supervise standalone Runner and BtSweep processes through
   Managers.
 
 ## Does Not
@@ -114,4 +114,4 @@ They are not Bot Risk and are not evaluated by isolated backtests.
 - One service failure reaches Server.
 - Partial startup cleans every started child.
 - Shutdown order preserves Runner evidence.
-- Direct Runner, BtRunner, and SweepRunner execution succeeds without Server.
+- Direct Runner, BtBot, and BtSweep execution succeeds without Server.

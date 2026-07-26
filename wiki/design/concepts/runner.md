@@ -38,7 +38,7 @@ Runner directly owns:
 - Bootstrap required bars before opening Controller admission.
 - Deliver validated bars and BBO values to Controller.
 - Mark the matching Account recon-dirty from user events.
-- Trigger fast BBO checks and slower reconciliation requests.
+- Trigger fast BBO checks and own one drift-free heartbeat for scheduled work.
 - Supervise its clock, subscriptions, Controller, and completion.
 - Stop new input before Controller teardown.
 - Publish its own lifecycle and result evidence.
@@ -79,7 +79,7 @@ Start
   bootstrap Bars
   start Controller
   subscribe live inputs
-  register Clock timers
+  register one heartbeat timer
   start WallClock
   mark running
 
@@ -95,12 +95,58 @@ Stop
   persist result status
 ```
 
+## Heartbeat
+
+Runner owns one scheduler timer. Its heartbeat is ten seconds.
+
+Each heartbeat reads WallClock once and uses that value for every due decision.
+
+The heartbeat may run normal reconciliation, unresolved-Order cleanup, balance and
+equity calculation, telemetry append, or stopping action.
+
+Every interval is configurable. Scheduled boundaries advance independently of work duration to avoid drift.
+
+Every heartbeat appends one cheap JSON telemetry row, whether scheduled work succeeds or fails.
+
+A failed reconciliation writes operational telemetry but no domain state or cursor.
+
+The current live display reads the latest indexed telemetry row.
+
+Hot-path telemetry uses primitive counters and freshness timestamps. It never traverses the domain graph.
+
+Decision-critical Account state remains synchronous.
+
+Balance and equity cadence may become configurable only after those calculations are proven observability-only.
+
+## Reconciliation Failure
+
+Future live execution retains the last published generation after the first and second consecutive whole-reconciliation failures.
+
+A successful reconciliation resets the count. The third consecutive failure begins stoppage.
+
+Runner stages exact deltas, validates Ledger and Account candidates, commits dirty
+rows, then performs non-failing memory publication.
+
+It does not deep-clone the complete graph for rollback.
+
+## Initialization Capacity
+
+Runner initialization reserves capacity for 1,000 Trades, 2,000 Orders, and
+2,000 Fills per Runner, plus reusable evidence buffers.
+
+Capacity reserves containers, not objects. It is not automatically a hard limit.
+
+BtBot uses the same initialization reserve.
+
 ## Invariants
 
 - One Runner owns one Controller.
 - Controller admission opens only after initial truth exists.
 - Feed work cannot execute trading policy.
 - Every background task has one owner, stop condition, and error path.
+- One Runner heartbeat is the only scheduler timer.
+- Every heartbeat appends one telemetry row.
+- Failed reconciliation publishes no domain state or cursor.
 
 ## Required Proof
 

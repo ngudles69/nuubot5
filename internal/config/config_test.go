@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -28,6 +29,27 @@ func TestLoadIsIdempotent(t *testing.T) {
 			"minimum order notional actual %d, expected 11",
 			first.Hyperliquid.MinOrderNotionalUSDC,
 		)
+	}
+}
+
+func TestLoadAppRejectsOldBtRunnerKey(t *testing.T) {
+	var sourcePath = filepath.Join("..", "..", "workspace", "config", "config.toml")
+	var contents, err = os.ReadFile(sourcePath)
+	if err != nil {
+		t.Fatalf("read App Config: %v", err)
+	}
+	var oldConfig = strings.Replace(string(contents), "[btbot]", "[btrunner]", 1)
+	var path = filepath.Join(t.TempDir(), "config.toml")
+	if err = os.WriteFile(path, []byte(oldConfig), 0o600); err != nil {
+		t.Fatalf("write old App Config: %v", err)
+	}
+
+	var _, loadErr = LoadApp(path)
+	if loadErr == nil {
+		t.Fatal("old btrunner Config key was accepted")
+	}
+	if !strings.Contains(loadErr.Error(), "btrunner") {
+		t.Fatalf("error = %q, want old key", loadErr)
 	}
 }
 

@@ -222,29 +222,29 @@ func main() {
 	}
 	log = botLog
 
-	var runner *btrunner.BtRunner
-	runner, err = btrunner.Init(log, sweepID, botID)
+	var runner btbot.BtBot
+	err = runner.Init(context.Background(), log, sweepID, botID)
 	if err != nil {
-		log.Error(fmt.Sprintf("btrunner.Init() failed: %v", err))
+		log.Error(fmt.Sprintf("btbot.Init() failed: %v", err))
 		os.Exit(1)
 	}
 	err = runner.Start()
 	if err != nil {
 		err = errors.Join(err, runner.Stop())
-		log.Error(fmt.Sprintf("btrunner.Start() failed: %v", err))
+		log.Error(fmt.Sprintf("btbot.Start() failed: %v", err))
 		os.Exit(1)
 	}
 	err = runner.Loop()
 	var stopErr = runner.Stop()
 	if err != nil {
-		log.Error(fmt.Sprintf("btrunner.Loop() failed: %v", errors.Join(err, stopErr)))
+		log.Error(fmt.Sprintf("btbot.Loop() failed: %v", errors.Join(err, stopErr)))
 		os.Exit(1)
 	}
 	if stopErr != nil {
-		log.Error(fmt.Sprintf("btrunner.Stop() failed: %v", stopErr))
+		log.Error(fmt.Sprintf("btbot.Stop() failed: %v", stopErr))
 		os.Exit(1)
 	}
-	log.Info(fmt.Sprintf("btrunner completed successfully in %s", time.Since(started)))
+	log.Info(fmt.Sprintf("btbot completed successfully in %s", time.Since(started)))
 }
 ```
 
@@ -366,6 +366,6 @@ Nuubot5 owns its implementation and proof.
 
 ## 11. Current Source State
 
-The implemented BtRunner path follows these rules.
+The implemented BtBot path follows these rules.
 
 New and changed source MUST preserve this contract.

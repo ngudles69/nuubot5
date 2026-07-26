@@ -26,8 +26,8 @@ Replay: Sweep 10, Bot 14, BTC, 2026-03-01 through 2026-06-01.
 
 | Metric | Result |
 |---|---:|
-| BtRunner elapsed time | 25,848 ms |
-| BtRunner historical-data loop elapsed time | 23,908 ms |
+| BtBot elapsed time | 25,848 ms |
+| BtBot historical-data loop elapsed time | 23,908 ms |
 | Tick rows | 7,948,800 |
 | Controller runs | 794,880 |
 | Signal packages | 2,207 |
@@ -79,8 +79,8 @@ Replay: Sweep 10, Bot 14, BTC, 2026-03-01 through 2026-06-01.
 
 | Metric | Result |
 |---|---:|
-| BtRunner elapsed time | 26,007 ms |
-| BtRunner historical-data loop elapsed time | 24,066 ms |
+| BtBot elapsed time | 26,007 ms |
+| BtBot historical-data loop elapsed time | 24,066 ms |
 | Tick rows | 7,948,800 |
 | Controller runs | 794,880 |
 | Signal packages | 2,207 |
@@ -106,9 +106,9 @@ Fresh-process stability passed 2 of 2 and 10 of 10.
 
 All stability runs produced identical domain and financial results.
 
-2x suite: 51,805 ms; BtRunner average 24,754 ms; historical-data-loop average 24,006 ms.
+2x suite: 51,805 ms; BtBot average 24,754 ms; historical-data-loop average 24,006 ms.
 
-10x suite: 260,764 ms; BtRunner average 24,856 ms; historical-data-loop average 24,099 ms.
+10x suite: 260,764 ms; BtBot average 24,856 ms; historical-data-loop average 24,099 ms.
 
 2x log: `workspace/logs/nuubot5-grtest-s10-b14-2-20260725T071011Z.log`
 
@@ -134,8 +134,8 @@ Replay: Sweep 10, Bot 14, BTC, 2026-03-01 through 2026-06-01.
 
 | Metric | Result |
 |---|---:|
-| BtRunner elapsed time | 25,397 ms |
-| BtRunner historical-data loop elapsed time | 23,533 ms |
+| BtBot elapsed time | 25,397 ms |
+| BtBot historical-data loop elapsed time | 23,533 ms |
 | Tick rows | 7,948,800 |
 | Controller runs | 794,880 |
 | Signal packages | 2,207 |
@@ -161,9 +161,9 @@ Fresh-process stability passed 2 of 2 and 10 of 10.
 
 All stability runs produced identical domain and financial results.
 
-2x suite: 52,776 ms; BtRunner average 25,314 ms; historical-data-loop average 24,588 ms.
+2x suite: 52,776 ms; BtBot average 25,314 ms; historical-data-loop average 24,588 ms.
 
-10x suite: 268,307 ms; BtRunner average 25,781 ms; historical-data-loop average 24,220 ms.
+10x suite: 268,307 ms; BtBot average 25,781 ms; historical-data-loop average 24,220 ms.
 
 2x log: `workspace/logs/nuubot5-grtest-s10-b14-2-20260725T072539Z.log`
 
@@ -222,15 +222,15 @@ All stability runs produced identical execution and financial results.
 
 2x suite: 155,660 ms.
 
-2x BtRunner average: 76,524 ms.
+2x BtBot average: 76,524 ms.
 
 2x historical-data-loop average: 71,970 ms.
 
 10x suite: 780,162 ms.
 
-10x BtRunner average: 76,688.2 ms.
+10x BtBot average: 76,688.2 ms.
 
-10x BtRunner range: 75,153 through 77,857 ms.
+10x BtBot range: 75,153 through 77,857 ms.
 
 10x historical-data-loop average: 72,237.3 ms.
 

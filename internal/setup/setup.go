@@ -24,7 +24,7 @@ type Admission struct {
 
 // Section 1 - Program Flow
 
-// Setup returns one admitted standalone BtRunner input.
+// Setup returns one admitted standalone BtBot input.
 func Setup(
 	caller context.Context,
 	log *logging.Logger,

@@ -98,7 +98,7 @@ BotCycle stops and flattens every Executor Account.
 
 Controller then stops Risks and Signaler.
 
-Fatal child errors propagate to BtRunner.
+Fatal child errors propagate to BtBot.
 
 ## Deferred
 

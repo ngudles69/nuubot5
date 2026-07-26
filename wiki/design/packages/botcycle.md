@@ -45,7 +45,7 @@ BotCycle distributes symbol-qualified BBO values.
 
 Executors ignore values for other symbols.
 
-Current BtRunner admits one replay symbol.
+Current BtBot admits one replay symbol.
 
 Multi-source deterministic replay remains deferred.
 

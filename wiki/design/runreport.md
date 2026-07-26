@@ -1,7 +1,7 @@
 # RunReport
 
-Status: Implemented for the initial BtRunner slice.
-Covers: `internal/runreport`, terminal report building, structured
+Status: Implemented for the initial BtBot slice.
+Covers: `internal/report`, terminal report building, structured
 output, table rendering, and suite aggregation.
 Purpose: Build repeatable terminal analysis without embedding reporting inside
 trading objects.
@@ -14,7 +14,7 @@ RunReport is terminal.
 
 It must provide a standardized result examined repeatedly after every test.
 
-The report will grow to include execution, timing, memory, PnL, Risk, BtRunner,
+The report will grow to include execution, timing, memory, PnL, Risk, BtBot,
 BotCycle, Executor, and Trade statistics.
 
 Output must use stable tables with multiple columns.
@@ -47,7 +47,7 @@ RunReport consumes:
 
 - immutable terminal Results;
 - collected telemetry;
-- BtRunner terminal timing and memory; and
+- BtBot terminal timing and memory; and
 - suite-owned external process measurements.
 
 RunReport does not collect live telemetry.
@@ -68,7 +68,7 @@ RunReport owns terminal calculation and presentation.
 
 ## Ownership
 
-`internal/runreport` owns:
+`internal/report` owns:
 
 - report input validation;
 - terminal calculations;
@@ -78,7 +78,7 @@ RunReport owns terminal calculation and presentation.
 - table rendering; and
 - JSON rendering.
 
-BtRunner owns one run's terminal Result and internal measurements.
+BtBot owns one run's terminal Result and internal measurements.
 
 The test harness owns fresh-process and suite measurements.
 
@@ -87,13 +87,13 @@ ResultPublisher owns the dedicated SQLite result database.
 BotManager will later own API-side report queries.
 
 No Account, Executor, BotCycle, Risk, Signaler, Controller, or Ledger imports
-`runreport`.
+`report`.
 
-`runreport` must not import `btrunner`.
+`report` must not import `btbot`.
 
-Its input is an import-safe value owned by `runreport`.
+Its input is an import-safe value owned by `report`.
 
-BtRunner fills that value from Controller Result, replay proof, telemetry, and
+BtBot fills that value from Controller Result, replay proof, telemetry, and
 memory.
 
 ## Top-Level Flow
@@ -101,12 +101,12 @@ memory.
 One run:
 
 ```text
-BtRunner verifies replay
+BtBot verifies replay
   -> stop Controller
   -> collect immutable Controller Result
   -> append final telemetry
   -> sample Go memory
-  -> build RunReport once from runreport.Input
+  -> build RunReport once from report.Input
   -> publish Result, telemetry, and RunReport atomically
   -> command emits one compact RunReport JSON record
 ```
@@ -114,7 +114,7 @@ BtRunner verifies replay
 One stability suite:
 
 ```text
-test harness launches N fresh BtRunner processes
+test harness launches N fresh BtBot processes
   -> capture one compact RunReport JSON record per successful process
   -> retain records and exact process measurements in memory
   -> retain explicit failed-attempt envelopes
@@ -145,7 +145,7 @@ RunReport reuses:
 - Risk decisions; and
 - replay proof.
 
-`runreport.Input` contains:
+`report.Input` contains:
 
 - Controller Result;
 - replay proof;
@@ -154,7 +154,7 @@ RunReport reuses:
 
 It contains no live object pointers.
 
-It does not import or depend on `btrunner`.
+It does not import or depend on `btbot`.
 
 Missing report facts should first be assessed as terminal domain facts,
 telemetry facts, or derived analytics.
@@ -224,7 +224,7 @@ SuiteReport contains:
 
 Exact process launch-to-exit timing belongs to the test harness.
 
-BtRunner cannot measure work after its own final instruction.
+BtBot cannot measure work after its own final instruction.
 
 Suite elapsed starts after build completes and before the first process launch.
 
@@ -244,7 +244,7 @@ publication.
 The complete fixed-width report uses:
 
 ```text
-Nx BtRunner — Sweep <sweep_id>, Bot <bot_id>
+Nx BtBot — Sweep <sweep_id>, Bot <bot_id>
 
 BotSpec: <bot_spec_id>    Symbol: <symbol>
 Status: <status>          Requested: N
@@ -253,7 +253,7 @@ Attempted: N              Passed: N    Failed: N
 Timing (ms)
 Item                  #  Cumulative  Avg  Min  Max
 Suite (total)         1
-BtRunner              N
+BtBot              N
 Historical Data Loop  N
 
 Memory (MB)
@@ -340,7 +340,7 @@ Suite net PnL cumulative means experimental total across independent runs.
 
 It is not portfolio PnL.
 
-GC pause minimum and maximum initially mean per-BtRunner cumulative pause.
+GC pause minimum and maximum initially mean per-BtBot cumulative pause.
 
 They do not claim individual GC-event pause distribution.
 
@@ -460,7 +460,7 @@ A process emits no successful RunReport JSON when terminal publication fails.
 
 Removing RunReport requires:
 
-1. delete `internal/runreport`;
+1. delete `internal/report`;
 2. delete the single terminal build call;
 3. delete run-summary persistence;
 4. delete report renderers; and
@@ -472,7 +472,7 @@ independent.
 ## Initial Proof
 
 - RunReport calculations use immutable Results and telemetry only.
-- Domain packages do not import `runreport`.
+- Domain packages do not import `report`.
 - One run report builds once.
 - One suite report builds once.
 - RunReport builds without a Go import cycle.

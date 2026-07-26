@@ -1,6 +1,6 @@
 # Setup Package
 
-Status: Implemented for standalone BtRunner admission.
+Status: Implemented for standalone BtBot admission.
 Covers: `internal/setup/setup.go`
 Purpose: Admit external App, Bot, replay, Meta, and result-path inputs.
 
@@ -27,7 +27,7 @@ Setup starts no goroutine or WebSocket.
 The returned value contains AppConfig, stored BotConfig, ReplayInput, Meta, and
 the per-Bot result path.
 
-BtRunner passes those values to the exact BotSpec builder.
+BtBot passes those values to the exact BotSpec builder.
 
 Controller never imports Setup.
 

@@ -16,7 +16,7 @@ TradeExecutor or GridExecutor owns one Account.
 
 Account owns one selected Venue and one Ledger.
 
-The current BtRunner implementation selects Simulator only.
+The current BtBot implementation selects Simulator only.
 
 Account hides Venue selection and response translation from Executor.
 
@@ -138,7 +138,9 @@ HTTP mutation responses are acknowledgement evidence, not final lifecycle truth.
 
 ## Reconciliation
 
-Account queries Venue in this order:
+### Current Implementation
+
+Account queries Simulator in this order:
 
 1. Open Orders.
 2. Fills from the inclusive Ledger cursor.
@@ -149,21 +151,42 @@ Account validates untrusted Venue shapes once.
 
 Ledger receives normalized concrete values.
 
-Account filters history by the smallest useful time range.
-
-A cap-sized response remains incomplete until Account narrows or continues the range.
-
-Missing history rows never authorize deleting local Ledger evidence.
-
-Reconciliation repairs drift from missing or delayed HTTP and WebSocket evidence.
-
 Normal reconciliation returns the latest snapshot without querying a clean Account.
 
 Forced reconciliation queries Venue even when Account is clean.
 
-Failed reconciliation restores dirty state.
+Failed reconciliation restores dirty state. It advances no cursor or success timestamp.
 
-It advances no cursor or success timestamp.
+### Approved Live Target
+
+Normal live reconciliation queries `openOrders`, paginated `userFillsByTime`, exact
+`orderStatus` for missing active Orders, then Account state.
+
+Hyperliquid Fill history has no symbol filter. Responses cap at 2,000 rows, and
+`userFillsByTime` retains only the latest 10,000 Fills.
+
+Account continues capped responses and deduplicates inclusive cursor boundaries by Venue TID.
+
+Routine reconciliation does not query `historicalOrders`. `openOrders` has no documented 2,000-row cap.
+
+Account and Ledger compare through stable identity indexes.
+
+Work touches only active Orders, new Fills, touched Trades, and the Account candidate.
+
+The cursor advances only after every Venue read, validation, Ledger change, Account calculation, and persistence step succeeds.
+
+A missing active Order remains unresolved after inconclusive exact lookup.
+
+Future live behavior quarantines its owning Grid level without replacement, reuse, or assumed outcome.
+
+Other levels continue only within a separately approved safety boundary. Sweep fails immediately.
+
+Configurable cleanup may run when unresolved Orders exist and cleanup is due.
+
+Cleanup reads the latest 2,000 historical Orders and Fills, matches CLOID, OID,
+and TID, and repairs only exact evidence.
+
+No cleanup default or escalation threshold is approved.
 
 ## Dirty State
 
@@ -197,6 +220,12 @@ Successful reconciliation returns one immutable-by-contract Account snapshot.
 
 The snapshot contains identity, observation time, exposure, equity, margins, PnL, fees, and domain counts.
 
+Decision-critical Account state remains synchronous.
+
+Balance and equity calculation cadence may become configurable only after proof that those values are observability-only.
+
+Telemetry includes separate freshness timestamps for balance and equity.
+
 It contains no Account, Ledger, Trade, Order, Fill, or Venue pointer.
 
 See [AccountSnapshot](../concepts/account-snapshot.md).
@@ -204,6 +233,29 @@ See [AccountSnapshot](../concepts/account-snapshot.md).
 `Telemetry()` returns explicit absence until one successful Account observation.
 
 Observed telemetry returns the latest snapshot without mutation or Venue access.
+
+## Live Failure and Publication
+
+Future live execution retains the last published generation through one or two consecutive whole-reconciliation failures.
+
+Success resets the failure count. The third consecutive failure begins stoppage.
+
+Sweep fails on the first error.
+
+Account stages exact normalized deltas and validates the Ledger and Account candidate before publication.
+
+Maximum persistence writes dirty rows in one SQL transaction.
+
+Memory publication follows commit and must not fail. No complete graph clone exists for rollback.
+
+A failed attempt may publish operational telemetry. It publishes no domain state, cursor, or successful Account observation.
+
+## Capacity
+
+Each Runner or BtBot Account initialization reserves reusable capacity for
+1,000 Trades, 2,000 Orders, and 2,000 Fills, plus evidence buffers.
+
+Capacity reserves containers, not domain objects. These reserves are not automatic hard limits.
 
 ## Persistence
 
