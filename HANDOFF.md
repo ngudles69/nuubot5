@@ -4,7 +4,18 @@ Last updated: 2026-07-26
 
 ## Focus
 
-Commit and push the proven BtBot, `stest.sh`, and template work, then await the new reconciliation implementation approach.
+Make the holistic reconciliation design implementable through complete impact analysis, adversarial review, and blocker fixes.
+
+## Active Recon Design Review Contract
+
+- Every architect, documenter, adversarial reviewer, and fixer must assess each change holistically.
+- Review must cover lifecycle, ownership, memory, indexes, Venue behavior, domain integrity, persistence, recovery, telemetry, STOP, tests, and cutover.
+- A locally correct change fails review when it creates an unaddressed cross-package conflict or external impact.
+- Reviewers must identify exact affected code and documentation outside Recon.
+- Rewrite and reorganize complete sections when structure or ownership is wrong; never accumulate patch text.
+- Keep the Recon concept minimal and every specification limited to implementation-driving facts.
+- Reject duplicated, stale, bloated, locally patched, or structurally misleading design.
+- No implementation begins before the user approves the reviewed design.
 
 ## Active Task
 
@@ -113,16 +124,62 @@ Commit and push the proven BtBot, `stest.sh`, and template work, then await the 
 - Profiled Grid measured BtBot 82,880 ms, loop 77,930 ms, and 142,514.548 MB allocation.
 - Final direct full tests, full vet, shell syntax, diagnostics, stale-name, and diff checks passed.
 - Commit and push are authorized and next.
+- Hyperliquid filled acknowledgement is now distinct from fee-complete local reconciliation.
+- `wiki/design/hyperliquid/exchange.md` owns the fee-completion and Grid/Hedge STOP contract.
+- Generic Recon points to that fact and retains fee-incomplete filled Orders as reconciliation-pending.
+- `Fill.HasFee` proves fee presence; zero fees and negative rebates remain valid.
+- Hyperliquid creates no synthetic Fill from a filled acknowledgement lacking Venue TID.
+- A TID-bearing Fill without fee remains immutable execution evidence with incomplete metadata.
+- Reconciliation retains fee-incomplete timestamp anchors and queries bounded repair windows around them.
+- Grid/Hedge STOP remains reconciling while any closure Fill is missing or fee-incomplete.
+- Hyperliquid fee transitions require per-Fill identity logs and per-cycle aggregate telemetry.
+- Fee telemetry identifies Venue, network, Account, symbol, both cursor ranges, rows, durations, cap splits, matches, errors, and pending ages.
+- Fee-resolution lag measures first local missing-fee observation through successful enrichment.
+- Testnet and mainnet require separate observed fee-completion baselines.
+- Delayed-fee proof must advance the normal cursor beyond the Fill timestamp, then enrich that exact TID once.
+- One advancing Fill cursor is insufficient and may permanently hide delayed Hyperliquid fee evidence.
+- Recon requires independent new-Fill discovery and pending-fee repair queries, merged and deduplicated by Venue TID.
+- Fee repair uses bounded windows around unresolved timestamps, never one growing oldest-pending-to-present query.
+- Every physical Fill-history request produces one chartable telemetry entry with query kind, range, rows, duration, cap, matches, enrichment, and error.
+- Account owns one `ReconTelemetry` outcome containing all `FillQueryTelemetry` entries for each successful, failed, or skipped invocation.
+- Account publishes that outcome once; `Telemetry()` only copies it without Ledger traversal.
+- Runner heartbeat is configurable and defaults to ten seconds.
+- After every reconciliation, the process owner persists `ReconTelemetry` according to configuration.
+- ReconTelemetry identifies `recon_kind` as `standard`, `sweep`, `recovery`, or `startup`.
+- All reconciliation kinds share one telemetry schema; `recon_kind` is a filtering and charting tag only.
+- Generic Recon links to the Telemetry owner and Hyperliquid per-pull measurement contract.
+- One persisted ReconTelemetry value may contain multiple Fill-query entries.
+- Filled acknowledgements without TID retain the Order acknowledgement timestamp as their repair anchor.
+- Every admitted Fill observation must classify as added, enriched, or unchanged duplicate without silent omission.
+- Dual-Recon focused Account, Ledger, Executor, and BotSpec tests pass with Go 1.26.5 and `-tags noasm`.
+- Full Go tests and vet pass with `CGO_ENABLED=0`, Go 1.26.5, and `-tags noasm`.
+- Canonical Recon and frozen Recon2 still contain the same unoptimized algorithm.
+- Holistic `wiki/design/concepts/recon.md` draft is complete and awaiting replacement by the implementable rewrite.
+- The draft opens with only the corrected Recon concept, polling loop, and eight-step process.
+- Read-only holistic impact assessment completed across lifecycle, domain, Venue, persistence, telemetry, STOP, tests, and cutover.
+- Assessment found Grid startup, stopping reconciliation, delayed closed-Trade fees, Venue completeness, reload indexes, dirty persistence, telemetry, and migration blockers.
+- Removed unproven 1,000/2,000 container preallocation; target maps and sets grow dynamically.
+- Preallocation or buffer reuse requires focused proof after complete-Ledger cloning is removed.
+- Recon design now has ten steps with separate Trade and Account Snapshot updates.
+- Recon remains one synchronous Account process; it owns no loop, scheduler, lifecycle, or state machine.
+- Controller or Bot decides to stop; BotCycle coordinates; Executor acts; Account and Ledger report facts.
+- Adversarial holistic design review round one completed with verdict BLOCKED and ten accepted blockers.
 
 ### TODO
 
-- Commit the complete proven worktree. IN PROGRESS.
-- Push `main`.
-- Stand by for the user's new reconciliation implementation instructions.
+- Replace `wiki/design/concepts/recon.md` with the clean implementable Init and ten-step Recon specification. DONE.
+- Fix accepted adversarial round-one blockers through complete section rewrites. DONE.
+- Verify the 263-line minimal draft against current Recon source. DONE.
+- Verify every current Recon2 action maps into the ten-step design. DONE.
+- Add the exact ten-step source-comment layout contract. DONE.
+- Commit and push the complete current checkpoint before changing canonical Recon. IN PROGRESS.
+- Rewrite canonical Recon using `cmd/nuubot-bt-bot/main.go` as the readability model. TODO.
+- Preserve Recon2 unchanged as the behavior and performance control. TODO.
 
 ### PENDING USER APPROVAL
 
-- New reconciliation implementation approach after current script/template work.
+- Review the completed canonical Recon implementation and proof.
+- Delete Recon2 after canonical Recon parity and performance are accepted.
 - Add the chief-of-staff delegation rule to `AGENTS.md`.
 - Fail stability when deterministic results differ.
 - Preserve every stability-attempt database.

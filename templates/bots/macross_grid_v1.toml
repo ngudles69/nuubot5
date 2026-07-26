@@ -26,6 +26,7 @@ min_expected_pnl_usdc = "0"
 fee_pct = "0.05"
 slippage_pct = "0"
 persist_mode = "none"
+recon = "recon"
 
 [[risks]]
 kind = "balanced"

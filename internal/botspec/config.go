@@ -64,6 +64,7 @@ type tradeExecutorConfig struct {
 	FeePct            string `toml:"fee_pct"`
 	SlippagePct       string `toml:"slippage_pct"`
 	PersistMode       string `toml:"persist_mode"`
+	Recon             string `toml:"recon"`
 }
 
 type observerConfig struct {
@@ -106,6 +107,7 @@ type gridExecutorConfig struct {
 	FeePct             string `toml:"fee_pct"`
 	SlippagePct        string `toml:"slippage_pct"`
 	PersistMode        string `toml:"persist_mode"`
+	Recon              string `toml:"recon"`
 }
 
 // Section 1 - Program Flow
@@ -333,7 +335,8 @@ func admitTradeExecutor(raw tradeExecutorConfig) (executor.Spec, error) {
 		values[3].GreaterThanOrEqual(decimal.NewFromInt(1)) ||
 		values[4].IsNegative() ||
 		values[5].IsNegative() ||
-		(raw.PersistMode != "none" && raw.PersistMode != "max") {
+		(raw.PersistMode != "none" && raw.PersistMode != "max") ||
+		(raw.Recon != "" && raw.Recon != "recon" && raw.Recon != "recon2") {
 		return executor.Spec{}, fmt.Errorf("invalid %s Trade Executor", MacrossTrade)
 	}
 	return executor.Spec{
@@ -349,6 +352,7 @@ func admitTradeExecutor(raw tradeExecutorConfig) (executor.Spec, error) {
 		FeePct:        values[4],
 		SlippagePct:   values[5],
 		PersistMode:   raw.PersistMode,
+		Recon:         raw.Recon,
 	}, nil
 }
 
@@ -386,7 +390,8 @@ func admitGridExecutor(raw gridExecutorConfig) (executor.Spec, error) {
 		values[2].IsNegative() ||
 		values[3].IsNegative() ||
 		values[4].IsNegative() ||
-		(raw.PersistMode != "none" && raw.PersistMode != "max") {
+		(raw.PersistMode != "none" && raw.PersistMode != "max") ||
+		(raw.Recon != "" && raw.Recon != "recon" && raw.Recon != "recon2") {
 		return executor.Spec{}, fmt.Errorf("invalid %s Grid Executor", MacrossGrid)
 	}
 	return executor.Spec{
@@ -402,6 +407,7 @@ func admitGridExecutor(raw gridExecutorConfig) (executor.Spec, error) {
 		FeePct:         values[3],
 		SlippagePct:    values[4],
 		PersistMode:    raw.PersistMode,
+		Recon:          raw.Recon,
 	}, nil
 }
 

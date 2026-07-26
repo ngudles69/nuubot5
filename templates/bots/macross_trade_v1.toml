@@ -28,6 +28,7 @@ stop_loss_pct = "0.01"
 fee_pct = "0.05"
 slippage_pct = "0.02"
 persist_mode = "none"
+recon = "recon"
 
 [[risks]]
 kind = "balanced"

@@ -82,6 +82,27 @@ func TestCanonicalTemplatesValidate(t *testing.T) {
 	}
 }
 
+func TestReconSelectionValues(t *testing.T) {
+	var content, err = os.ReadFile(botTemplatePath(t, "macross_grid_v1.toml"))
+	if err != nil {
+		t.Fatalf("read Grid template: %v", err)
+	}
+	for _, value := range []string{"recon", "recon2"} {
+		var config = strings.Replace(string(content), `recon = "recon"`, `recon = "`+value+`"`, 1)
+		var admitted, admitErr = admit(MacrossGrid, config)
+		if admitErr != nil {
+			t.Fatalf("admit %s: %v", value, admitErr)
+		}
+		if admitted.executors[0].Recon != value {
+			t.Fatalf("admitted Recon = %q, want %q", admitted.executors[0].Recon, value)
+		}
+	}
+	var invalid = strings.Replace(string(content), `recon = "recon"`, `recon = "invalid"`, 1)
+	if err = Validate(MacrossGrid, invalid); err == nil {
+		t.Fatal("invalid reconciliation selection was accepted")
+	}
+}
+
 func TestGridLevelCountUsesCompleteTenBitRange(t *testing.T) {
 	var content, err = os.ReadFile(botTemplatePath(t, "macross_grid_v1.toml"))
 	if err != nil {

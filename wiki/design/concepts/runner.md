@@ -97,7 +97,7 @@ Stop
 
 ## Heartbeat
 
-Runner owns one scheduler timer. Its heartbeat is ten seconds.
+Runner owns one scheduler timer. Its configurable heartbeat defaults to ten seconds.
 
 Each heartbeat reads WallClock once and uses that value for every due decision.
 

@@ -117,6 +117,7 @@ func (e *gridExecutor) OnInit(ctx Context) error {
 		FeePct:          ctx.Spec.FeePct,
 		SlippagePct:     ctx.Spec.SlippagePct,
 		PersistMode:     ctx.Spec.PersistMode,
+		Recon:           ctx.Spec.Recon,
 		ResultPath:      ctx.Spec.ResultPath,
 	})
 	if err != nil {

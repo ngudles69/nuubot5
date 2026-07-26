@@ -28,7 +28,7 @@ Telemetry must not scatter update calls through trading behavior.
 BtBot collects telemetry in memory and writes it during one terminal result
 publication.
 
-Runner will append live operational telemetry on its Runner-owned ten-second heartbeat.
+Runner will append live operational telemetry on its configurable heartbeat, which defaults to ten seconds.
 
 That heartbeat is the only live scheduler timer.
 
@@ -269,7 +269,7 @@ Exact fresh-process elapsed time still includes both operations.
 
 Runner remains unimplemented. This section defines approved future live behavior.
 
-Runner owns one ten-second heartbeat and reads time once per heartbeat.
+Runner owns one configurable heartbeat, defaults it to ten seconds, and reads time once per heartbeat.
 
 Every heartbeat appends exactly one cheap JSON telemetry row, whether due work succeeds or fails.
 
@@ -341,12 +341,36 @@ Its retention and downsampling design remains deferred.
 Implementation proof records telemetry rows, database size, publication time,
 BtBot elapsed time, loop time, and memory.
 
-## Live Reconciliation Fields
+## Recon Telemetry
 
-Each future Runner row carries cheap reconciliation fields such as success,
-failure stage, consecutive failures, work counts, dirty identities, rows written,
-duration, unresolved count, unresolved high-water count, oldest unresolved age,
-and cleanup attempts.
+Account owns one private reconciliation outcome for its latest attempt.
+
+```text
+HeartbeatTelemetry
+  `-- ReconTelemetry
+      `-- []FillQueryTelemetry
+```
+
+Account builds the outcome locally during reconciliation and publishes it once when the attempt ends.
+
+`Account.Telemetry()` copies that outcome. It performs no query, mutation, calculation, or Ledger traversal.
+
+`ReconTelemetry` exists for successful, failed, and skipped attempts.
+
+It records `recon_kind` as `standard`, `sweep`, `recovery`, or `startup`.
+
+All kinds use one telemetry schema. `recon_kind` tags records for filtering, charting, and comparison only.
+
+It records attempt reason, stage, success, duration, consecutive failures, work counts, dirty identities, rows written, and unresolved state.
+
+Every physical Fill-history request contributes one `FillQueryTelemetry` entry.
+
+[Hyperliquid Exchange](hyperliquid/exchange.md#fee-completion-observability)
+owns exact per-pull ranges, row counts, durations, classifications, cap evidence, and delayed-fee measurements.
+
+One heartbeat JSON row embeds all query entries from that attempt. It does not require one database row per Venue request.
+
+After every reconciliation, the process owner persists `ReconTelemetry` according to configuration.
 
 These are primitive values collected during owned work. Telemetry does not derive them by traversing Ledger evidence.
 

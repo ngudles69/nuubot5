@@ -56,6 +56,7 @@ type Spec struct {
 	FeePct          decimal.Decimal
 	SlippagePct     decimal.Decimal
 	PersistMode     string
+	Recon           string
 	Meta            meta.Instrument
 	MinNotionalUSDC decimal.Decimal
 	ResultPath      string
