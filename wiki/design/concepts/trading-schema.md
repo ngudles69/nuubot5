@@ -122,15 +122,27 @@ CREATE TABLE IF NOT EXISTS account_fill (
         REFERENCES account_order (ledger_id, trade_id, order_id, cloid)
 );
 
-CREATE TABLE IF NOT EXISTS simulator_state (
-    ledger_id       INTEGER PRIMARY KEY REFERENCES account_ledger(ledger_id),
-    schema_version  INTEGER NOT NULL,
-    payload_json    TEXT NOT NULL,
-    updated_ms      INTEGER NOT NULL
+CREATE TABLE IF NOT EXISTS simulator_venue_state (
+    account_name   TEXT NOT NULL,
+    symbol         TEXT NOT NULL,
+    schema_version INTEGER NOT NULL,
+    payload_json   TEXT NOT NULL,
+    updated_ms     INTEGER NOT NULL,
+    PRIMARY KEY (account_name, symbol)
 );
 ```
 
 Every SQLite connection enables foreign keys and a 30-second busy timeout.
+
+`simulator_venue_state` is Simulator-owned schema version 3.
+
+Its payload stores official identity, policy, Venue counters, canonical Orders, and canonical Fills.
+
+Each Simulator Order and Fill appears once.
+
+It stores no Ledger ID, Trade ID, local Order ID, role, or purpose.
+
+Legacy `simulator_state` payloads are not read or adapted.
 
 ## Grid Result Evidence
 
@@ -164,7 +176,9 @@ shutdown.
 
 Closing every writer precedes the final rename.
 
-`max` reloads Ledger and Simulator state by Ledger identity.
+`max` reloads Ledger by Ledger identity.
+
+Simulator reloads independently by official simulated account and symbol.
 
 It does not resume replay, Controller, Signaler, or TradeExecutor policy
 cursors.
@@ -173,15 +187,12 @@ Transient BBO state is never restored.
 
 ## Transaction Rules
 
-- One Ledger save replaces one complete Ledger tree in one transaction.
-- Reconciliation stages and validates the full tree before persistence.
+- One Ledger Recon save writes changed rows in one transaction.
+- Reconciliation validates one complete attempt before Snapshot publication.
 - The Fill cursor advances only with the accepted batch.
 - Venue calls never occur inside Ledger transactions.
-- Simulator state uses one versioned JSON row per Ledger.
-
-The complete-tree rewrite is intentionally simple.
-
-`max` performance must be measured before replacing it with incremental writes.
+- Simulator state uses one versioned JSON row per account and symbol.
+- Simulator persistence succeeds before changed canonical memory becomes visible.
 
 ## Invariants
 
@@ -192,7 +203,9 @@ The complete-tree rewrite is intentionally simple.
 - Missing bounded history deletes nothing.
 - Terminal Orders never reopen.
 - Terminal Trades never reopen.
-- Simulator payload identity matches its Ledger.
+- Simulator payload identity matches its official account, asset, symbol, and policy.
+- Simulator Orders and Fills contain no Account domain identity.
+- Simulator terminal Orders never re-enter its active index.
 - Credentials enter no table.
 
 ## Proof

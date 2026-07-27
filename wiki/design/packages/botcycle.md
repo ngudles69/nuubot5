@@ -33,11 +33,15 @@ BotCycle Stop reaches every sibling with one parent reason.
 
 ## Reconciliation
 
-BotCycle reconciles capable Executor Accounts as one barrier.
+BotCycle reconciles every capable running Executor Account before completing one barrier.
 
-It returns immutable Account snapshots to Controller.
+The result reports any failure and the maximum consecutive Account Recon failure count.
 
-Only after Risk allows the pass does BotCycle deliver `OnRecon`.
+Any failure suppresses the complete Snapshot barrier. Controller receives no partial snapshots.
+
+A successful barrier returns every immutable Account Snapshot to Controller.
+
+Only after Risk allows the successful barrier does BotCycle deliver `OnRecon`.
 
 ## Market Data
 

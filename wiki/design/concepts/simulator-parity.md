@@ -1,192 +1,141 @@
 # Simulator Parity
 
-Status: Internal behavior implemented. Frozen-output and testnet parity remain pending.
-Covers: `internal/simulator/*.go` and `internal/account/*.go`
-Purpose: Separate Hyperliquid behavior, SDK-visible responses, and Nuubot domain evidence.
+Status: Internal lifecycle and official JSON boundary implemented. External fixture and testnet proof remain pending.
+Covers: `internal/simulator`, `internal/hyperliquid`, and `internal/account`
+Purpose: Keep simulated exchange truth separate from Nuubot domain truth.
 
-## Verdict
-
-Nuubot3 needs correction, not replacement.
-
-Its Account, Ledger, Trade, Order, Fill, and reconciliation design remains the strongest domain reference.
-
-Nuutrader6 supplies the proven exchange behavior.
-
-`async_hyperliquid` supplies the client-visible response contract used by Nuutrader6.
-
-Nuubot5 implements the current Simulator and domain contracts in Go.
-
-## Three Contracts
-
-| Contract | Source | Nuubot5 owner |
-|---|---|---|
-| Exchange behavior | Official API and proven Nuutrader6 behavior | Simulator and Hyperliquid adapter |
-| Client-visible response | `async_hyperliquid` 0.4.8 and frozen fixtures | `internal/hyperliquid` protocol types |
-| Domain evidence | Nuubot3 Account and Ledger design | Account, Ledger, Trade, Order, Fill |
-
-These contracts may resemble each other.
-
-They are not interchangeable.
-
-Account must not read Simulator internals.
-
-Simulator must not create domain objects.
-
-## Batch Bracket Response
-
-Order results retain request order:
+## Contracts
 
 ```text
-0 entry
-1 take profit
-2 stop loss
+Official API
+  request fields
+  response JSON
+  status meaning
+
+Simulator
+  matching
+  canonical exchange state
+  fresh official responses
+
+Account and Ledger
+  Nuubot ownership
+  reconciliation
+  finance
 ```
 
-A resting entry returns:
+These contracts share values.
 
-```text
-entry        resting
-take profit  waitingForFill
-stop loss    waitingForFill
-```
+They never share objects or memory.
 
-An immediately filled entry returns:
+## Submission
 
-```text
-entry        filled
-take profit  waitingForTrigger
-stop loss    waitingForTrigger
-```
+Account submits official asset, side, price, size, reduce-only, order type, grouping, CLOID, and timestamp values.
 
-`waitingForFill` means the child waits for its parent entry.
+CLOID is mandatory and opaque.
 
-`waitingForTrigger` means the child is armed against market data.
+Simulator assigns OID once.
 
-Public Order queries may expose both child states as `open`.
+The ordered official response returns `resting`, `filled`, or `error`.
 
-Account retains the exact submit result and later reconciles public Order truth.
+Private waiting and arming state never appears as a custom public status.
 
-Neither Simulator nor live submission responses bypass reconciliation.
+Waiting trigger children appear as official open Orders.
 
-WebSocket events remain optional dirty hints.
+## Canonical Truth
 
-Account passes `persist_mode` into Simulator.
+Simulator keeps one canonical private Order record per accepted Order.
 
-`none` remains memory-only until one successful final export.
+Matching, arming, filling, and cancellation update that record.
 
-`max` persists every Simulator state change.
+OID and CLOID indexes point to the same record.
 
-Recovery reloads Simulator truth and forces recon before any decision.
+The active index contains only matchable nonterminal Orders.
 
-Forced reconciliation catches missing hints and lifecycle drift.
+Each execution creates one canonical Fill record.
+
+Terminal Orders leave the active index and never match again.
 
 ## Bracket Lifecycle
 
 ```text
 submit entry, TP, SL
-  entry rests
-    TP and SL wait for parent Fill
-  entry fills
-    TP and SL become trigger-active
-  TP or SL triggers
-    selected child fills
-    sibling cancels
-    position becomes flat
+  Venue assigns three OIDs
+  entry is active
+  TP and SL wait privately
+
+entry fills
+  same entry record becomes filled
+  TP and SL arm privately
+
+TP or SL fills
+  same child record becomes filled
+  sibling record becomes canceled
+  position becomes flat
 ```
 
-Parent cancellation cancels both waiting children.
+Parent cancellation cancels waiting children.
 
-Reduce-only children cannot open or reverse exposure.
+Reduce-only execution cannot increase or reverse exposure.
 
-One child Fill and one sibling cancellation must remain queryable.
+## Public Boundary
 
-Internal arming may update Simulator state.
+Every mutation and query returns fresh detached official JSON.
 
-It must not create exchange-history noise absent from the client-visible contract.
+Account decodes and validates that JSON.
 
-## Output Boundary
+Simulator exposes no `Result`, history slice, map, pointer, or diagnostic object through Account.
 
-Hyperliquid transport returns the `async_hyperliquid`-compatible response shape.
+Open Orders return active official rows.
 
-Simulator constructs the same admitted response shape.
+Order status returns one official envelope.
 
-Account validates and translates that shape once.
+Fill history returns official rows and may omit CLOID.
 
-Mutation responses retain:
+Account state returns one official clearinghouse snapshot.
 
-- outer status;
-- response type;
-- ordered item statuses;
-- CLOID;
-- OID;
-- filled size;
-- average Fill price;
-- item error.
+## Identity Resolution
 
-HTTP success does not imply Order success.
+Submit binds each request CLOID to the Venue-assigned OID.
 
-Every item in `statuses` must be inspected.
+Recon uses CLOID when an official row supplies it.
 
-One payload-wide pre-validation error may represent the complete batch.
+Fill rows may contain only OID and TID.
 
-Account expands that error into one ordered rejection per requested item while
-retaining the raw response.
+Account therefore resolves OID when CLOID is absent.
 
-Information responses retain the admitted Open Order, Order status, Fill, and account-state shapes.
+Conflicting CLOID and OID fail validation.
 
-Simulator-only diagnostics remain outside protocol responses.
+## Persistence
 
-Ledger stores normalized domain evidence and optional source evidence.
+Simulator owns schema version 3.
 
-## Current Evidence
+One row is keyed by official simulated account and symbol.
 
-Historical references contain resting long and short bracket parity evidence.
+The payload stores canonical Orders once, canonical Fills once, counters, and policy identity.
 
-Both return `resting`, `waitingForFill`, and `waitingForFill`.
+It stores no Ledger, Trade, local Order, role, or purpose identity.
 
-Nuubot3 parity captures also prove immediate-filled submission.
+Legacy Simulator payloads are not read or adapted.
 
-Those responses return `filled`, `waitingForTrigger`, and `waitingForTrigger`.
+The last BBO remains transient.
 
-Nuutrader6 implements parent activation, trigger matching, reduce-only protection, and OCO sibling cancellation.
+## Current Proof
 
-Go tests prove immediate entry, TP, SL, OCO, reduce-only, and final flattening behavior.
+- Official request inputs contain no Account domain identity.
+- Arbitrary shape-valid CLOID passes without domain decoding.
+- Venue assigns ordered OIDs.
+- Detached JSON mutation cannot alter Simulator truth.
+- Bracket Fill and sibling cancellation update canonical records.
+- Terminal Orders cannot create duplicate Fills.
+- Version 3 persistence round-trips each record once.
+- Failed durable mutation does not change memory truth.
 
-Fresh Hyperliquid testnet proof remains required for post-trigger history and sibling cancellation.
-
-## Reference Files
-
-```text
-D:\rust\nuutrader6\src\nuubot\hcbots\simulator.py
-D:\rust\nuutrader6\src\nuubot\hcbots\exchange.py
-D:\rust\nuubot3\wiki\simparity.md
-D:\rust\nuubot3\smoke\simparity.py
-D:\rust\nuutrader3-web\research\2026-05-07-simnet-fixture-parity-audit.md
-D:\rust\nuutrader3-web\research\fixtures\hype\phase-13-testnet-primitive-suite\repeatable-20260506T141429Z
-D:\rust\nuutrader3-web\research\fixtures\hype\phase-13-simnet-primitive-suite\20260507T-strict-parity-002
-```
-
-## Proof Ladder
-
-1. Lock Go protocol types to frozen response fixtures.
-2. Deterministic Simulator bracket tests. Complete.
-3. Compare Simulator and frozen testnet response structures.
-4. Compare domain reconciliation from both evidence sources.
-5. Run controlled Hyperliquid testnet bracket parity.
-6. Admit live mutation only after testnet parity passes.
-
-Testnet proof must cover long and short paths.
-
-It must cover resting entry, immediate Fill, TP Fill, SL Fill, sibling cancellation, and final flat state.
-
-Exact identifiers, timestamps, prices, fees, and balances may differ.
-
-Structure, status meaning, ordering, and lifecycle must match.
+External frozen-output and Hyperliquid testnet parity remain pending.
 
 ## Does Not Claim
 
-- Python implementation parity.
-- Exact raw values.
 - Mainnet mutation proof.
-- Public information endpoints not required by Account.
-- Queue position or order-book-depth simulation.
+- Queue-position simulation.
+- Order-book-depth partial fills.
+- Exact fees, balances, or identifiers from testnet.
+- Python implementation parity.

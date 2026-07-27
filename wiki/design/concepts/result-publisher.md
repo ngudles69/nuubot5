@@ -2,26 +2,33 @@
 
 Status: Implemented for complete per-Bot SQLite results.
 Covers: `internal/resultpublisher`
-Purpose: Persist one successful immutable backtest hierarchy atomically.
+Purpose: Publish one successful reconciled backtest hierarchy atomically.
 
-BtBot calls ResultPublisher only after replay verification and Controller
-shutdown succeed.
+BtBot calls ResultPublisher after replay verification and Controller shutdown.
 
 Publication receives:
 
-- exact Bot identity;
-- exact admitted BotConfig TOML and hash;
+- exact Bot identity and admitted configuration;
 - Controller capital, PnL, equity, and drawdown;
-- Signal and changed Risk decisions;
+- Signal and Risk decisions;
 - BotCycle and Executor results;
-- Grid Level calculations and terminal state;
-- Account, Ledger, Trade, Order, Fill, and Simulator evidence; and
-- ordered telemetry samples;
-- one calculated terminal RunReport; and
+- Grid Level state;
+- Account and reconciled Ledger evidence;
+- ordered telemetry;
+- one terminal RunReport; and
 - replay counts, range, duration, and completion.
 
-ResultPublisher creates `.partial`, writes all evidence, commits, and renames
-to `.db`.
+Account results contain no Simulator private result.
+
+ResultPublisher never reads Simulator memory, counters, indexes, or persistence.
+
+Simulator remains exchange truth during execution.
+
+Recon copies validated official evidence into Ledger.
+
+Ledger evidence is the terminal publishable trading record.
+
+ResultPublisher creates `.partial`, writes evidence, commits, and renames to `.db`.
 
 It writes every terminal Account result, including maximum persistence mode.
 

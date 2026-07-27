@@ -28,7 +28,7 @@ func TestFillEnrichesDuplicateEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create fill: %v", err)
 	}
-	var fee = decimal.RequireFromString("1.25")
+	var fee = decimal.Zero
 	input.Fee = &fee
 	input.Liquidity = "taker"
 	input.Raw = `{"tid":6}`
@@ -40,15 +40,15 @@ func TestFillEnrichesDuplicateEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("repeat fill evidence: %v", err)
 	}
-	var snapshot = actual.Snapshot()
-	if !snapshot.HasFee || !snapshot.Fee.Equal(fee) {
-		t.Fatalf("actual fee %s present=%t, expected %s", snapshot.Fee, snapshot.HasFee, fee)
+	var record = actual.State()
+	if !record.HasFee || !record.Fee.Equal(fee) {
+		t.Fatalf("actual fee %s present=%t, expected %s", record.Fee, record.HasFee, fee)
 	}
-	if snapshot.Liquidity != "taker" || snapshot.Raw != input.Raw {
+	if record.Liquidity != "taker" || record.Raw != input.Raw {
 		t.Fatalf(
 			"actual liquidity=%q raw=%q, expected liquidity=%q raw=%q",
-			snapshot.Liquidity,
-			snapshot.Raw,
+			record.Liquidity,
+			record.Raw,
 			"taker",
 			input.Raw,
 		)

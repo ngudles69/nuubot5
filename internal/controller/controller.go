@@ -43,17 +43,22 @@ type RiskDecision struct {
 
 // Result contains one immutable terminal Controller result.
 type Result struct {
-	Identity    bot.Identity
-	Cycles      []botcycle.Result
-	Signals     []SignalDecision
-	Risks       []RiskDecision
-	ExitReason  string
-	BotCapital  decimal.Decimal
-	NetPnL      decimal.Decimal
-	BotEquity   decimal.Decimal
-	PeakEquity  decimal.Decimal
-	Drawdown    decimal.Decimal
-	MaxDrawdown decimal.Decimal
+	Identity        bot.Identity
+	Cycles          []botcycle.Result
+	Signals         []SignalDecision
+	Risks           []RiskDecision
+	ExitReason      string
+	FirstMS         uint64
+	LastMS          uint64
+	TimeInCyclesMS  uint64
+	TimeOutCyclesMS uint64
+	Recon           account.ReconStats
+	BotCapital      decimal.Decimal
+	NetPnL          decimal.Decimal
+	BotEquity       decimal.Decimal
+	PeakEquity      decimal.Decimal
+	Drawdown        decimal.Decimal
+	MaxDrawdown     decimal.Decimal
 }
 
 // Telemetry contains one immutable current Controller observation.
@@ -75,25 +80,40 @@ type Telemetry struct {
 	MaxDrawdown         decimal.Decimal
 }
 
+type cycleControl interface {
+	Reconcile(uint64, bool) (botcycle.ReconResult, error)
+	OnRecon(uint64) error
+	Run(uint64) (bool, error)
+	Stop(string) (string, error)
+	IngestBBO(market.BBO) error
+	OnBBO(market.BBO)
+	Result() botcycle.Result
+	Telemetry() botcycle.Telemetry
+}
+
 // Controller owns synchronous Bot decisions and its direct children.
 type Controller struct {
-	log            *logging.Logger
-	definition     bot.Definition
-	cycle          *botcycle.Control
-	results        []botcycle.Result
-	latestBBOs     map[string]market.BBO
-	signalLog      []SignalDecision
-	riskLog        []RiskDecision
-	lastRisk       []risk.Decision
-	resourceEquity map[executor.Resource]decimal.Decimal
-	botCapital     decimal.Decimal
-	peakEquity     decimal.Decimal
-	maxDrawdown    decimal.Decimal
-	stats          stats
-	lastSignalMS   uint64
-	stopReason     string
-	started        bool
-	stopped        bool
+	log             *logging.Logger
+	definition      bot.Definition
+	cycle           cycleControl
+	results         []botcycle.Result
+	latestBBOs      map[string]market.BBO
+	signalLog       []SignalDecision
+	riskLog         []RiskDecision
+	lastRisk        []risk.Decision
+	resourceEquity  map[executor.Resource]decimal.Decimal
+	botCapital      decimal.Decimal
+	peakEquity      decimal.Decimal
+	maxDrawdown     decimal.Decimal
+	stats           stats
+	firstMS         uint64
+	lastMS          uint64
+	timeInCyclesMS  uint64
+	timeOutCyclesMS uint64
+	lastSignalMS    uint64
+	stopReason      string
+	started         bool
+	stopped         bool
 }
 
 // Section 1 - Program Flow
@@ -158,11 +178,27 @@ func (c *Controller) Run(nowMS uint64) (bool, error) {
 
 	var snapshots []account.Snapshot
 	if c.cycle != nil {
-		var err error
-		snapshots, err = c.cycle.Reconcile(nowMS, false)
+		var barrier, err = c.cycle.Reconcile(nowMS, false)
+		if barrier.MaxConsecutiveFailures >= 3 {
+			if err != nil {
+				return false, fmt.Errorf(
+					"reconcile BotCycle failed %d consecutive times: %w",
+					barrier.MaxConsecutiveFailures,
+					err,
+				)
+			}
+			return false, fmt.Errorf(
+				"reconcile BotCycle failed %d consecutive times",
+				barrier.MaxConsecutiveFailures,
+			)
+		}
 		if err != nil {
+			if barrier.Failed && barrier.MaxConsecutiveFailures > 0 {
+				return false, nil
+			}
 			return false, fmt.Errorf("reconcile BotCycle: %w", err)
 		}
+		snapshots = barrier.Snapshots
 	}
 
 	var blockStart bool
@@ -302,7 +338,8 @@ func (c *Controller) Stop(reason string) error {
 	c.log.Info(fmt.Sprintf(
 		"controller stopped ticks_accepted=%d runs=%d signal_packages_read=%d "+
 			"start_actions_skipped=%d cycles_started=%d cycles_rejected=%d "+
-			"cycles_closed=%d stop_loss_exits=%d stop_reason=%s",
+			"cycles_closed=%d time_in_cycles_ms=%d time_out_cycles_ms=%d "+
+			"stop_loss_exits=%d stop_reason=%s",
 		c.stats.ticks,
 		c.stats.runs,
 		c.stats.signalPackagesRead,
@@ -310,6 +347,8 @@ func (c *Controller) Stop(reason string) error {
 		c.stats.cyclesStarted,
 		c.stats.cyclesRejected,
 		c.stats.cyclesClosed,
+		c.timeInCyclesMS,
+		c.timeOutCyclesMS,
 		c.stats.stopLossExits,
 		c.stopReason,
 	))
@@ -326,6 +365,7 @@ func (c *Controller) IngestBBO(bbo market.BBO) error {
 	if bbo.Symbol == "" {
 		return fmt.Errorf("controller requires symbol-qualified BBO")
 	}
+	c.recordCycleTime(bbo.TimestampMS)
 	c.latestBBOs[bbo.Symbol] = bbo
 	if c.cycle != nil {
 		if err := c.cycle.IngestBBO(bbo); err != nil {
@@ -340,10 +380,14 @@ func (c *Controller) IngestBBO(bbo market.BBO) error {
 // Result returns one independently owned terminal Controller result.
 func (c *Controller) Result() Result {
 	var result = Result{
-		Identity:   c.definition.Identity,
-		Signals:    append([]SignalDecision(nil), c.signalLog...),
-		Risks:      append([]RiskDecision(nil), c.riskLog...),
-		ExitReason: c.stopReason,
+		Identity:        c.definition.Identity,
+		Signals:         append([]SignalDecision(nil), c.signalLog...),
+		Risks:           append([]RiskDecision(nil), c.riskLog...),
+		ExitReason:      c.stopReason,
+		FirstMS:         c.firstMS,
+		LastMS:          c.lastMS,
+		TimeInCyclesMS:  c.timeInCyclesMS,
+		TimeOutCyclesMS: c.timeOutCyclesMS,
 	}
 	var metrics = c.riskInput(0, nil)
 	result.BotCapital = metrics.BotCapital
@@ -353,7 +397,14 @@ func (c *Controller) Result() Result {
 	result.Drawdown = metrics.CurrentDrawdown
 	result.MaxDrawdown = metrics.MaximumDrawdown
 	for _, cycle := range c.results {
-		var copied = botcycle.Result{CycleNumber: cycle.CycleNumber}
+		var copied = botcycle.Result{
+			CycleNumber: cycle.CycleNumber,
+			StartMS:     cycle.StartMS,
+			EndMS:       cycle.EndMS,
+			DurationMS:  cycle.DurationMS,
+			Recon:       cycle.Recon,
+		}
+		addReconStats(&result.Recon, cycle.Recon)
 		for _, current := range cycle.Executors {
 			copied.Executors = append(copied.Executors, current.Clone())
 		}
@@ -411,6 +462,29 @@ func (c *Controller) Telemetry() Telemetry {
 		Drawdown:            drawdown,
 		MaxDrawdown:         maxDrawdown,
 	}
+}
+
+func (c *Controller) recordCycleTime(nowMS uint64) {
+	if c.firstMS == 0 {
+		c.firstMS = nowMS
+		c.lastMS = nowMS
+		return
+	}
+	var elapsed = nowMS - c.lastMS
+	if c.cycle == nil {
+		c.timeOutCyclesMS += elapsed
+	} else {
+		c.timeInCyclesMS += elapsed
+	}
+	c.lastMS = nowMS
+}
+
+func addReconStats(total *account.ReconStats, current account.ReconStats) {
+	total.Calls += current.Calls
+	total.SkippedClean += current.SkippedClean
+	total.Executed += current.Executed
+	total.Succeeded += current.Succeeded
+	total.Failed += current.Failed
 }
 
 func (c *Controller) openCycle(signal signaler.Package) error {

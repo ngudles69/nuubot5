@@ -1,10 +1,10 @@
 **Reconciliation**
 
-Status: Implementable reorganization and optimization of working Simulator/BtBot Recon.
-Covers: Account, Ledger, Simulator evidence, domain updates, persistence, Snapshot publication, outcomes, telemetry, parity, and performance.
-Purpose: Convert one Recon's Venue evidence into one validated Snapshot generation while preserving current behavior and finance.
+Status: Implemented canonical Recon. Further measured optimization remains pending.
+Covers: Account, Ledger, Simulator evidence, flat domain updates, persistence, Account Snapshot publication, outcomes, telemetry, parity, and performance.
+Purpose: Convert one Recon's Venue evidence into one validated Account Snapshot generation while preserving current behavior and finance.
 
-The current Simulator and BtBot behavior is canonical.
+The current Venue, Ledger, and BtBot results are canonical.
 Recon changes organization, indexing, selected work, and allocation behavior only.
 Recon adds no new execution policy, lifecycle, scheduler, or persistence mode.
 
@@ -19,8 +19,10 @@ Runner or BtBot owns invocation policy.
 
 **Source layout**
 
-`internal/account/recon.go` Section 1 is the lean program flow.
-It shows these exact comments and one clear call for each step:
+Recon-owning Go files use Section 1 for the complete lean program flow.
+Section 1 presents Init before Recon.
+Init shows memory allocation, persisted-state loading, and Ledger validation.
+Recon shows start conditions, skip conditions, these exact comments, and one clear call for each step:
 
 ```text
 // Step 1 - Prepare Attempt
@@ -37,16 +39,19 @@ It shows these exact comments and one clear call for each step:
 
 Section 2 contains the detailed domain implementation.
 Detailed blocks may use ordered comments such as `Step 1.1` and `Step 1.2`.
-Section 1 must not contain mechanical loops, mapping, or mutation details.
+Section 1 contains only flow decisions, step comments, clear calls, and the minimum flow-driving values needed for clarity.
+It must not contain mechanical loops, mapping, mutation, or incidental values.
 
 **Init**
 
+Each Account-owning Executor creates one Account and Ledger for one BotCycle.
+The next BotCycle creates new instances; it does not reuse the completed Ledger.
 Account.Init calls Ledger.Init.
 Init allocates empty dynamic maps and sets.
 There is no fixed preallocation, buffer-size requirement, reusable buffer requirement, or object pool.
 Persistence mode `none` opens no database.
 Persistence mode `max` loads persisted rows when present; otherwise it starts empty.
-After loading, Ledger rebuilds all locators, active sets, pending sets, and derived indexes.
+After loading, Ledger rebuilds all locators, active sets, pending sets, derived indexes, and its cached Summary once.
 Init validates every record, relationship, identity, index, set, and persisted finance value before use.
 Full Ledger validation belongs to Init and focused tests, not routine Recon.
 
@@ -118,8 +123,10 @@ A prior failure or missing trusted Snapshot cannot produce a skip.
 
 ## Step 2 Download Current Order Evidence
 **What**
-Download current open Orders from Simulator.
+Call Venue once for fresh detached bulk Open Orders JSON.
+Decode and validate it through `internal/hyperliquid`.
 For each selected active local Order absent from that response, download its exact current status.
+Treat each exact status download as exception handling and count every attempted request in Recon telemetry.
 Validate all returned identities before record mutation.
 **Why**
 Open Orders cover current working evidence.
@@ -127,11 +134,14 @@ Exact selected status checks resolve local active Orders no longer returned as o
 **Things to watch**
 Absence invents nothing.
 It does not prove cancellation, rejection, fill, completion, or deletion.
-Unexpected or conflicting Simulator evidence fails the attempt.
+Unexpected or conflicting Venue evidence fails the attempt.
+The exception count proves whether this gap occurs before any removal or optimization is considered.
+Resolve official evidence by CLOID when present, then OID.
+If both exist, they must identify the same Ledger Order.
 
 ## Step 3 Download Fill History
 **What**
-Download new Fills from the inclusive committed Fill cursor through the attempt boundary.
+Call Venue for fresh detached Fill-history JSON from the inclusive committed cursor through the attempt boundary.
 Recheck each pending missing fee during the next Recon using a bounded timestamp window around its known Fill time.
 Merge physical pull results and deduplicate them by Venue TID.
 Validate identity, Order ownership, quantity, price, timestamp, and fee presence.
@@ -139,6 +149,7 @@ Validate identity, Order ownership, quantity, price, timestamp, and fee presence
 The inclusive cursor prevents a boundary Fill from being skipped.
 The bounded repair window finds delayed fees after the normal cursor has advanced.
 Venue TID deduplication admits one execution fact once.
+Official Fill rows may omit CLOID, so OID resolves their owning Ledger Order.
 **Things to watch**
 A missing fee remains pending.
 A zero fee and a negative rebate are present fees.
@@ -146,7 +157,8 @@ No Fill is created without a Venue TID.
 
 ## Step 4 Download Current Account State
 **What**
-Download only the current Simulator AccountState through the existing Venue Account-state operation.
+Download one fresh detached official clearinghouse JSON response through Venue.
+Decode and validate it through `internal/hyperliquid`.
 Validate resource identity, observation time, position, prices, Account value, withdrawable value, margin values, and PnL inputs.
 Keep the validated response attempt-local until publication.
 **Why**
@@ -175,6 +187,7 @@ An unchanged duplicate performs no domain update.
 **What**
 Update touched Orders from exact Order evidence and their owned Fills.
 Recalculate status, filled quantity, remaining quantity, average fill price, and fees.
+Detect accepted semantic changes through the Order-owned transient mutation revision.
 Update active and pending membership and all Order locators with each record.
 **Why**
 Order values must agree with admitted Fill evidence and current Simulator status.
@@ -185,19 +198,26 @@ Absence from open Orders never supplies a status.
 
 ## Step 7 Update Trade Records
 **What**
-Update touched Trades only.
-Recalculate status, quantities, entry and exit prices, realized PnL, unrealized PnL, gross PnL, net PnL, fees, and timestamps.
-Update active Trade membership and cached Ledger totals from each old-to-new record delta.
+Structurally update touched Trades only.
+After Fill and Order updates, recalculate their exposure, status, realized PnL, fees, quantities, prices, and timestamps from owned evidence.
+Update every active Trade's current-mark finance from its stored exposure without rereading Orders or Fills.
+Store realized PnL, unrealized PnL, gross PnL, net PnL, fees, quantities, prices, status, and timestamps.
+When every execution and fee is complete, set unrealized PnL to zero, calculate final realized PnL and fees once, then mark the Trade closed.
+Closed Trades retain static stored totals and are never recalculated.
+Update active Trade membership after each changed Trade.
+Apply each changed Trade's exact old-to-new summary delta to the Ledger-owned cached Summary.
 **Why**
-Touched-only updates remove complete-history work while preserving exact Trade and Ledger finance.
-Cached deltas avoid repeated Ledger traversal.
+Touched-only in-memory Trade updates remove repeated historical recalculation while preserving exact finance.
 **Things to watch**
-Late fee enrichment must update its closed Trade's fees and dependent PnL once.
+A fee-incomplete Trade remains pending until a later Recon finalizes it once.
 Trade identity and established execution facts remain immutable.
 
 ## Step 8 Update Account Snapshot
 **What**
-After all touched Trades validate, calculate Account-level state:
+After all touched Trades validate, read the Ledger-owned cached Summary without traversing Trades.
+The cache contains exact stored Trade finance and evidence totals; it does not recalculate Trade PnL.
+Trades remain authoritative, and Init or persisted reload rebuilds the derived cache once.
+Calculate Account-level state:
 - Trade, Order, Fill, active, and pending counts.
 - Position and entry price.
 - Account value, balance, equity, withdrawable value, and margin values.
@@ -207,7 +227,7 @@ After all touched Trades validate, calculate Account-level state:
 Build one immutable Snapshot with the next generation.
 Risk, Controller, and BotCycle consume only that Snapshot.
 **Why**
-Account finance depends on final touched Trade values and the current AccountState.
+Account finance depends on final touched Trade values, their exact cached deltas, and the current AccountState.
 One immutable generation gives every consumer the same validated truth.
 **Things to watch**
 Account drawdown and Controller Bot drawdown are separate values with separate owners.
@@ -215,11 +235,12 @@ Preserve existing finance equations and decimal behavior exactly.
 
 ## Step 9 Persist and Publish
 **What**
-For `none`, perform no database work.
+For `none`, perform no Ledger, Trade, Order, Fill, or Simulator database work.
 For `max`, write only changed `account_ledger`, Trade, Order, and Fill rows through existing storage.
+Cached Summary is derived and not persisted; the schema remains unchanged.
 Persist nullable fee presence with the existing Fill representation.
-After persistence succeeds, apply validated touched updates to Ledger records, locators, sets, cached totals, cursor, and Account state.
-Publish the immutable Snapshot and generation last.
+Refresh Ledger locators and sets after direct domain updates.
+Publish the compact Account Snapshot and generation last.
 **Why**
 Dirty-row persistence removes full rewrites.
 Publishing last prevents decisions from observing partial truth.
@@ -227,6 +248,7 @@ Publishing last prevents decisions from observing partial truth.
 There is no full clone and no memory rollback.
 Any persistence or publication error fails Recon and blocks decisions.
 A failed Recon makes Sweep exit unsuccessful.
+Persistence failure may leave directly mutated records and cached totals equally untrusted.
 
 ## Step 10 Finalize Recon Outcome and Return
 **What**
@@ -235,43 +257,48 @@ On success:
 - store the new trusted Snapshot;
 - clear dirty state;
 - reset the failure count;
-- return `succeeded` with the Snapshot.
+- return `succeeded` with the Snapshot and zero consecutive failures.
 On valid skip:
 - retain the trusted Snapshot;
 - leave the failure count unchanged;
-- return `skipped` with that Snapshot.
+- return `skipped` with that Snapshot and the unchanged count.
 On failure:
 - retain dirty state;
 - increment the failure count exactly once;
 - store the error;
-- return `failed` without a decision Snapshot.
+- return `failed` without a decision Snapshot and with the consecutive count.
 **Why**
 One terminal path gives each invocation one exact outcome.
 Runner or BtBot owns response policy.
 Recon owns no repeated invocation.
 **Things to watch**
-Controller and BotCycle remain unchanged except that failed Recon blocks decisions.
+BotCycle reconciles every capable running Executor before completing one barrier.
+Any failure suppresses the complete Snapshot barrier and reports the maximum consecutive count.
+Controller skips Risk, Executor `OnRecon`, and BotCycle `Run` after failures one and two.
+Controller returns an error when any consecutive count reaches three.
 A failed attempt never falls back to stale truth for decisions.
+Persistence or execution failures outside Account Recon remain immediately fatal.
 
 **Exact implementation impact**
 
 - `internal/account/account.go`: trusted Snapshot, dirty state, failure count, and latest Recon telemetry.
-- `internal/account/recon.go`: exact ten-step flow, selected work, publication, and outcome.
-- `internal/ledger/ledger.go`: sole-owned records, stable locators, active and pending sets, and cached totals.
+- `internal/account/recon.go`: exact ten-step flow, selected work, publication, outcome, and explicit failure count.
+- `internal/botcycle/botcycle.go`: complete multi-Executor barrier, failure fact, and maximum consecutive count.
+- `internal/controller/controller.go`: first-two-pass skip and third-consecutive-failure Sweep error.
+- `internal/ledger/ledger.go`: sole-owned records, stable locators, and active and pending sets.
 - `internal/ledger/recon.go`: touched Fill, Order, and Trade updates with index maintenance.
 - `internal/ledger/store.go`: existing `none` behavior, `max` load, validation, and changed-row writes.
-- `internal/simulator/simulator.go`: current Order, Fill, and AccountState evidence plus deterministic delayed-fee proof.
+- `internal/simulator/simulator.go`: canonical private Venue truth and fresh official JSON responses.
+- `internal/hyperliquid/protocol.go`: strict mutation and information response decoding.
 - Focused tests beside these owners prove indexes, pending work, delayed fees, persistence, failures, parity, and performance.
-No Controller, BotCycle, execution-policy, or unrelated persistence redesign is required.
+No execution-policy, cadence, or unrelated persistence redesign is required.
 
 **Cutover**
 
-Recon2 remains the current control.
-First record exact current Recon and Recon2 results under identical Grid inputs.
-Then change canonical Recon only.
-Compare exact Trades, Orders, Fills, statuses, quantities, timestamps, finance, Account values, drawdown, and terminal result.
-Profile canonical Recon after parity passes.
-Recon2 deletion requires later approval.
+Canonical Recon is the only implementation.
+Recon2 source, configuration, and Bot 16 are retired.
+Change and profile canonical Recon only.
+Compare exact Trades, Orders, Fills, statuses, quantities, timestamps, finance, Account values, drawdown, and terminal result against the accepted Bot 15 baseline.
 
 **Proof**
 
@@ -282,4 +309,6 @@ Failure proof covers each download, validation, and persistence boundary with on
 Grid proof requires exact domain and finance parity against the recorded control.
 Performance proof reports Recon runtime, allocated bytes, allocation count, selected records, changed rows, and total Ledger size.
 Proof must show no routine full clone, full traversal, or repeated unchanged-object allocation.
+A test-only complete traversal oracle must equal cached Summary after mutations, Recon, failed validation, and maximum-persistence reload.
+Focused proof should show `Summary` and `ReconSummary` reads allocate nothing.
 All Go proof and profiling uses `-tags noasm`.

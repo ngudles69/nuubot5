@@ -22,7 +22,7 @@ validate_trade() {
     local stop_order_count telemetry_rows report_samples
     local result_cycles result_executors db_states result_config_match
     local equity_carry result_equity_match false_equity_samples
-    local declining_max_drawdown close_orders stop_orders
+    local declining_max_drawdown close_orders stop_orders domain_persisted expected_states
 
     integrity="$(sqlite3 "$result_db" 'PRAGMA integrity_check;')"
     foreign_keys="$(sqlite3 "$result_db" 'PRAGMA foreign_key_check;')"
@@ -38,7 +38,16 @@ validate_trade() {
         )"
     result_cycles="$(sqlite3 "$result_db" 'SELECT COUNT(*) FROM botcycle_result;')"
     result_executors="$(sqlite3 "$result_db" 'SELECT COUNT(*) FROM executor_result;')"
-    db_states="$(sqlite3 "$result_db" 'SELECT COUNT(*) FROM simulator_state;')"
+    domain_persisted="$(
+        sqlite3 "$result_db" \
+            "SELECT CASE WHEN instr(config_toml, 'persist_mode = \"max\"') > 0 THEN 1 ELSE 0 END FROM backtest_result;"
+    )"
+    db_states=0
+    expected_states=0
+    if [[ "$domain_persisted" == "1" ]]; then
+        db_states="$(sqlite3 "$result_db" 'SELECT COUNT(*) FROM simulator_state;')"
+        expected_states="$cycles"
+    fi
     false_equity_samples="$(
         sqlite3 "$result_db" "
             SELECT COUNT(*) FROM telemetry_sample
@@ -54,7 +63,12 @@ validate_trade() {
                 < CAST(earlier.max_drawdown AS REAL);
         "
     )"
-    close_orders="$(
+    close_orders=0
+    stop_orders="$stop_order_count"
+    equity_carry=1
+    result_equity_match=1
+    if [[ "$domain_persisted" == "1" ]]; then
+        close_orders="$(
         sqlite3 "$result_db" \
             "SELECT COUNT(*) FROM account_order WHERE order_role='close';"
     )"
@@ -93,6 +107,7 @@ validate_trade() {
             FROM backtest_result result;
         "
     )"
+    fi
 
     [[ "$integrity" == "ok" && -z "$foreign_keys" &&
        "$completed" == "1" && "$ticks" == "7948800" &&
@@ -102,7 +117,7 @@ validate_trade() {
        "$telemetry_rows" == "$((controller_runs + 1))" &&
        "$report_samples" == "$telemetry_rows" &&
        "$result_cycles" == "$cycles" && "$result_executors" == "$cycles" &&
-       "$db_states" == "$cycles" && "$result_config_match" == "1" &&
+       "$db_states" == "$expected_states" && "$result_config_match" == "1" &&
        "$equity_carry" == "1" && "$result_equity_match" == "1" &&
        "$false_equity_samples" == "0" && "$declining_max_drawdown" == "0" &&
        "$close_orders" == "0" && "$stop_orders" == "$stop_order_count" &&
@@ -123,7 +138,7 @@ validate_grid() {
     local result_cycles result_executors result_levels result_boundaries
     local result_initial_levels active_orders nonflat_accounts
     local false_equity_samples declining_max_drawdown close_orders stop_orders
-    local result_config_match
+    local result_config_match domain_persisted
 
     integrity="$(sqlite3 "$result_db" 'PRAGMA integrity_check;')"
     foreign_keys="$(sqlite3 "$result_db" 'PRAGMA foreign_key_check;')"
@@ -140,6 +155,10 @@ validate_grid() {
         )"
     result_cycles="$(sqlite3 "$result_db" 'SELECT COUNT(*) FROM botcycle_result;')"
     result_executors="$(sqlite3 "$result_db" 'SELECT COUNT(*) FROM executor_result;')"
+    domain_persisted="$(
+        sqlite3 "$result_db" \
+            "SELECT CASE WHEN instr(config_toml, 'persist_mode = \"max\"') > 0 THEN 1 ELSE 0 END FROM backtest_result;"
+    )"
     result_levels="$(sqlite3 "$result_db" 'SELECT COUNT(*) FROM grid_level_result;')"
     result_boundaries="$(
         sqlite3 "$result_db" \
@@ -149,18 +168,22 @@ validate_grid() {
         sqlite3 "$result_db" \
             'SELECT COUNT(*) FROM grid_level_result WHERE initial_submission_completed=1;'
     )"
-    active_orders="$(
-        sqlite3 "$result_db" "
-            SELECT COUNT(*) FROM account_order
-            WHERE status IN ('created','submitted','open','partially_filled');
-        "
-    )"
-    nonflat_accounts="$(
-        sqlite3 "$result_db" "
-            SELECT COUNT(*) FROM account_ledger
-            WHERE CAST(json_extract(account_state_json,'$.PositionSize') AS REAL)!=0;
-        "
-    )"
+    active_orders=0
+    nonflat_accounts=0
+    if [[ "$domain_persisted" == "1" ]]; then
+        active_orders="$(
+            sqlite3 "$result_db" "
+                SELECT COUNT(*) FROM account_order
+                WHERE status IN ('created','submitted','open','partially_filled');
+            "
+        )"
+        nonflat_accounts="$(
+            sqlite3 "$result_db" "
+                SELECT COUNT(*) FROM account_ledger
+                WHERE CAST(json_extract(account_state_json,'$.PositionSize') AS REAL)!=0;
+            "
+        )"
+    fi
     false_equity_samples="$(
         sqlite3 "$result_db" "
             SELECT COUNT(*) FROM telemetry_sample
@@ -176,14 +199,18 @@ validate_grid() {
                 < CAST(earlier.max_drawdown AS REAL);
         "
     )"
-    close_orders="$(
-        sqlite3 "$result_db" \
-            "SELECT COUNT(*) FROM account_order WHERE order_role='close';"
-    )"
-    stop_orders="$(
-        sqlite3 "$result_db" \
-            "SELECT COUNT(*) FROM account_order WHERE order_role='stop';"
-    )"
+    close_orders=0
+    stop_orders="$stop_order_count"
+    if [[ "$domain_persisted" == "1" ]]; then
+        close_orders="$(
+            sqlite3 "$result_db" \
+                "SELECT COUNT(*) FROM account_order WHERE order_role='close';"
+        )"
+        stop_orders="$(
+            sqlite3 "$result_db" \
+                "SELECT COUNT(*) FROM account_order WHERE order_role='stop';"
+        )"
+    fi
     result_config_match="$(
         sqlite3 "$result_db" "
             ATTACH DATABASE '$source_db_sql' AS source;

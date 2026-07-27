@@ -135,7 +135,7 @@ func (e *gridExecutor) OnInit(ctx Context) error {
 	if err != nil {
 		return e.stopError(fmt.Errorf("initialize grid executor: %w", err))
 	}
-	if len(existing.Ledger.Trades) != 0 {
+	if existing.Ledger.Trades != 0 {
 		return e.stopError(fmt.Errorf(
 			"initialize grid executor: persisted Trade recovery is pending Runner",
 		))
@@ -188,7 +188,7 @@ func (e *gridExecutor) OnStop(reason string) error {
 	}
 
 	// reconcile current Account truth
-	var snapshot, _, err = e.account.Reconcile(e.lastBBO.TimestampMS, true)
+	var snapshot, _, _, err = e.account.Reconcile(e.lastBBO.TimestampMS, true)
 	if err != nil {
 		return e.stopError(fmt.Errorf("stop grid executor: %w", err))
 	}
@@ -205,19 +205,14 @@ func (e *gridExecutor) OnStop(reason string) error {
 			return e.stopError(fmt.Errorf("stop grid executor: %w", err))
 		}
 		e.cancellations += uint64(len(cloids))
-		snapshot, _, err = e.account.Reconcile(e.lastBBO.TimestampMS, true)
+		snapshot, _, _, err = e.account.Reconcile(e.lastBBO.TimestampMS, true)
 		if err != nil {
 			return e.stopError(fmt.Errorf("stop grid executor: %w", err))
 		}
 	}
 
 	// close open Trades
-	var current account.Result
-	current, err = e.account.Result()
-	if err != nil {
-		return e.stopError(fmt.Errorf("stop grid executor: %w", err))
-	}
-	for _, owned := range current.Ledger.Trades {
+	for _, owned := range e.account.OpenTrades() {
 		if owned.OpenQuantity.IsZero() {
 			continue
 		}
@@ -252,7 +247,7 @@ func (e *gridExecutor) OnStop(reason string) error {
 	}
 
 	// reconcile final Venue truth
-	snapshot, _, err = e.account.Reconcile(e.lastBBO.TimestampMS, true)
+	snapshot, _, _, err = e.account.Reconcile(e.lastBBO.TimestampMS, true)
 	if err != nil {
 		return e.stopError(fmt.Errorf("stop grid executor: %w", err))
 	}
@@ -275,7 +270,7 @@ func (e *gridExecutor) OnStop(reason string) error {
 	if err != nil {
 		return e.stopError(fmt.Errorf("stop grid executor: %w", err))
 	}
-	e.roundTrips = countFilledOrders(result, order.TakeProfit)
+	e.roundTrips = e.account.CountOrders(order.TakeProfit, order.Filled)
 
 	// stop Account
 	err = e.account.Stop()
@@ -292,9 +287,9 @@ func (e *gridExecutor) OnStop(reason string) error {
 		"executor stopped cycle=%d executor=%d kind=grid trades=%d orders=%d fills=%d cancellations=%d closure_orders=%d retries=%d round_trips=%d stop_reason=%s",
 		e.cycleNumber,
 		e.executorNumber,
-		len(result.Ledger.Trades),
-		countOrders(result),
-		countFills(result),
+		result.Ledger.Trades,
+		result.Ledger.Orders,
+		result.Ledger.Fills,
 		e.cancellations,
 		e.closureOrders,
 		e.retries,
@@ -349,7 +344,7 @@ func (e *gridExecutor) OnBBO(bbo market.BBO) {
 func (e *gridExecutor) Reconcile(
 	nowMS uint64,
 	forced bool,
-) (account.Snapshot, bool, error) {
+) (account.Snapshot, bool, uint64, error) {
 	return e.account.Reconcile(nowMS, forced)
 }
 
@@ -493,7 +488,7 @@ func (e *gridExecutor) submitLevel(index int, initial bool, nowMS uint64) error 
 			}
 			break
 		}
-		var owned trade.Snapshot
+		var owned trade.ReconState
 		owned, lastErr = e.account.Trade(placed.TradeID)
 		if lastErr != nil {
 			break
@@ -728,7 +723,7 @@ func calculateGridLevels(
 	return levels, nil
 }
 
-func orderedCancellations(active []order.Snapshot) []order.Snapshot {
+func orderedCancellations(active []order.ActiveState) []order.ActiveState {
 	var priority = func(role string) int {
 		switch role {
 		case order.TakeProfit:
@@ -757,26 +752,6 @@ func gridGross(
 		return entry.Sub(exit).Mul(quantity)
 	}
 	return exit.Sub(entry).Mul(quantity)
-}
-
-func countOrders(result account.Result) int {
-	var count int
-	for _, ownedTrade := range result.Ledger.Trades {
-		count += len(ownedTrade.Orders)
-	}
-	return count
-}
-
-func countFilledOrders(result account.Result, role string) uint64 {
-	var count uint64
-	for _, ownedTrade := range result.Ledger.Trades {
-		for _, ownedOrder := range ownedTrade.Orders {
-			if ownedOrder.Role == role && ownedOrder.Status == order.Filled {
-				count++
-			}
-		}
-	}
-	return count
 }
 
 // Section 3 - Generic Helpers

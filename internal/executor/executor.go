@@ -179,7 +179,7 @@ type BBOIngestHandler interface {
 
 // AccountReconciler refreshes one Executor's Account truth.
 type AccountReconciler interface {
-	Reconcile(uint64, bool) (account.Snapshot, bool, error)
+	Reconcile(uint64, bool) (account.Snapshot, bool, uint64, error)
 }
 
 // ReconHandler consumes one accepted reconciliation barrier.

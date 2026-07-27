@@ -7,6 +7,7 @@ import (
 
 	"github.com/shopspring/decimal"
 
+	"nuubot/internal/fill"
 	"nuubot/internal/order"
 )
 
@@ -38,8 +39,8 @@ type Input struct {
 	Symbol      string
 }
 
-// Snapshot contains one immutable-by-contract Trade value.
-type Snapshot struct {
+// Record contains one flat Trade database value.
+type Record struct {
 	Input
 	Status            Status
 	Side              string
@@ -54,7 +55,23 @@ type Snapshot struct {
 	OpenedMS          uint64
 	ClosedMS          uint64
 	UpdatedMS         uint64
-	Orders            []order.Snapshot
+}
+
+// ReconState is the flat Trade value used by reconciliation decisions.
+type ReconState = Record
+
+// Summary contains stored finance and allocation-free reconciliation counts.
+type Summary struct {
+	Status        Status
+	RealizedPnL   decimal.Decimal
+	UnrealizedPnL decimal.Decimal
+	GrossPnL      decimal.Decimal
+	Fees          decimal.Decimal
+	NetPnL        decimal.Decimal
+	ActiveOrders  int
+	Fills         int
+	PendingOrders int
+	PendingFills  int
 }
 
 type metrics struct {
@@ -64,7 +81,10 @@ type metrics struct {
 	averageEntryPrice decimal.Decimal
 	hasAveragePrice   bool
 	realizedPnL       decimal.Decimal
+	unrealizedPnL     decimal.Decimal
+	grossPnL          decimal.Decimal
 	fees              decimal.Decimal
+	netPnL            decimal.Decimal
 	openedMS          uint64
 	closedMS          uint64
 	updatedMS         uint64
@@ -112,33 +132,33 @@ func (t *Trade) AddOrder(created *order.Order) error {
 	if created == nil {
 		return fmt.Errorf("add trade order: order is required")
 	}
-	var snapshot = created.Snapshot()
-	if snapshot.LedgerID != t.input.LedgerID ||
-		snapshot.TradeID != t.input.TradeID ||
-		snapshot.Account != t.input.Account ||
-		snapshot.CycleNumber != t.input.CycleNumber ||
-		snapshot.Symbol != t.input.Symbol {
+	var state = created.ReconState()
+	if state.LedgerID != t.input.LedgerID ||
+		state.TradeID != t.input.TradeID ||
+		state.Account != t.input.Account ||
+		state.CycleNumber != t.input.CycleNumber ||
+		state.Symbol != t.input.Symbol {
 		return fmt.Errorf("add trade order: ownership mismatch")
 	}
 	if t.finalized {
 		return fmt.Errorf("add trade order: terminal trade cannot change")
 	}
-	if _, exists := t.orders[snapshot.OrderID]; exists {
-		return fmt.Errorf("add trade order: duplicate order id %d", snapshot.OrderID)
+	if _, exists := t.orders[state.OrderID]; exists {
+		return fmt.Errorf("add trade order: duplicate order id %d", state.OrderID)
 	}
 	for _, existing := range t.orders {
-		if existing.Snapshot().CLOID == snapshot.CLOID {
-			return fmt.Errorf("add trade order: duplicate cloid %s", snapshot.CLOID)
+		if existing.ReconState().CLOID == state.CLOID {
+			return fmt.Errorf("add trade order: duplicate cloid %s", state.CLOID)
 		}
 	}
 
 	// attach Order
-	t.orders[snapshot.OrderID] = created
+	t.orders[state.OrderID] = created
 
 	// refresh Trade
 	var err = t.Refresh()
 	if err != nil {
-		delete(t.orders, snapshot.OrderID)
+		delete(t.orders, state.OrderID)
 		return err
 	}
 	return nil
@@ -147,41 +167,14 @@ func (t *Trade) AddOrder(created *order.Order) error {
 // Refresh derives Trade state and economics from owned Orders and Fills.
 func (t *Trade) Refresh() error {
 	// order Fill evidence
-	var executions = make([]execution, 0)
-	var activeOrders int
-	var activeCloseOrders int
-	for _, ownedOrder := range t.orders {
-		var snapshot = ownedOrder.Snapshot()
-		if snapshot.Active {
-			activeOrders++
-			if snapshot.ReduceOnly || isCloseRole(snapshot.Role) {
-				activeCloseOrders++
-			}
-		}
-		for _, ownedFill := range snapshot.Fills {
-			var fee = decimal.Zero
-			if ownedFill.HasFee {
-				fee = ownedFill.Fee
-			}
-			executions = append(executions, execution{
-				side:        ownedFill.Side,
-				quantity:    ownedFill.Quantity,
-				price:       ownedFill.Price,
-				fee:         fee,
-				timestampMS: ownedFill.TimestampMS,
-				venueTID:    ownedFill.VenueTID,
-			})
-		}
-	}
-	sort.Slice(executions, func(left int, right int) bool {
-		if executions[left].timestampMS == executions[right].timestampMS {
-			return executions[left].venueTID < executions[right].venueTID
-		}
-		return executions[left].timestampMS < executions[right].timestampMS
-	})
+	var executions, activeOrders, activeCloseOrders, pendingFills = t.executions()
 
 	// calculate exposure
-	var calculated, err = calculate(executions, activeOrders, activeCloseOrders)
+	var calculated, err = calculate(executions, activeOrders, activeCloseOrders, pendingFills)
+	if err != nil {
+		return fmt.Errorf("refresh trade: %w", err)
+	}
+	calculated, err = calculateFinance(calculated, nil)
 	if err != nil {
 		return fmt.Errorf("refresh trade: %w", err)
 	}
@@ -195,15 +188,91 @@ func (t *Trade) Refresh() error {
 	return nil
 }
 
-// Snapshot returns one immutable-by-contract marked Trade value.
-func (t *Trade) Snapshot(markPrice *decimal.Decimal) (Snapshot, error) {
-	return t.snapshot(markPrice, true)
+// RefreshRecon derives and stores canonical reconciliation finance at one mark.
+func (t *Trade) RefreshRecon(markPrice *decimal.Decimal) error {
+	var executions, activeOrders, activeCloseOrders, pendingFills = t.executions()
+	var calculated, err = calculate(executions, activeOrders, activeCloseOrders, pendingFills)
+	if err != nil {
+		return fmt.Errorf("refresh trade recon: %w", err)
+	}
+	calculated, err = calculateFinance(calculated, markPrice)
+	if err != nil {
+		return fmt.Errorf("refresh trade recon: %w", err)
+	}
+	if t.finalized && !sameMetrics(calculated, t.metrics) {
+		return fmt.Errorf("refresh trade recon: terminal trade values changed")
+	}
+	t.metrics = calculated
+	t.finalized = isTerminal(calculated.status)
+	return nil
 }
 
-// State returns one independently owned unmarked Trade state for persistence.
-func (t *Trade) State() Snapshot {
-	var snapshot, _ = t.snapshot(nil, false)
-	return snapshot
+// RefreshMark updates stored finance from existing exposure without reading Orders or Fills.
+func (t *Trade) RefreshMark(markPrice *decimal.Decimal) error {
+	if t.finalized || !t.metrics.openQuantity.IsPositive() {
+		return nil
+	}
+	var calculated, err = calculateFinance(t.metrics, markPrice)
+	if err != nil {
+		return fmt.Errorf("refresh trade recon: %w", err)
+	}
+	t.metrics = calculated
+	return nil
+}
+
+// MarkedRecord returns one flat Trade value at the supplied mark.
+func (t *Trade) MarkedRecord(markPrice *decimal.Decimal) (Record, error) {
+	return t.record(markPrice, true)
+}
+
+// Record returns one flat stored Trade value.
+func (t *Trade) Record() Record {
+	var current, _ = t.record(nil, false)
+	return current
+}
+
+// ReconState returns allocation-free Trade identity and mutable state.
+func (t *Trade) ReconState() ReconState {
+	return ReconState{
+		Input:             t.input,
+		Status:            t.metrics.status,
+		Side:              t.metrics.side,
+		OpenQuantity:      t.metrics.openQuantity,
+		AverageEntryPrice: t.metrics.averageEntryPrice,
+		HasAveragePrice:   t.metrics.hasAveragePrice,
+		RealizedPnL:       t.metrics.realizedPnL,
+		UnrealizedPnL:     t.metrics.unrealizedPnL,
+		GrossPnL:          t.metrics.grossPnL,
+		Fees:              t.metrics.fees,
+		NetPnL:            t.metrics.netPnL,
+		OpenedMS:          t.metrics.openedMS,
+		ClosedMS:          t.metrics.closedMS,
+		UpdatedMS:         t.metrics.updatedMS,
+	}
+}
+
+// Summary returns stored finance and allocation-free reconciliation counts.
+func (t *Trade) Summary() Summary {
+	var result = Summary{
+		Status:        t.metrics.status,
+		RealizedPnL:   t.metrics.realizedPnL,
+		UnrealizedPnL: t.metrics.unrealizedPnL,
+		GrossPnL:      t.metrics.grossPnL,
+		Fees:          t.metrics.fees,
+		NetPnL:        t.metrics.netPnL,
+	}
+	for _, owned := range t.orders {
+		var current = owned.Summary()
+		if current.Active {
+			result.ActiveOrders++
+		}
+		result.Fills += current.Fills
+		result.PendingFills += current.PendingFills
+		if current.ReconciliationPending {
+			result.PendingOrders++
+		}
+	}
+	return result
 }
 
 // Clone returns one independently owned Trade.
@@ -222,68 +291,98 @@ func (t *Trade) Order(orderID uint64) (*order.Order, bool) {
 	return owned, ok
 }
 
-// Orders returns independently owned Order snapshots.
-func (t *Trade) Orders() []order.Snapshot {
-	var snapshots = make([]order.Snapshot, 0, len(t.orders))
+// EachOrder visits every owned Order without allocating a collection.
+func (t *Trade) EachOrder(visit func(*order.Order) error) error {
 	for _, owned := range t.orders {
-		snapshots = append(snapshots, owned.Snapshot())
+		var err = visit(owned)
+		if err != nil {
+			return err
+		}
 	}
-	return snapshots
+	return nil
 }
 
 // Section 2 - Domain Helpers
 
-func (t *Trade) snapshot(
+func (t *Trade) record(
 	markPrice *decimal.Decimal,
 	requireMark bool,
-) (Snapshot, error) {
-	// mark open exposure
-	var unrealized = decimal.Zero
-	if t.metrics.openQuantity.IsPositive() {
-		if requireMark && (markPrice == nil || !markPrice.IsPositive()) {
-			return Snapshot{}, fmt.Errorf("snapshot trade: positive mark price is required")
+) (Record, error) {
+	var finance = t.metrics
+	if requireMark {
+		if finance.openQuantity.IsPositive() && (markPrice == nil || !markPrice.IsPositive()) {
+			return Record{}, fmt.Errorf("read trade record: positive mark price is required")
 		}
-		if markPrice != nil && t.metrics.side == Long {
-			unrealized = markPrice.Sub(t.metrics.averageEntryPrice).
-				Mul(t.metrics.openQuantity)
-		} else if markPrice != nil {
-			unrealized = t.metrics.averageEntryPrice.Sub(*markPrice).
-				Mul(t.metrics.openQuantity)
+		var err error
+		finance, err = calculateFinance(finance, markPrice)
+		if err != nil {
+			return Record{}, fmt.Errorf("read trade record: %w", err)
 		}
 	}
-	var gross = t.metrics.realizedPnL.Add(unrealized)
-
-	// return immutable Trade values
-	var orders = make([]order.Snapshot, 0, len(t.orders))
-	for _, ownedOrder := range t.orders {
-		orders = append(orders, ownedOrder.Snapshot())
-	}
-	sort.Slice(orders, func(left int, right int) bool {
-		return orders[left].OrderID < orders[right].OrderID
-	})
-	return Snapshot{
+	return Record{
 		Input:             t.input,
 		Status:            t.metrics.status,
 		Side:              t.metrics.side,
 		OpenQuantity:      t.metrics.openQuantity,
 		AverageEntryPrice: t.metrics.averageEntryPrice,
 		HasAveragePrice:   t.metrics.hasAveragePrice,
-		RealizedPnL:       t.metrics.realizedPnL,
-		UnrealizedPnL:     unrealized,
-		GrossPnL:          gross,
-		Fees:              t.metrics.fees,
-		NetPnL:            gross.Sub(t.metrics.fees),
+		RealizedPnL:       finance.realizedPnL,
+		UnrealizedPnL:     finance.unrealizedPnL,
+		GrossPnL:          finance.grossPnL,
+		Fees:              finance.fees,
+		NetPnL:            finance.netPnL,
 		OpenedMS:          t.metrics.openedMS,
 		ClosedMS:          t.metrics.closedMS,
 		UpdatedMS:         t.metrics.updatedMS,
-		Orders:            orders,
 	}, nil
+}
+
+func (t *Trade) executions() ([]execution, int, int, int) {
+	var executions = make([]execution, 0)
+	var activeOrders int
+	var activeCloseOrders int
+	var pendingFills int
+	for _, ownedOrder := range t.orders {
+		var state = ownedOrder.ReconState()
+		if state.Active {
+			activeOrders++
+			if state.ReduceOnly || isCloseRole(state.Role) {
+				activeCloseOrders++
+			}
+		}
+		ownedOrder.EachFill(func(ownedFill *fill.Fill) error {
+			var current = ownedFill.State()
+			var fee = decimal.Zero
+			if current.HasFee {
+				fee = current.Fee
+			} else {
+				pendingFills++
+			}
+			executions = append(executions, execution{
+				side:        current.Side,
+				quantity:    current.Quantity,
+				price:       current.Price,
+				fee:         fee,
+				timestampMS: current.TimestampMS,
+				venueTID:    current.VenueTID,
+			})
+			return nil
+		})
+	}
+	sort.Slice(executions, func(left int, right int) bool {
+		if executions[left].timestampMS == executions[right].timestampMS {
+			return executions[left].venueTID < executions[right].venueTID
+		}
+		return executions[left].timestampMS < executions[right].timestampMS
+	})
+	return executions, activeOrders, activeCloseOrders, pendingFills
 }
 
 func calculate(
 	executions []execution,
 	activeOrders int,
 	activeCloseOrders int,
+	pendingFills int,
 ) (metrics, error) {
 	var result = metrics{status: Pending, side: Flat}
 	var signed = decimal.Zero
@@ -344,7 +443,7 @@ func calculate(
 		result.status = Pending
 	case len(executions) == 0:
 		result.status = Canceled
-	case result.openQuantity.IsZero() && activeOrders > 0:
+	case result.openQuantity.IsZero() && (activeOrders > 0 || pendingFills > 0):
 		result.status = Closing
 	case result.openQuantity.IsZero():
 		result.status = Closed
@@ -354,6 +453,25 @@ func calculate(
 		result.status = Open
 	}
 	return result, nil
+}
+
+func calculateFinance(current metrics, markPrice *decimal.Decimal) (metrics, error) {
+	current.unrealizedPnL = decimal.Zero
+	if current.openQuantity.IsPositive() && markPrice != nil {
+		if !markPrice.IsPositive() {
+			return metrics{}, fmt.Errorf("positive mark price is required")
+		}
+		if current.side == Long {
+			current.unrealizedPnL = markPrice.Sub(current.averageEntryPrice).
+				Mul(current.openQuantity)
+		} else {
+			current.unrealizedPnL = current.averageEntryPrice.Sub(*markPrice).
+				Mul(current.openQuantity)
+		}
+	}
+	current.grossPnL = current.realizedPnL.Add(current.unrealizedPnL)
+	current.netPnL = current.grossPnL.Sub(current.fees)
+	return current, nil
 }
 
 func isCloseRole(role string) bool {
@@ -377,7 +495,10 @@ func sameMetrics(left metrics, right metrics) bool {
 		left.averageEntryPrice.Equal(right.averageEntryPrice) &&
 		left.hasAveragePrice == right.hasAveragePrice &&
 		left.realizedPnL.Equal(right.realizedPnL) &&
+		left.unrealizedPnL.Equal(right.unrealizedPnL) &&
+		left.grossPnL.Equal(right.grossPnL) &&
 		left.fees.Equal(right.fees) &&
+		left.netPnL.Equal(right.netPnL) &&
 		left.openedMS == right.openedMS &&
 		left.closedMS == right.closedMS &&
 		left.updatedMS == right.updatedMS

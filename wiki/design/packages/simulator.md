@@ -1,245 +1,219 @@
 # Simulator Package
 
-Status: Implemented for the first Simulator trading tranche. External parity remains pending.
+Status: Canonical exchange state and official JSON boundary implemented. External parity remains pending.
 Covers: `internal/simulator/*.go`
-Purpose: Provide Hyperliquid-shaped simulated Venue truth for Account reconciliation.
-
-## Canonical Sources
-
-- `D:/rust/nuubot3/nuubot/exchange/simulator.py`
-- `D:/rust/nuubot3/wiki/account/simulator.md`
-- `D:/rust/nuutrader6/src/nuubot/hcbots/simulator.py`
-- Installed `async_hyperliquid` 0.4.8 output shapes
-- [Simulator Parity](../concepts/simulator-parity.md)
+Purpose: Simulate one Hyperliquid Venue without sharing Account domain state.
 
 ## Ownership
 
-Account owns one concrete Simulator.
+Account owns Simulator lifetime.
 
-Simulator owns simulated Orders, Fills, positions, counters, and transient BBO state.
+Simulator owns:
 
-Simulator owns no Ledger, Trade, Order, or Fill domain object.
+- accepted official Orders;
+- Venue-assigned OIDs and TIDs;
+- canonical Fills;
+- private batch, waiting, and arming state;
+- active Order indexes;
+- position and finance state;
+- matching policy;
+- transient BBO state; and
+- schema version 3 persistence.
 
-## Lifecycle
+Simulator owns no Ledger, Trade, domain Order, domain Fill, role, or purpose.
 
-Simulator is one concrete implementation. No one-product Venue interface exists.
+## Inputs
 
-`Init` validates identity, policy, persistence mode, and optional persisted state.
+`Config` contains only simulated Venue identity and policy:
 
-`Stop` releases owned resources.
+```text
+account
+asset
+symbol
+equity
+fee percent
+slippage percent
+persist mode
+store path
+```
 
-Constructors perform no network, storage, matching, or background work.
+Place receives `hyperliquid.PlaceOrderAction`.
+
+Cancel receives `hyperliquid.CancelByCLOIDAction`.
+
+BBO ingestion receives only market data.
+
+CLOID is mandatory, shape-validated, stored unchanged, and never domain-decoded.
+
+No caller supplies OID.
+
+## Canonical State
+
+Each accepted Order creates one private `simOrder`.
+
+OID and CLOID indexes point to that record.
+
+The active index points to the same record while it can match.
+
+Arming, Fill, and cancellation mutate that record.
+
+Terminal mutation removes it from the active index.
+
+Terminal Orders never match again.
+
+Each execution appends one private `simFill`.
+
+Simulator never creates detached private Order history copies.
 
 ## Program Flow
 
 ```text
-Init
-  bind Simulator inputs
-  validate Simulator identity
-  validate Simulator policy
-  validate persistence mode
-  initialize Simulator
-  open Simulator state when configured
-  load Simulator state when configured
-  admit Simulator lifecycle
-
 PlaceOrders
-  validate Venue requests
-  stage recoverable Simulator mutation
-  allocate staged Venue identities
-  execute staged marketable Orders
-  persist staged state when configured
-  commit staged state
-  return admitted SDK-shaped submit response
+  validate official action and CLOIDs
+  stage durable mutation
+  allocate each OID once
+  infer private batch relationships
+  match marketable Orders
+  persist when required
+  commit canonical truth
+  build fresh ordered official JSON
 
 CancelOrders
-  stage recoverable Simulator mutation
-  cancel staged simulated Orders
-  persist staged state when configured
-  commit staged state
-  return admitted SDK-shaped cancel response
+  validate official action
+  stage canonical mutations
+  cancel selected Orders and private children
+  persist when required
+  commit canonical truth
+  build fresh official JSON
 
 IngestBBO
-  validate BBO identity
-  warm transient market state
-  stage recoverable Simulator mutation
-  match staged eligible Orders
-  persist staged state when configured
-  commit staged state
-  report changed truth
+  validate market input
+  warm or stage matching
+  match active Orders
+  create each Fill once
+  persist changed truth
+  commit canonical truth
 
-Result
-  copy identity policy and counters
-  copy Orders and Fill history
-  return immutable Simulator result
-
-Stop
-  stop Simulator
+Queries
+  read canonical truth
+  build fresh official JSON
+  return detached bytes
 ```
 
-Source action comments follow this flow.
+## Private Bracket State
 
-## Parity Layers
+`normalTpsl` groups one submitted batch privately.
 
-Nuutrader6 supplies matching behavior.
+Limit entry Orders start active.
 
-`async_hyperliquid` supplies the client-visible response contract.
+Trigger children wait privately when their entry is present.
 
-Simulator returns the same admitted shapes as the Hyperliquid adapter.
+Entry Fill arms its trigger children.
 
-| Operation | Shape |
-|---|---|
-| Submit batch | `status`, `response.type`, ordered `statuses` |
-| Cancel batch | `status`, `response.type`, ordered `statuses` |
-| Open Orders | Hyperliquid frontend Order rows |
-| Order status | Hyperliquid Order status envelope |
-| User Fills | Hyperliquid Fill rows |
-| Account state | Hyperliquid clearinghouse state |
+TP or SL Fill cancels its sibling.
 
-Internal response meanings and ordered statuses follow the admitted reference.
+Public submit statuses remain official `resting`, `filled`, or `error`.
 
-Recorded external JSON parity remains pending.
+Private waiting and arming never become custom public statuses.
 
-The official API controls exchange semantics.
+## Matching
 
-Account consumes the same public contract from both Venue implementations.
-
-Simulator diagnostics remain outside public responses.
-
-## Bracket States
-
-| Event | Entry | TP | SL |
-|---|---|---|---|
-| Resting submission | `resting` | `waitingForFill` | `waitingForFill` |
-| Immediate entry Fill | `filled` | `waitingForTrigger` | `waitingForTrigger` |
-| Later entry Fill | `filled` | `waitingForTrigger` | `waitingForTrigger` |
-| TP Fill | `filled` | `filled` | `canceled` |
-| SL Fill | `filled` | `canceled` | `filled` |
-
-Public Order queries may expose waiting children as `open`.
-
-Internal activation must not add unsupported public history rows.
-
-Parent cancellation cancels both waiting children.
-
-## Matching Rules
-
-- The first BBO only warms transient market state.
-- Newly submitted marketable GTC and IOC Orders may execute against the current admitted BBO.
-- Nonmarketable GTC Orders rest until a later crossing BBO.
-- Later BBOs fill crossed resting Orders.
-- Live matching remains exchange-owned.
-- Regular buy limits cross when ask is at or below requested price.
-- Regular sell limits cross when bid is at or above requested price.
-- TP and SL use trigger or requested price as Fill basis.
+- The first BBO warms market state.
+- Marketable GTC and IOC Orders may fill during submission.
+- Resting Orders match later crossing BBOs.
+- Limit, TP, and SL crossings preserve existing exact-decimal behavior.
 - Adverse slippage applies to the Fill basis.
-- The first slice has no partial depth fills.
-- One BBO fills at most one leg per Trade.
-- Different Grid Trades may each fill one eligible leg on the same BBO.
-- Entry execution arms TP and SL children.
-- TP or SL execution cancels its sibling.
-- Reduce-only execution cannot increase or reverse exposure.
-- Invalid reduce-only Orders cancel without a Fill.
+- Reduce-only execution cannot open or reverse exposure.
+- Unsupported reduce-only execution cancels without a Fill.
+- One submitted private batch fills at most one leg per BBO.
 
-## Fill Evidence
+Each canonical Order owns one transient exact comparison key.
 
-Simulator Fill rows include:
+Simulator builds one matching key per admitted BBO.
 
-```text
-coin
-px
-sz
-side
-time
-startPosition
-dir
-closedPnl
-hash
-oid
-crossed
-fee
-tid
-cloid
-feeToken
-twapId
-```
+Matching-key comparison performs no allocation and changes no official value.
 
-`closedPnl` is gross realized price PnL before fees.
+## Official Responses
 
-Fees remain a separate field.
+Simulator returns fresh detached JSON for:
 
-Ledger calculates its own domain PnL.
+- submit acknowledgement;
+- cancel acknowledgement;
+- bulk open Orders;
+- exact Order status;
+- bounded Fill history; and
+- clearinghouse state.
 
-## Account State
+Submit returns each Venue-assigned OID in request order.
 
-Simulator reports Hyperliquid-shaped margin summaries and positions.
+Open rows use remaining positive size.
 
-Position size is signed.
+Terminal exact status retains submitted size and terminal status.
 
-Position value uses the latest admitted BBO midpoint.
+Fill rows use OID and TID. They need not expose CLOID.
 
-Account value includes realized PnL, unrealized PnL, and fees.
+Clearinghouse time uses the latest canonical Venue event timestamp.
 
-A recovered open position requires one fresh BBO before marked state.
+Returned bytes never alias canonical state.
+
+## Position
+
+Simulator updates signed size, entry price, realized PnL, and fees once per accepted Fill.
+
+Reduce-only sizing reads this maintained state.
+
+Clearinghouse output uses the latest admitted BBO for marked values.
+
+A recovered open position requires one fresh BBO.
 
 ## Persistence
 
-Simulator state is one versioned JSON payload keyed by Ledger identity.
+Simulator owns `simulator_venue_state`.
 
-The payload contains identity, policy, counters, Orders, Order history, and Fill history.
+Its primary key is official simulated account plus symbol.
 
-The last BBO is transient and never restored.
+Schema version 3 stores:
 
-Identity, version, and policy mismatch fail without overwriting state.
+- official identity and policy;
+- Venue counters;
+- latest canonical Venue timestamp;
+- each canonical Order once; and
+- each canonical Fill once.
 
-See [Trading Schema](../concepts/trading-schema.md).
+No Ledger foreign key or local domain identity enters this payload.
 
-Account passes the configured `persist_mode`.
+Legacy Simulator payloads are not loaded or adapted.
 
-`none` keeps state in memory until one successful final export.
+`none` keeps state in memory.
 
-`max` persists every Simulator state change.
+`max` persists before changed memory becomes visible.
 
-Account passes store operations only for `max`.
+Persistence failure leaves memory and durable truth unchanged.
 
-Simulator never detects Runner, Sweep, paper, or live mode.
+The last BBO remains transient.
 
-For `max`, durable SQLite success precedes publication of changed in-memory state.
+Reload reconstructs indexes and maintained position from canonical records.
 
-Persistence failure leaves both memory and recoverable state at the prior version.
+## No Result Escape
 
-After loading persisted state, Account requires a fresh BBO before a marked snapshot.
+Simulator exposes no terminal `Result` through Account.
 
-## Terminal Result
+ResultPublisher receives reconciled Ledger evidence only.
 
-`Result` returns one immutable `simulator.Result`.
-
-It contains identity, policy, counters, Orders, Order history, and Fill history.
-
-Every slice and map is newly owned. No value aliases mutable Simulator state.
-
-## Does Not
-
-- Mutate Ledger.
-- Call Executor policy.
-- Reconcile Account state.
-- Import the Python client.
-- Contact Hyperliquid.
-- Hide corrupt state with defaults.
-- Use BBO price as every Fill price.
+Simulator private counters, records, and persistence never cross that boundary.
 
 ## Required Proof
 
-- Submit, cancel, Order, Fill, and account-state fixtures match admitted reference shapes.
-- First BBO warms without matching.
-- Nonmarketable GTC Orders wait for a later crossing BBO.
-- Marketable GTC Orders fill during submission.
-- Market-like IOC submission may fill immediately.
-- TP and SL activation and OCO behavior are correct.
-- Resting and immediate-filled batch statuses retain request order.
-- Public history contains no Simulator-only activation event.
-- Controlled testnet proof confirms TP, SL, and sibling-cancellation behavior.
-- Reduce-only execution never reverses exposure.
-- Duplicate BBO without new Order state performs no durable mutation.
-- Persisted state round-trips exactly.
-- Corrupt state fails without replacement.
+- Official action validation.
+- Mandatory opaque CLOID.
+- Ordered Venue OID assignment.
+- Detached response bytes.
+- Canonical bracket mutation.
+- One Fill per execution.
+- Terminal no-rematch.
+- Reduce-only protection.
+- Position replay equality.
+- Version 3 round-trip.
+- Durable failure atomicity.
+- Frozen official response fixtures.
+- Controlled testnet parity.

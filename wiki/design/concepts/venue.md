@@ -1,163 +1,128 @@
 # Venue
 
-Status: Approved — unimplemented. Refined by trading-state assessment.
-Covers: No implemented source.
-Purpose: Define the common Account-facing batch, cancellation, and query contract for live and simulated execution truth.
+Status: Implemented for Simulator-backed Accounts.
+Covers: `internal/account`, `internal/hyperliquid`, and `internal/simulator`
+Purpose: Separate Account domain state from official exchange operations.
 
-## Scope
+## Ownership
 
-Venue is the Account-owned behavioral boundary.
+Account owns one Venue lifecycle.
 
-Hyperliquid and Simulator implement Venue.
+Account and Venue remain separate entities.
 
-The consumer package MUST own the smallest interface Account requires.
-
-## Required Contract
-
-Venue MUST support:
-
-- initialize and close;
-- ingest BBO for Simulator-only matching;
-- place one batch of validated Orders;
-- cancel one batch by supported venue identity;
-- query open Orders;
-- query bounded Fills;
-- query exact Order status;
-- query transient account state.
-
-The first Go contract is Account-owned and minimal:
+Account owns the smallest interface it consumes:
 
 ```go
-type Venue interface {
-    Init(context.Context) error
-    PlaceOrders(context.Context, []hyperliquid.OrderRequest) (hyperliquid.SubmitResponse, error)
-    CancelOrders(context.Context, []hyperliquid.CancelRequest) (hyperliquid.CancelResponse, error)
+type venue interface {
+    PlaceOrders(hyperliquid.PlaceOrderAction, uint64) ([]byte, error)
+    CancelOrders(hyperliquid.CancelByCLOIDAction, uint64) ([]byte, error)
     IngestBBO(market.BBO) (bool, error)
-    OpenOrders(context.Context) ([]hyperliquid.Order, error)
-    Fills(context.Context, uint64, uint64) ([]hyperliquid.Fill, error)
-    OrderStatus(context.Context, string) (hyperliquid.OrderStatus, error)
-    AccountState(context.Context) (hyperliquid.AccountState, error)
+    OpenOrders(string) ([]byte, error)
+    Fills(string, uint64, uint64) ([]byte, error)
+    OrderStatus(string, string) ([]byte, error)
+    AccountState(string) ([]byte, error)
     Stop() error
 }
 ```
 
-Method names may adjust during coding to preserve exact project style.
+Simulator is the implemented Venue.
 
-The operation set may not expand without a current Account caller.
+Live Hyperliquid remains pending.
 
-## Protocol Types
+## Boundary
 
-`internal/hyperliquid` owns admitted Hyperliquid request and response types.
+Account sends only official operation values.
 
-Simulator constructs those protocol values without importing transport or signing.
+Venue returns fresh detached official JSON.
 
-Account translates protocol values into domain evidence.
+Account validates JSON through `internal/hyperliquid`.
 
-No `internal/venue` package is required for this first Hyperliquid-only slice.
+Account then translates validated values into Ledger evidence.
 
-A second approved Venue may justify normalized shared protocol values later.
+These values never cross into Venue:
+
+- Ledger, Trade, Order, or Fill objects;
+- Ledger, Trade, or Account-owned Order IDs;
+- Order roles or strategy purpose;
+- Account scratch, callbacks, caches, or storage; and
+- caller-owned response buffers.
+
+Venue responses never expose private Simulator objects, indexes, persistence, or diagnostics.
+
+## Identity
+
+Every Nuubot Order request carries one mandatory official CLOID.
+
+Venue validates CLOID shape and stores the value unchanged.
+
+Venue treats CLOID as opaque.
+
+Venue never decodes Nuubot identity from CLOID.
+
+Venue assigns OID once after accepting the request.
+
+The ordered submit response binds that OID to its request.
+
+Account resolves acknowledgement by response order and CLOID.
+
+Recon resolves evidence CLOID-first when CLOID exists.
+
+Recon falls back to OID when official evidence omits CLOID.
+
+If both exist, Account and Ledger require one consistent Order.
+
+## Mutations
+
+Place uses `hyperliquid.PlaceOrderAction`.
+
+Cancel uses `hyperliquid.CancelByCLOIDAction`.
+
+Every batch item receives one ordered official status.
+
+Malformed responses fail before acknowledgement advances.
+
+Mutation responses acknowledge Venue admission.
+
+Ledger lifecycle still advances through Recon.
+
+## Queries
+
+Open Orders and Fill history are bulk official calls.
+
+Exact Order status is exception handling for selected active Orders missing from the bulk response.
+
+Account state is one official clearinghouse snapshot.
+
+Each call constructs new JSON from current Venue truth.
+
+Returned bytes never alias Venue memory.
 
 ## IngestBBO
 
-[`IngestBBO`](ingestbbo.md) is one common Account-facing Venue operation.
+`IngestBBO` is Simulator-only market input.
 
-```text
-Venue.IngestBBO
-  Live
-    return without changing state
-  Simulator
-    match eligible existing Orders
-    record simulated Venue outcomes
-    report whether Venue truth changed
-```
+It does not pass Account or Ledger state.
 
-Venue ingestion does not mutate Ledger or run Executor policy. Reconciliation
-later copies validated Venue truth into Ledger evidence.
+Simulator matches eligible private Orders and records private execution truth.
 
-## Responsibilities
-
-- Translate Account requests into venue-specific operations.
-- Return venue-shaped responses and source timestamps.
-- Preserve batch item identity and order.
-- Surface partial batch success and rejection explicitly.
-- Keep authoritative venue or simulated execution state.
-
-## Does Not
-
-- Mutate Ledger, Trade, Order, or Fill.
-- Own Account.
-- Reconcile domain state.
-- Decide Risk or Executor behavior.
-- Hide adapter failure behind fallback.
-- Make live and Simulator implementations import each other.
-
-## Ownership
-
-```text
-Account
-`-- Venue
-    |-- Hyperliquid
-    `-- Simulator
-```
-
-One Account owns exactly one selected Venue implementation.
-
-Venue lifetime matches Account lifetime.
-
-## Logical Relationships
-
-| Relation | Cardinality | Identity | Lifetime | Writer |
-|---|---:|---|---|---|
-| Account owns Venue | 1 to 1 | Network and account identity | Account | Account selects |
-| Hyperliquid implements Venue | One selected implementation | Mainnet or testnet account | Account | Hyperliquid writes venue truth |
-| Simulator implements Venue | One selected implementation | Simulated account identity | Account | Simulator writes simulated truth |
-
-This table defines logical design. It does not define a physical schema.
-
-## Batch Contract
-
-Every submitted request MUST receive one explicit success or rejection result.
-
-Malformed or incomplete batch responses MUST fail before domain state advances.
-
-Returned CLOID MUST match its request when present.
-
-Successful venue Order identities MUST be unique inside the response.
+Account learns those changes only through official Venue responses.
 
 ## Invariants
 
-- Venue responses remain untrusted until Account validates them.
-- Venue timestamps MUST retain source meaning.
-- No implementation may silently fall back to another Venue.
-- Venue MUST NOT expose mutable internal state.
-- Venue implementation selection MUST occur during Account initialization.
+- Account owns Venue lifetime, not Venue truth.
+- Venue owns accepted exchange state.
+- CLOID is mandatory and opaque.
+- OID is Venue-assigned.
+- Official JSON remains untrusted until Account validates it.
+- No implementation silently falls back to another Venue.
+- No private state crosses either direction.
+- Recon2 is retired.
 
-## Reference Evidence
+## Does Not
 
-Canonical:
-
-```text
-D:\rust\nuubot4\wiki\recon.md
-D:\rust\nuubot4\wiki\ownership.md
-```
-
-Supplemental:
-
-```text
-D:\rust\nuubot3\wiki\coding\exchange.md
-D:\rust\nuubot3\wiki\account\simulator.md
-D:\rust\nuutrader6\src\nuubot\hcbots\exchange.py
-D:\rust\nuutrader6\src\nuubot\hcbots\account.py
-```
-
-## Conflict
-
-Nuubot4 left `Venue` versus `Exchange` unresolved. Nuubot5 uses `Venue` for this approved design.
-
-## Recommendation
-
-Keep the interface consumer-owned. Add methods only when Account has a current caller.
-
-Use Simulator as the first implementation.
-
-Add live Hyperliquid only after Simulator and Account proof pass.
+- Mutate Ledger or domain objects.
+- Decide Executor or Risk policy.
+- Poll Account state.
+- Cache public responses.
+- Accept caller response storage.
+- Fabricate domain identity.

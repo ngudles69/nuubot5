@@ -1,6 +1,6 @@
 # Ledger Package
 
-Status: Implemented for memory, maximum persistence, reload, and final publication.
+Status: Implemented for memory, maximum persistence, reload, and summary results.
 Covers: `internal/ledger/*.go`
 Purpose: Hold one Account's coherent local Trades, Orders, Fills, and reconciliation cursor.
 
@@ -46,36 +46,40 @@ Init
   initialize Ledger
   open Ledger identity when configured
   load Ledger evidence when configured
-  index active evidence
+  rebuild indexes and cached Summary
 
 CreateTrade
-  stage Trade and initial Orders
-  persist staged tree when configured
-  publish Trade and Orders
+  prepare Trade and initial Orders
+  persist new Trade and Orders when configured
+  publish Trade, Orders, and exact Summary delta
 
 AddOrders
-  stage existing Trade
-  persist staged Orders when configured
-  publish Orders
+  validate new Orders
+  attach validated Orders directly
+  persist touched Trade and Orders when configured
+  publish Orders and exact Trade Summary delta
 
 RecordSubmit
-  stage submitted Orders
-  apply ordered outcomes
-  persist submission evidence when configured
-  publish submit result
+  validate submitted Orders
+  apply ordered outcomes directly
+  persist touched submission rows when configured
+  refresh touched indexes and exact Trade Summary deltas
 
 Recon
-  index active local Orders
-  match incoming Venue evidence
-  stage exact deltas for active Orders new Fills and touched Trades
-  validate complete Ledger candidate
+  prepare attempt
+  stage selected Fill updates
+  stage selected Order updates
+  recalculate touched Trade structure
+  remark active Trade exposure from stored state
+  apply exact old-to-new Trade Summary deltas
+  validate candidate index deltas
   persist dirty rows and cursor when configured
   publish recon result without failure
 
 Result
-  copy Trades Orders and Fills
-  copy reconciliation cursor and snapshot
-  return immutable Ledger result
+  aggregate terminal flat domain counts
+  copy reconciliation cursor and cached Ledger Summary
+  return summary-only Ledger result
 
 Stop
   stop Ledger
@@ -115,21 +119,39 @@ Future live comparison uses stable CLOID, OID, and TID indexes.
 
 Routine reconciliation works only on active Orders, new Fills, and touched Trades.
 
+Canonical Recon detects accepted Order changes through the Order-owned transient
+mutation revision.
+
+It reads allocation-free Fill ownership instead of constructing detached Order
+records.
+
+Ledger owns one cached derived `Summary`.
+
+Trades remain authoritative.
+
+Init or persisted reload rebuilds the cache once from all Trades.
+
+CreateTrade, AddOrders, RecordSubmit, and canonical Recon apply exact old-to-new Trade summary deltas.
+
+`Summary` and `ReconSummary` return the cache without traversing Trades.
+
 An inconclusive exact lookup marks an active Order unresolved. It does not infer a terminal state.
 
 Unresolved-history cleanup may repair only exact CLOID, OID, or TID evidence.
 
 ## Atomicity
 
-Ledger stages exact reconciliation deltas before publishing them.
+Ledger validates normalized identities before direct mutation.
 
-It validates the complete Ledger candidate without deep-cloning the object graph.
+It updates owned Trades, Orders, and Fills without cloning the object graph.
 
-Under `max`, one transaction persists only dirty Trades, Orders, Fills, Ledger snapshot, and Fill cursor.
+Under `max`, one transaction persists only dirty Trade, Order, Fill, Ledger identity, and Fill cursor rows.
 
-A failed transaction publishes no domain state, success cursor, or snapshot.
+Cached Summary is derived and never persisted. The schema remains unchanged.
 
-Memory publication occurs after commit and must be non-failing.
+A failed transaction may leave directly mutated records and cached totals equally untrusted. Sweep exits immediately; live decisions remain blocked.
+
+Account publishes no successful Account Snapshot after persistence failure.
 
 External Venue calls never occur inside Ledger transactions.
 
@@ -189,16 +211,13 @@ Recovery always forces reconciliation before new decisions.
 
 ## Capacity
 
-Each Runner or BtBot initialization reserves container capacity for 1,000
-Trades, 2,000 Orders, and 2,000 Fills.
+Ledger maps, sets, and reconciliation slices grow dynamically.
 
-Reusable reconciliation evidence buffers are also reserved.
-
-Reservation allocates container capacity, not domain objects. It does not impose a hard limit automatically.
+Ledger reserves no fixed Trade, Order, Fill, or evidence-buffer capacity.
 
 ## Persistence Modes
 
-`none` retains memory state until one successful final export.
+`none` performs no Ledger, Trade, Order, or Fill database writes.
 
 `max` persists every accepted mutation.
 
@@ -216,11 +235,13 @@ Full Bot resume remains pending Runner-owned orchestration cursors.
 
 ## Terminal Result
 
-`Result` returns one immutable `ledger.Result`.
+`Result` returns one summary-only `ledger.Result`.
 
-It contains Ledger identity, cursor, snapshot, Trades, Orders, and Fills.
+It contains Ledger identity, cursor, cached finance totals, and flat Trade, Order, Fill, cancellation, and Stop counts.
 
-Every slice and map is newly owned. No value aliases mutable Ledger state.
+Terminal Order traversal for counts, cancellations, and Stop Orders remains unchanged.
+
+It contains no Trade, Order, Fill, slice, map, or copied ownership graph.
 
 ## Does Not
 
@@ -248,3 +269,5 @@ Every slice and map is newly owned. No value aliases mutable Ledger state.
 - Persistence failure publishes no success.
 - Ledger owns no reconciliation-dirty flag.
 - Reload reconstructs the same domain tree.
+- A complete-traversal test oracle equals cached Summary after every mutation, Recon, failed validation, and reload.
+- `Summary` and `ReconSummary` reads allocate nothing.

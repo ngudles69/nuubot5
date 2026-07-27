@@ -21,6 +21,12 @@ One session writes under:
 workspace/perf/profiles/stest-s<sweep>-b<bot>-<UTC timestamp>/
 ```
 
+Ignored performance artifacts may not appear in editor file search. Locate them from the repository root:
+
+```text
+find workspace/perf/profiles -maxdepth 2 -type f -print
+```
+
 The run writes `run-001.cpu.pprof`, `.trace`, `.heap.pprof`,
 `.allocs.pprof`, `.block.pprof`, and `.mutex.pprof`.
 
@@ -69,7 +75,7 @@ Level  BtBot ms  Replay ms  Expected outcome
 1      5,604        2,152      7,948,800 ticks; 794,880 runs; 64 cycles; report complete
 2      7,111        2,190      Level 1 plus six readable performance artifacts
 3      14,250       7,972      193 cycles; 193 Trades; 626 Orders; 386 Fills
-4      Pending      Pending    Establish after Sweep 11 Bot 15 exists
+4      50,906       46,733     50 cycles; 1,982 Trades; 4,697 Orders; 2,636 Fills
 5      76,688 avg   72,237 avg 50 cycles; 1,982 Trades; 4,697 Orders; 2,636 Fills
 ```
 
@@ -116,6 +122,272 @@ Profile directory    workspace/perf/profiles/stest-s10-b14-20260726T104650Z/
 ```
 
 Profiled timing is not the normal timing baseline.
+
+### Grid Recon Snapshot Removal Proof
+
+```text
+Command             ./stest.sh -bot 15 -pp
+BtBot                50,906 ms
+Historical loop      46,733 ms
+Total allocation     46,715.107 MB
+GC runs               320
+Trades               1,982
+Orders               4,697
+Fills                2,636
+Net PnL              -57.420074089999999993851 USDC
+Ending equity        942.579925910000000006149 USDC
+Maximum drawdown     75.791979199999999992245 USDC
+Result log           workspace/logs/nuubot5-stest-s11-b15-1-20260726T184055Z.log
+Suite report         workspace/logs/nuubot5-stest-s11-b15-1-20260726T184055Z.json
+Profile directory    workspace/perf/profiles/stest-s11-b15-20260726T184055Z/
+```
+
+This proof removes nested Trade, Order, and Fill snapshots from Recon and terminal results.
+
+Fresh repeat confirmation:
+
+```text
+Command             ./stest.sh -bot 15 -pp
+BtBot                50,857 ms
+Historical loop      46,689 ms
+Total allocation     46,730.336 MB
+GC runs               320
+Result log           workspace/logs/nuubot5-stest-s11-b15-1-20260726T184654Z.log
+Suite report         workspace/logs/nuubot5-stest-s11-b15-1-20260726T184654Z.json
+Profile directory    workspace/perf/profiles/stest-s11-b15-20260726T184654Z/
+```
+
+Exact Trade, Order, Fill, finance, equity, and drawdown results match the accepted proof.
+
+### Ledger Mutation Clone Removal Proof
+
+```text
+Command             ./stest.sh -bot 15 -pp
+BtBot                49,514 ms
+Historical loop      45,366 ms
+Total allocation     46,354.773 MB
+GC runs               318
+cloneTrades samples   0
+Result log           workspace/logs/nuubot5-stest-s11-b15-1-20260727T033944Z.log
+Suite report         workspace/logs/nuubot5-stest-s11-b15-1-20260727T033944Z.json
+Profile directory    workspace/perf/profiles/stest-s11-b15-20260727T033944Z/
+```
+
+Compared with the immediate snapshot-free profile, allocation fell `375.563 MB` and profiled runtime fell `1,343 ms`.
+
+Five fresh processes passed exact stability proof:
+
+```text
+Command             ./stest.sh -bot 15 -runs 5
+Passed              5/5
+BtBot average       50,298.4 ms
+Historical average 46,238.6 ms
+Allocation average 46,324.660 MB
+Result log          workspace/logs/nuubot5-stest-s11-b15-5-20260727T033454Z.log
+Suite report        workspace/logs/nuubot5-stest-s11-b15-5-20260727T033454Z.json
+```
+
+The canonical mutation path no longer replaces complete Ledger graphs.
+
+### Incremental Ledger Summary Proof
+
+Target 1 replaces repeated complete-Ledger summary traversal with exact
+old-to-new Trade summary deltas.
+
+```text
+Command             ./stest.sh -bot 15 -pp
+BtBot                55,346 ms
+Historical loop      51,170 ms
+Total allocation     53,101.770 MB
+GC runs               356
+Result log           workspace/logs/nuubot5-stest-s11-b15-1-20260727T052216Z.log
+Suite report         workspace/logs/nuubot5-stest-s11-b15-1-20260727T052216Z.json
+Profile directory    workspace/perf/profiles/stest-s11-b15-20260727T052216Z/
+```
+
+Bot 15 and frozen-control Bot 16 preserved exact Trade, Order, Fill, finance,
+equity, drawdown, polling, and reconciliation results.
+
+`Ledger.Summary` and `Ledger.ReconSummary` allocate nothing.
+
+The remaining `6,746.997 MB` allocation increase belongs to repeated structural
+Trade refresh and is Target 2.
+
+### Split Trade Refresh Proof
+
+Target 2 structurally refreshes only Trades touched by changed Order or Fill
+evidence. Active Trades update current-mark finance from stored exposure.
+
+```text
+Command             ./stest.sh -bot 15 -pp
+BtBot                50,641 ms
+Historical loop      46,318 ms
+Total allocation     50,954.596 MB
+GC runs               343
+Result log           workspace/logs/nuubot5-stest-s11-b15-1-20260727T055551Z.log
+Suite report         workspace/logs/nuubot5-stest-s11-b15-1-20260727T055551Z.json
+Profile directory    workspace/perf/profiles/stest-s11-b15-20260727T055551Z/
+```
+
+Exact accepted Trades, Orders, Fills, finance, equity, drawdown, polling, and
+reconciliation results passed.
+
+Compared with Target 1, allocation fell `2,147.174 MB`, BtBot fell `4,705 ms`,
+the historical loop fell `4,852 ms`, and GC runs fell by `13`.
+
+### Incremental Simulator Position Proof
+
+Target 3 maintains signed position size, entry price, realized PnL, and fees
+once per accepted Fill. AccountState and reduce-only sizing read that state.
+
+```text
+Command             ./stest.sh -bot 15 -pp
+BtBot                47,379 ms
+Historical loop      43,055 ms
+Total allocation     44,336.333 MB
+GC runs               294
+Result log           workspace/logs/nuubot5-stest-s11-b15-1-20260727T060536Z.log
+Suite report         workspace/logs/nuubot5-stest-s11-b15-1-20260727T060536Z.json
+Profile directory    workspace/perf/profiles/stest-s11-b15-20260727T060536Z/
+```
+
+Exact accepted Trades, Orders, Fills, finance, equity, drawdown, polling, and
+reconciliation results passed.
+
+Compared with Target 2, allocation fell `6,618.263 MB`, BtBot fell `3,262 ms`,
+the historical loop fell `3,263 ms`, and GC runs fell by `49`.
+
+### Allocation-Free Order Comparison Proof
+
+Target 4A gives each Order one transient mutation revision. Canonical Recon
+detects changes and reads Fill ownership without detached Order copies.
+
+```text
+Command             ./stest.sh -bot 15 -pp
+BtBot                44,039 ms
+Historical loop      39,910 ms
+Total allocation     41,489.475 MB
+GC runs               274
+Result log           workspace/logs/nuubot5-stest-s11-b15-1-20260727T062514Z.log
+Suite report         workspace/logs/nuubot5-stest-s11-b15-1-20260727T062514Z.json
+Profile directory    workspace/perf/profiles/stest-s11-b15-20260727T062514Z/
+```
+
+Exact accepted Trades, Orders, Fills, finance, equity, drawdown, polling, and
+reconciliation results passed.
+
+Compared with Target 3, allocation fell `2,846.859 MB`, BtBot fell `3,340 ms`,
+the historical loop fell `3,145 ms`, and GC runs fell by `20`.
+
+### Order Evidence Reassessment
+
+Target 4A solved Order comparison work. It did not remove bulk Venue response construction.
+
+```text
+downloadOrderEvidence   5,584.70 MB cumulative
+Simulator.OpenOrders    3,137.20 MB cumulative
+Account evidence build  1,532.14 MB flat
+Ledger.ActiveOrders       915.86 MB cumulative
+```
+
+Bulk Venue evidence and detached outputs remain required.
+
+The original Chunk 4B caller-buffer and public-output-cache design was rejected.
+
+The replacement fixes ownership instead of reusing response memory:
+
+```text
+Account sends official actions
+Simulator owns one canonical Order per accepted request
+Simulator owns each Fill execution once
+Simulator builds fresh detached official JSON per call
+Account validates JSON and updates Ledger
+```
+
+This hardcut removes domain identity from Simulator input and removes duplicate
+private Order history.
+
+It intentionally keeps fresh bulk response construction.
+
+### Canonical Simulator Ownership Proof
+
+```text
+Command             ./stest.sh -bot 15 -pp
+BtBot                70,007 ms
+Historical loop      66,050 ms
+Total allocation     56,578.288 MB
+GC runs               375
+Result log           workspace/logs/nuubot5-stest-s11-b15-1-20260727T080548Z.log
+Suite report         workspace/logs/nuubot5-stest-s11-b15-1-20260727T080548Z.json
+Profile directory    workspace/perf/profiles/stest-s11-b15-20260727T080548Z/
+```
+
+Exact accepted Trades, Orders, Fills, finance, equity, and drawdown passed.
+
+Compared with Target 4A, allocation rose `15,088.813 MB`, BtBot rose
+`25,968 ms`, the historical loop rose `26,140 ms`, and GC runs rose by `101`.
+
+Fresh official JSON encoding, decoding, and validation is accepted boundary
+work. Later tuning may optimize its implementation without sharing memory.
+
+### Exact Simulator Matching-Key Proof
+
+Target 5 builds one transient exact comparison key per canonical Order and one
+per admitted BBO. Matching performs no allocation.
+
+```text
+Command             ./stest.sh -bot 15 -pp
+BtBot                66,324 ms
+Historical loop      62,086 ms
+Total allocation     46,756.513 MB
+GC runs               311
+Result log           workspace/logs/nuubot5-stest-s11-b15-1-20260727T081234Z.log
+Suite report         workspace/logs/nuubot5-stest-s11-b15-1-20260727T081234Z.json
+Profile directory    workspace/perf/profiles/stest-s11-b15-20260727T081234Z/
+```
+
+Exact accepted Trades, Orders, Fills, finance, equity, and drawdown passed.
+
+Compared with the ownership hardcut, allocation fell `9,821.775 MB`, BtBot
+fell `3,683 ms`, the historical loop fell `3,964 ms`, and GC runs fell by `64`.
+
+The focused crossing benchmark measured `24.95 ns/op`, `0 B/op`, and
+`0 allocs/op`.
+
+Exact missing-active Order status is exception handling. Recon telemetry measures its request count before later reassessment.
+
+Performance Targets 4A, the Simulator ownership replacement, and Target 5 are accepted.
+
+## Approved Next Performance Targets
+
+Completed in measured order:
+
+```text
+1. Maintain Ledger totals incrementally.
+2. Separate structural Trade refresh from current-mark refresh.
+3. Maintain Simulator position and finance incrementally.
+4. Complete proof for the canonical Simulator ownership replacement.
+5. Normalize Simulator matching comparisons while preserving exact decimal behavior.
+```
+
+Scheduled Recon and Venue polling remain unchanged. Reprofile after every target and require exact domain and finance parity.
+
+Recon2 and Bot 16 are retired. New performance acceptance uses Bot 15 only.
+
+Each target runs one normal Bot 15 proof and one profiled Bot 15 proof. Do not
+run 5x stability.
+
+### Deferred Target 6
+
+Telemetry retention and terminal publication remain deferred:
+
+```text
+BtBot telemetry        1.61 GB cumulative allocation
+Result publication     1.67 GB cumulative allocation
+Result publication     3.60 s CPU
+```
+
+Do not optimize this target during Targets 1–5. Preserve it for later measurement and design.
 
 ## Controller Replay
 

@@ -25,7 +25,18 @@ type Inputs struct {
 // Result contains one immutable terminal BotCycle result.
 type Result struct {
 	CycleNumber int
+	StartMS     uint64
+	EndMS       uint64
+	DurationMS  uint64
+	Recon       account.ReconStats
 	Executors   []executor.Result
+}
+
+// ReconResult contains one complete Account reconciliation barrier result.
+type ReconResult struct {
+	Snapshots              []account.Snapshot
+	Failed                 bool
+	MaxConsecutiveFailures uint64
 }
 
 // Telemetry contains one immutable current BotCycle observation.
@@ -162,9 +173,11 @@ func (c *Control) Stop(reason string) (string, error) {
 		}
 		if err == nil {
 			c.result.Executors = append(c.result.Executors, result.Clone())
+			if result.Account != nil {
+				addReconStats(&c.result.Recon, result.Account.Recon)
+			}
 		}
 	}
-	c.result.CycleNumber = c.number
 	c.completed = true
 	c.stopped = true
 
@@ -176,6 +189,10 @@ func (c *Control) Stop(reason string) (string, error) {
 	if c.endMS >= c.startMS {
 		durationMS = c.endMS - c.startMS
 	}
+	c.result.CycleNumber = c.number
+	c.result.StartMS = c.startMS
+	c.result.EndMS = c.endMS
+	c.result.DurationMS = durationMS
 
 	// report proof
 	c.log.Info(fmt.Sprintf(
@@ -199,8 +216,9 @@ func (c *Control) Stop(reason string) (string, error) {
 func (c *Control) Reconcile(
 	nowMS uint64,
 	forced bool,
-) ([]account.Snapshot, error) {
-	var snapshots []account.Snapshot
+) (ReconResult, error) {
+	var result ReconResult
+	var failures []error
 	for index, activeExecutor := range c.executors {
 		if activeExecutor.Status() != executor.Running {
 			continue
@@ -209,13 +227,25 @@ func (c *Control) Reconcile(
 		if !supported {
 			continue
 		}
-		var snapshot, _, err = reconciler.Reconcile(nowMS, forced)
-		if err != nil {
-			return nil, fmt.Errorf("reconcile executor %d Account: %w", index+1, err)
+		var snapshot, _, consecutiveFailures, err = reconciler.Reconcile(nowMS, forced)
+		if consecutiveFailures > result.MaxConsecutiveFailures {
+			result.MaxConsecutiveFailures = consecutiveFailures
 		}
-		snapshots = append(snapshots, snapshot)
+		if err != nil {
+			failures = append(
+				failures,
+				fmt.Errorf("reconcile executor %d Account: %w", index+1, err),
+			)
+			continue
+		}
+		result.Snapshots = append(result.Snapshots, snapshot)
 	}
-	return snapshots, nil
+	if len(failures) != 0 {
+		result.Failed = true
+		result.Snapshots = nil
+		return result, errors.Join(failures...)
+	}
+	return result, nil
 }
 
 // OnRecon delivers one accepted reconciliation barrier.
@@ -238,7 +268,13 @@ func (c *Control) OnRecon(nowMS uint64) error {
 
 // Result returns one independently owned terminal BotCycle result.
 func (c *Control) Result() Result {
-	var result = Result{CycleNumber: c.result.CycleNumber}
+	var result = Result{
+		CycleNumber: c.result.CycleNumber,
+		StartMS:     c.result.StartMS,
+		EndMS:       c.result.EndMS,
+		DurationMS:  c.result.DurationMS,
+		Recon:       c.result.Recon,
+	}
 	for _, current := range c.result.Executors {
 		result.Executors = append(result.Executors, current.Clone())
 	}
@@ -332,6 +368,14 @@ func (c *Control) exitReason(fallback string) string {
 		}
 	}
 	return reason
+}
+
+func addReconStats(total *account.ReconStats, current account.ReconStats) {
+	total.Calls += current.Calls
+	total.SkippedClean += current.SkippedClean
+	total.Executed += current.Executed
+	total.Succeeded += current.Succeeded
+	total.Failed += current.Failed
 }
 
 // Section 3 - Generic Helpers

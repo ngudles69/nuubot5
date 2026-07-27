@@ -122,7 +122,7 @@ func (e *tradeExecutor) OnInit(ctx Context) error {
 	if err != nil {
 		return e.stopError(fmt.Errorf("initialize trade executor: %w", err))
 	}
-	if len(existing.Ledger.Trades) != 0 {
+	if existing.Ledger.Trades != 0 {
 		return e.stopError(fmt.Errorf(
 			"initialize trade executor: persisted Trade recovery is pending Runner",
 		))
@@ -154,7 +154,7 @@ func (e *tradeExecutor) OnStop(reason string) error {
 	}
 
 	// reconcile current Account truth
-	var snapshot, _, err = e.account.Reconcile(e.lastBBO.TimestampMS, true)
+	var snapshot, _, _, err = e.account.Reconcile(e.lastBBO.TimestampMS, true)
 	if err != nil {
 		return e.stopError(fmt.Errorf("stop trade executor: %w", err))
 	}
@@ -170,7 +170,7 @@ func (e *tradeExecutor) OnStop(reason string) error {
 		if err != nil {
 			return e.stopError(fmt.Errorf("stop trade executor: %w", err))
 		}
-		snapshot, _, err = e.account.Reconcile(e.lastBBO.TimestampMS, true)
+		snapshot, _, _, err = e.account.Reconcile(e.lastBBO.TimestampMS, true)
 		if err != nil {
 			return e.stopError(fmt.Errorf("stop trade executor: %w", err))
 		}
@@ -200,7 +200,7 @@ func (e *tradeExecutor) OnStop(reason string) error {
 	}
 
 	// reconcile final Venue truth
-	snapshot, _, err = e.account.Reconcile(e.lastBBO.TimestampMS, true)
+	snapshot, _, _, err = e.account.Reconcile(e.lastBBO.TimestampMS, true)
 	if err != nil {
 		return e.stopError(fmt.Errorf("stop trade executor: %w", err))
 	}
@@ -235,8 +235,8 @@ func (e *tradeExecutor) OnStop(reason string) error {
 		"executor stopped cycle=%d executor=%d kind=trade trades=%d fills=%d stop_reason=%s",
 		e.cycleNumber,
 		e.executorNumber,
-		len(result.Ledger.Trades),
-		countFills(result),
+		result.Ledger.Trades,
+		result.Ledger.Fills,
 		e.exitReason,
 	))
 	return nil
@@ -264,7 +264,7 @@ func (e *tradeExecutor) OnBBO(bbo market.BBO) {
 func (e *tradeExecutor) Reconcile(
 	nowMS uint64,
 	forced bool,
-) (account.Snapshot, bool, error) {
+) (account.Snapshot, bool, uint64, error) {
 	return e.account.Reconcile(nowMS, forced)
 }
 
@@ -387,16 +387,6 @@ func (e *tradeExecutor) Result() (Result, error) {
 }
 
 // Section 3 - Generic Helpers
-
-func countFills(result account.Result) int {
-	var count int
-	for _, ownedTrade := range result.Ledger.Trades {
-		for _, ownedOrder := range ownedTrade.Orders {
-			count += len(ownedOrder.Fills)
-		}
-	}
-	return count
-}
 
 func (e *tradeExecutor) stopError(err error) error {
 	e.status = Error

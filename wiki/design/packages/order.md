@@ -23,6 +23,12 @@ Order is a mutable domain object.
 
 It is not a lifecycle component.
 
+Order owns one transient mutation revision.
+
+Canonical Recon reads that scalar before and after mutation.
+
+Identical duplicate evidence leaves the revision unchanged.
+
 It has no `Init`, `Start`, `Run`, or `Stop`.
 
 Request identity and terms remain immutable.
@@ -39,9 +45,9 @@ submitted/open/partially_filled -> expired
 created/submitted/open/partially_filled -> error
 ```
 
-`filled`, `canceled`, `rejected`, `expired`, and `error` are terminal.
+`canceled`, `rejected`, `expired`, and `error` are locally terminal.
 
-Terminal Orders never return active.
+Venue `filled` remains reconciliation-pending and active until quantity and every Fill fee are complete.
 
 ## Immutable Fields
 
@@ -55,7 +61,7 @@ Terminal Orders never return active.
 ## Mutable Fields
 
 - Venue Order identity.
-- Status, active flag, and rejection reason.
+- Status, active flag, reconciliation-pending flag, and rejection reason.
 - Venue update timestamp.
 - Filled quantity, remaining quantity, average Fill price, and fees.
 - Raw Venue evidence.
@@ -79,8 +85,21 @@ ApplyFill
   add or enrich Fill
   refresh Fill totals
 
-Snapshot
-  return immutable Order values
+RefreshRecon
+  keep fee-incomplete or Fill-incomplete acknowledgements pending
+  complete only quantity-exact fee-complete Orders
+
+ComparisonState
+  return the allocation-free mutation revision
+
+FillIdentity
+  return allocation-free immutable ownership for one Fill update
+
+Record
+  return one flat Order database value
+
+EachFill
+  visit directly owned Fills without copying them
 ```
 
 These are domain operations, not lifecycle phases.
@@ -93,6 +112,8 @@ Average Fill price is quantity-weighted.
 
 Fees are summed once.
 
+Missing fees keep the Order reconciliation-pending. Zero and negative fees remain complete evidence.
+
 Remaining quantity never becomes negative.
 
 One Venue TID may enrich metadata but cannot change side, quantity, or price.
@@ -101,11 +122,17 @@ One Venue TID may enrich metadata but cannot change side, quantity, or price.
 
 See [Trading Schema](../concepts/trading-schema.md).
 
+One Order row contains no Fill collection. Fills remain separate rows linked by `order_id`.
+
 ## Required Proof
 
 - Invalid state transitions fail.
 - Duplicate identical Fills are idempotent.
+- Identical duplicate Order and Fill evidence leaves comparison state unchanged.
+- New Fill, fee enrichment, and terminal transitions advance comparison state.
+- Comparison and Fill ownership reads allocate nothing.
 - Changed execution for one Venue TID fails.
 - Partial and complete Fill totals are correct.
-- Terminal Orders remain terminal.
+- Fee-incomplete and Fill-incomplete acknowledgements remain reconciliation-pending.
+- Locally terminal Orders remain terminal.
 - Request fields never change during reconciliation.

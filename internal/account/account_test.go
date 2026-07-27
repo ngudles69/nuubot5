@@ -10,10 +10,12 @@ import (
 	"github.com/shopspring/decimal"
 	_ "modernc.org/sqlite"
 
+	"nuubot/internal/ledger"
 	"nuubot/internal/market"
 	"nuubot/internal/meta"
 	"nuubot/internal/order"
 	"nuubot/internal/toolkit/logging"
+	"nuubot/internal/trade"
 )
 
 // Section 1 - Program Flow
@@ -95,20 +97,43 @@ func TestAccountRunsOneReconciledBracket(t *testing.T) {
 		t.Fatalf("actual Orders %d, expected 3", len(placed.Orders))
 	}
 	var snapshot Snapshot
-	snapshot, _, err = actual.Reconcile(1000, false)
+	snapshot, _, _, err = actual.Reconcile(1000, false)
 	if err != nil {
 		t.Fatalf("reconcile entry: %v", err)
 	}
-	if !snapshot.PositionQuantity.IsPositive() {
-		t.Fatalf("actual entry position %s, expected positive", snapshot.PositionQuantity)
+	if snapshot.Generation != 1 || !snapshot.PositionQuantity.IsPositive() {
+		t.Fatalf(
+			"actual generation=%d entry position=%s, expected generation 1 and positive position",
+			snapshot.Generation,
+			snapshot.PositionQuantity,
+		)
+	}
+	var skipped Snapshot
+	var refreshed bool
+	skipped, refreshed, _, err = actual.Reconcile(1000, false)
+	if err != nil {
+		t.Fatalf("skip clean reconciliation: %v", err)
+	}
+	if refreshed || skipped.Generation != snapshot.Generation ||
+		actual.ReconciliationTelemetry().Outcome != ReconSkipped {
+		t.Fatalf(
+			"unexpected skip refreshed=%t generation=%d telemetry=%+v",
+			refreshed,
+			skipped.Generation,
+			actual.ReconciliationTelemetry(),
+		)
+	}
+	if actual.reconStats != (ReconStats{
+		Calls: 2, SkippedClean: 1, Executed: 1, Succeeded: 1,
+	}) {
+		t.Fatalf("unexpected Recon counters: %+v", actual.reconStats)
 	}
 	var entryValue = snapshot.AccountValue
 	var mark, _ = market.CreateBBO(1500, 105)
 	if err = actual.IngestBBO(mark); err != nil {
 		t.Fatalf("ingest mark BBO: %v", err)
 	}
-	var refreshed bool
-	snapshot, refreshed, err = actual.Reconcile(1500, false)
+	snapshot, refreshed, _, err = actual.Reconcile(1500, false)
 	if err != nil {
 		t.Fatalf("reconcile mark: %v", err)
 	}
@@ -125,11 +150,11 @@ func TestAccountRunsOneReconciledBracket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ingest take-profit BBO: %v", err)
 	}
-	snapshot, _, err = actual.Reconcile(2000, false)
+	snapshot, _, _, err = actual.Reconcile(2000, false)
 	if err != nil {
 		t.Fatalf("reconcile exit: %v", err)
 	}
-	if !snapshot.PositionQuantity.IsZero() || snapshot.Fills != 2 {
+	if snapshot.Generation != 3 || !snapshot.PositionQuantity.IsZero() || snapshot.Fills != 2 {
 		t.Fatalf(
 			"actual final position=%s fills=%d",
 			snapshot.PositionQuantity,
@@ -141,9 +166,104 @@ func TestAccountRunsOneReconciledBracket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read Account result: %v", err)
 	}
-	if len(result.Ledger.Trades) != 1 || result.Simulator == nil ||
-		len(result.Simulator.Fills) != 2 {
+	if result.Ledger.Trades != 1 || result.Ledger.Fills != 2 {
 		t.Fatalf("unexpected Account result: %+v", result)
+	}
+	if err = actual.Stop(); err != nil {
+		t.Fatalf("stop Account: %v", err)
+	}
+}
+
+func TestAccountReconFailurePublishesOnlyTelemetry(t *testing.T) {
+	var path = filepath.Join(t.TempDir(), "result.db")
+	var actual Account
+	var err = actual.Init(logging.Create(io.Discard), simulatorFailureConfig(path, 6))
+	if err != nil {
+		t.Fatalf("initialize Account: %v", err)
+	}
+	var warm, _ = market.CreateBBO(1000, 100)
+	if err = actual.IngestBBO(warm); err != nil {
+		t.Fatalf("warm Account: %v", err)
+	}
+	var price = decimal.NewFromInt(99)
+	_, err = actual.PlaceOrders([]OrderSpec{{
+		Role:        order.Entry,
+		Side:        order.Buy,
+		Type:        order.Limit,
+		TimeInForce: order.GTC,
+		Quantity:    decimal.RequireFromString("0.12"),
+		Price:       &price,
+		TimestampMS: 1000,
+	}})
+	if err != nil {
+		t.Fatalf("place resting Order: %v", err)
+	}
+	var db *sql.DB
+	db, err = sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open result database: %v", err)
+	}
+	_, err = db.Exec(`
+		CREATE TRIGGER fail_recon_cursor
+		BEFORE UPDATE ON account_ledger
+		BEGIN
+			SELECT RAISE(FAIL, 'injected Recon failure');
+		END;`)
+	if err != nil {
+		t.Fatalf("inject Recon failure: %v", err)
+	}
+	var snapshot Snapshot
+	var refreshed bool
+	var consecutiveFailures uint64
+	snapshot, refreshed, consecutiveFailures, err = actual.Reconcile(1100, true)
+	if err == nil {
+		t.Fatal("failed Recon returned nil error")
+	}
+	var telemetry = actual.ReconciliationTelemetry()
+	if refreshed || snapshot.ObservedMS != 0 || consecutiveFailures != 1 ||
+		telemetry.Outcome != ReconFailed || telemetry.ConsecutiveFailures != 1 {
+		t.Fatalf(
+			"unexpected first failed Recon snapshot=%+v refreshed=%t failures=%d telemetry=%+v",
+			snapshot,
+			refreshed,
+			consecutiveFailures,
+			telemetry,
+		)
+	}
+	snapshot, refreshed, consecutiveFailures, err = actual.Reconcile(1150, true)
+	if err == nil {
+		t.Fatal("second failed Recon returned nil error")
+	}
+	telemetry = actual.ReconciliationTelemetry()
+	if refreshed || snapshot.ObservedMS != 0 || consecutiveFailures != 2 ||
+		telemetry.Outcome != ReconFailed || telemetry.ConsecutiveFailures != 2 {
+		t.Fatalf(
+			"unexpected second failed Recon snapshot=%+v refreshed=%t failures=%d telemetry=%+v",
+			snapshot,
+			refreshed,
+			consecutiveFailures,
+			telemetry,
+		)
+	}
+	if _, err = db.Exec(`DROP TRIGGER fail_recon_cursor`); err != nil {
+		t.Fatalf("remove Recon failure: %v", err)
+	}
+	if err = db.Close(); err != nil {
+		t.Fatalf("close result database: %v", err)
+	}
+	snapshot, refreshed, consecutiveFailures, err = actual.Reconcile(1200, true)
+	if err != nil {
+		t.Fatalf("retry Recon: %v", err)
+	}
+	telemetry = actual.ReconciliationTelemetry()
+	if !refreshed || snapshot.Generation != 1 || consecutiveFailures != 0 ||
+		telemetry.Outcome != ReconSucceeded || telemetry.ConsecutiveFailures != 0 {
+		t.Fatalf(
+			"unexpected successful retry snapshot=%+v refreshed=%t telemetry=%+v",
+			snapshot,
+			refreshed,
+			telemetry,
+		)
 	}
 	if err = actual.Stop(); err != nil {
 		t.Fatalf("stop Account: %v", err)
@@ -236,7 +356,7 @@ func TestAccountMaxPersistenceRecoversDirtyVenueState(t *testing.T) {
 		t.Fatalf("warm restored Account: %v", err)
 	}
 	var snapshot Snapshot
-	snapshot, _, err = restored.Reconcile(1100, false)
+	snapshot, _, _, err = restored.Reconcile(1100, false)
 	if err != nil {
 		t.Fatalf("reconcile restored entry: %v", err)
 	}
@@ -251,7 +371,7 @@ func TestAccountMaxPersistenceRecoversDirtyVenueState(t *testing.T) {
 	if err = restored.IngestBBO(exitBBO); err != nil {
 		t.Fatalf("ingest restored take-profit BBO: %v", err)
 	}
-	snapshot, _, err = restored.Reconcile(2000, false)
+	snapshot, _, _, err = restored.Reconcile(2000, false)
 	if err != nil {
 		t.Fatalf("reconcile restored exit: %v", err)
 	}
@@ -291,7 +411,7 @@ func TestAccountMaxPersistenceRecoversSimulatorSubmitFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open result database: %v", err)
 	}
-	if _, err = db.Exec(`DROP TABLE simulator_state`); err != nil {
+	if _, err = db.Exec(`DROP TABLE simulator_venue_state`); err != nil {
 		t.Fatalf("remove Simulator store: %v", err)
 	}
 	var price = decimal.NewFromInt(100)
@@ -315,10 +435,9 @@ func TestAccountMaxPersistenceRecoversSimulatorSubmitFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read failed Account result: %v", err)
 	}
-	if len(result.Ledger.Trades) != 1 ||
-		len(result.Ledger.Trades[0].Orders) != 1 ||
-		result.Ledger.Trades[0].Orders[0].Status != order.Error ||
-		len(result.Simulator.Orders) != 0 {
+	var failedOrder, orderErr = first.Order(1)
+	if orderErr != nil || result.Ledger.Trades != 1 || result.Ledger.Orders != 1 ||
+		failedOrder.Status != order.Error {
 		t.Fatalf("unexpected failed submission result: %+v", result)
 	}
 	if err = restoreSimulatorTable(db); err != nil {
@@ -340,7 +459,7 @@ func TestAccountMaxPersistenceRecoversSimulatorSubmitFailure(t *testing.T) {
 		t.Fatalf("warm restored Account: %v", err)
 	}
 	var snapshot Snapshot
-	snapshot, _, err = restored.Reconcile(1100, false)
+	snapshot, _, _, err = restored.Reconcile(1100, false)
 	if err != nil {
 		t.Fatalf("reconcile restored Account: %v", err)
 	}
@@ -400,15 +519,65 @@ func TestAccountDoesNotMarkAcceptedSimulatorOrderRetriable(t *testing.T) {
 			err,
 		)
 	}
-	var result Result
-	result, err = actual.Result()
-	if err != nil {
-		t.Fatalf("read Account result: %v", err)
+	if _, err = db.Exec(`DROP TRIGGER fail_submitted_order`); err != nil {
+		t.Fatalf("remove Ledger failure: %v", err)
 	}
-	if len(result.Simulator.Orders) != 1 {
+	if err = db.Close(); err != nil {
+		t.Fatalf("close result database: %v", err)
+	}
+	if _, _, _, err = actual.Reconcile(1100, true); err != nil {
+		t.Fatalf("reconcile accepted Simulator Order: %v", err)
+	}
+	if err = actual.Stop(); err != nil {
+		t.Fatalf("stop Account: %v", err)
+	}
+}
+
+func TestAccountReconRetainsImmediateFillAfterSubmitPersistenceFailure(t *testing.T) {
+	var path = filepath.Join(t.TempDir(), "result.db")
+	var cfg = simulatorFailureConfig(path, 10)
+	var actual Account
+	var err = actual.Init(logging.Create(io.Discard), cfg)
+	if err != nil {
+		t.Fatalf("initialize Account: %v", err)
+	}
+	var warm, _ = market.CreateBBO(1000, 100)
+	if err = actual.IngestBBO(warm); err != nil {
+		t.Fatalf("warm Account: %v", err)
+	}
+	var db *sql.DB
+	db, err = sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open result database: %v", err)
+	}
+	if _, err = db.Exec(`
+		CREATE TRIGGER fail_submitted_order
+		BEFORE INSERT ON account_order
+		WHEN NEW.status = 'submitted'
+		BEGIN
+			SELECT RAISE(FAIL, 'injected Ledger failure');
+		END;`); err != nil {
+		t.Fatalf("inject Ledger failure: %v", err)
+	}
+	var price = decimal.NewFromInt(100)
+	var placed PlaceResult
+	placed, err = actual.PlaceOrders([]OrderSpec{{
+		Role:        order.Entry,
+		Side:        order.Buy,
+		Type:        order.Limit,
+		TimeInForce: order.IOC,
+		Quantity:    decimal.RequireFromString("0.11"),
+		Price:       &price,
+		TimestampMS: 1000,
+	}})
+	if err == nil {
+		t.Fatal("Ledger persistence failure was admitted")
+	}
+	if placed.TradeID == 0 || errors.Is(err, ErrNotSubmitted) {
 		t.Fatalf(
-			"actual Simulator Orders=%d, expected accepted Order",
-			len(result.Simulator.Orders),
+			"actual Trade ID=%d error=%v, expected committed Venue Fill",
+			placed.TradeID,
+			err,
 		)
 	}
 	if _, err = db.Exec(`DROP TRIGGER fail_submitted_order`); err != nil {
@@ -417,8 +586,133 @@ func TestAccountDoesNotMarkAcceptedSimulatorOrderRetriable(t *testing.T) {
 	if err = db.Close(); err != nil {
 		t.Fatalf("close result database: %v", err)
 	}
-	if _, _, err = actual.Reconcile(1100, true); err != nil {
-		t.Fatalf("reconcile accepted Simulator Order: %v", err)
+	var snapshot Snapshot
+	snapshot, _, _, err = actual.Reconcile(1100, true)
+	if err != nil {
+		t.Fatalf("reconcile committed Venue Fill: %v", err)
+	}
+	var execution, found = actual.Fill(1)
+	var filledOrder, orderErr = actual.Order(1)
+	if !found || orderErr != nil || filledOrder.VenueOrderID != 1 ||
+		filledOrder.Status != order.Filled || snapshot.Fills != 1 ||
+		snapshot.PendingOrders != 0 || snapshot.PendingFills != 0 ||
+		!snapshot.PositionQuantity.Equal(decimal.RequireFromString("0.11")) ||
+		!snapshot.EntryPrice.Equal(price) || !snapshot.AccountValue.Equal(cfg.EquityUSDC) ||
+		!execution.Quantity.Equal(decimal.RequireFromString("0.11")) ||
+		!execution.Price.Equal(price) || !execution.HasFee ||
+		!execution.Fee.IsZero() {
+		t.Fatalf(
+			"unexpected recovered Fill snapshot=%+v Order=%+v Fill=%+v",
+			snapshot,
+			filledOrder,
+			execution,
+		)
+	}
+	if err = actual.Stop(); err != nil {
+		t.Fatalf("stop Account: %v", err)
+	}
+}
+
+func TestEnrichFillCLOIDsRejectsAmbiguousVenueIdentity(t *testing.T) {
+	var cases = []struct {
+		name   string
+		orders []ledger.OrderEvidence
+		fills  []ledger.FillEvidence
+	}{
+		{
+			name: "duplicate mapping",
+			orders: []ledger.OrderEvidence{
+				{CLOID: "first", VenueOrderID: 7},
+				{CLOID: "first", VenueOrderID: 7},
+			},
+		},
+		{
+			name: "conflicting mapping",
+			orders: []ledger.OrderEvidence{
+				{CLOID: "first", VenueOrderID: 7},
+				{CLOID: "second", VenueOrderID: 7},
+			},
+		},
+		{
+			name:   "conflicting Fill",
+			orders: []ledger.OrderEvidence{{CLOID: "first", VenueOrderID: 7}},
+			fills:  []ledger.FillEvidence{{CLOID: "second", VenueOrderID: 7}},
+		},
+	}
+	for _, current := range cases {
+		var err = enrichFillCLOIDs(current.orders, current.fills)
+		if err == nil {
+			t.Fatalf("%s ambiguity was admitted", current.name)
+		}
+	}
+}
+
+func TestAccountReconTelemetryReportsNoBulkOrderStatusQueries(t *testing.T) {
+	var actual Account
+	var err = actual.Init(logging.Create(io.Discard), accountTestConfig(34, "recon"))
+	if err != nil {
+		t.Fatalf("initialize Account: %v", err)
+	}
+	var price = decimal.NewFromInt(100)
+	_, err = actual.PlaceOrders([]OrderSpec{{
+		Role: order.Entry, Side: order.Buy, Type: order.Limit, TimeInForce: order.GTC,
+		Quantity: decimal.RequireFromString("0.11"), Price: &price, TimestampMS: 1000,
+	}})
+	if err != nil {
+		t.Fatalf("place open Order: %v", err)
+	}
+	if _, _, _, err = actual.Reconcile(1000, false); err != nil {
+		t.Fatalf("reconcile open Order: %v", err)
+	}
+	var telemetry = actual.ReconciliationTelemetry()
+	if telemetry.OrderStatusQueries != 0 {
+		t.Fatalf("actual OrderStatus queries %d, expected 0", telemetry.OrderStatusQueries)
+	}
+	if err = actual.Stop(); err != nil {
+		t.Fatalf("stop Account: %v", err)
+	}
+}
+
+func TestAccountReconTelemetryPreservesFailedOrderStatusQuery(t *testing.T) {
+	var actual Account
+	var err = actual.Init(logging.Create(io.Discard), accountTestConfig(35, "recon"))
+	if err != nil {
+		t.Fatalf("initialize Account: %v", err)
+	}
+	var plan ledger.Plan
+	plan, err = actual.ledger.PlanTrade(1)
+	if err != nil {
+		t.Fatalf("plan Trade: %v", err)
+	}
+	var price = decimal.NewFromInt(100)
+	var created *order.Order
+	created, err = order.New(order.Input{
+		LedgerID: actual.config.LedgerID, TradeID: plan.Trade.TradeID,
+		OrderID: plan.OrderIDs[0], Account: actual.config.Name,
+		CycleNumber: actual.config.CycleNumber, Symbol: actual.config.Symbol,
+		BatchNo: 1, OrderPos: 1, CLOID: "0x00000000000000000000000000000023",
+		Role: order.Entry, Side: order.Buy, Type: order.Limit, TimeInForce: order.GTC,
+		RequestedQuantity: decimal.RequireFromString("0.11"),
+		RequestedPrice:    &price,
+		TimestampMS:       1000,
+	})
+	if err != nil {
+		t.Fatalf("create Order: %v", err)
+	}
+	if err = actual.ledger.CreateTrade(plan.Trade, []*order.Order{created}); err != nil {
+		t.Fatalf("create Trade: %v", err)
+	}
+	if err = actual.ledger.RecordSubmit([]ledger.SubmitOutcome{{
+		OrderID: plan.OrderIDs[0], VenueOrderID: 99,
+	}}); err != nil {
+		t.Fatalf("record submit: %v", err)
+	}
+	if _, _, _, err = actual.Reconcile(1000, false); err == nil {
+		t.Fatal("missing submitted Venue Order returned nil error")
+	}
+	var telemetry = actual.ReconciliationTelemetry()
+	if telemetry.Outcome != ReconFailed || telemetry.OrderStatusQueries != 1 {
+		t.Fatalf("unexpected failed Recon telemetry: %+v", telemetry)
 	}
 	if err = actual.Stop(); err != nil {
 		t.Fatalf("stop Account: %v", err)
@@ -449,7 +743,7 @@ func TestAccountMaxPersistenceRepairsMissingSubmittingOrder(t *testing.T) {
 		BEGIN
 			SELECT RAISE(FAIL, 'injected Ledger failure');
 		END;
-		DROP TABLE simulator_state;`)
+		DROP TABLE simulator_venue_state;`)
 	if err != nil {
 		t.Fatalf("inject persistence failures: %v", err)
 	}
@@ -471,8 +765,20 @@ func TestAccountMaxPersistenceRepairsMissingSubmittingOrder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read failed Account result: %v", err)
 	}
-	if result.Ledger.Trades[0].Orders[0].Status != order.Created {
-		t.Fatalf("unexpected in-memory Order state: %+v", result)
+	var failedOrder, orderErr = first.Order(1)
+	if orderErr != nil || failedOrder.Status != order.Error {
+		t.Fatalf("unexpected untrusted in-memory Order state: %+v", failedOrder)
+	}
+	var storedStatus string
+	if err = db.QueryRow(
+		`SELECT status FROM account_order WHERE ledger_id = ? AND order_id = ?`,
+		cfg.LedgerID,
+		uint64(1),
+	).Scan(&storedStatus); err != nil {
+		t.Fatalf("read rolled-back Order state: %v", err)
+	}
+	if storedStatus != string(order.Created) {
+		t.Fatalf("failed transaction changed durable Order state: %s", storedStatus)
 	}
 	if _, err = db.Exec(`DROP TRIGGER fail_error_order`); err != nil {
 		t.Fatalf("remove Ledger failure: %v", err)
@@ -496,7 +802,7 @@ func TestAccountMaxPersistenceRepairsMissingSubmittingOrder(t *testing.T) {
 		t.Fatalf("warm restored Account: %v", err)
 	}
 	var snapshot Snapshot
-	snapshot, _, err = restored.Reconcile(1100, false)
+	snapshot, _, _, err = restored.Reconcile(1100, false)
 	if err != nil {
 		t.Fatalf("repair missing submitting Order: %v", err)
 	}
@@ -504,16 +810,178 @@ func TestAccountMaxPersistenceRepairsMissingSubmittingOrder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read repaired Account result: %v", err)
 	}
-	if result.Ledger.Trades[0].Orders[0].Status != order.Error ||
+	var repairedOrder order.Record
+	repairedOrder, orderErr = restored.Order(1)
+	if orderErr != nil || repairedOrder.Status != order.Error ||
 		snapshot.ActiveOrders != 0 || snapshot.OpenTrades != 0 {
 		t.Fatalf("unexpected repaired Account state snapshot=%+v result=%+v", snapshot, result)
+	}
+	var telemetry = restored.ReconciliationTelemetry()
+	if telemetry.OrderStatusQueries != 1 {
+		t.Fatalf(
+			"actual failed OrderStatus queries %d, expected 1",
+			telemetry.OrderStatusQueries,
+		)
 	}
 	if err = restored.Stop(); err != nil {
 		t.Fatalf("stop restored Account: %v", err)
 	}
 }
 
+func TestAccountRepairsCursorAdvancedMissingFee(t *testing.T) {
+	var actual Account
+	var err = actual.Init(logging.Create(io.Discard), accountTestConfig(20, "recon"))
+	if err != nil {
+		t.Fatalf("initialize Account: %v", err)
+	}
+	var warm, _ = market.CreateBBO(1000, 100)
+	if err = actual.IngestBBO(warm); err != nil {
+		t.Fatalf("warm Account: %v", err)
+	}
+	var price = decimal.NewFromInt(100)
+	_, err = actual.PlaceOrders([]OrderSpec{{
+		Role: order.Entry, Side: order.Buy, Type: order.Limit, TimeInForce: order.IOC,
+		Quantity: decimal.RequireFromString("0.11"), Price: &price, TimestampMS: 1000,
+	}})
+	if err != nil {
+		t.Fatalf("place entry: %v", err)
+	}
+	setFillFeeAvailableForTest(t, &actual, 1, false)
+	var snapshot Snapshot
+	snapshot, _, _, err = actual.Reconcile(1000, false)
+	if err != nil {
+		t.Fatalf("reconcile missing fee: %v", err)
+	}
+	if snapshot.PendingOrders != 1 || snapshot.PendingFills != 1 {
+		t.Fatalf("unexpected initial pending state: %+v", snapshot)
+	}
+	var later, _ = market.CreateBBO(3000, 101)
+	if err = actual.IngestBBO(later); err != nil {
+		t.Fatalf("advance mark: %v", err)
+	}
+	if _, _, _, err = actual.Reconcile(3000, false); err != nil {
+		t.Fatalf("advance Fill cursor: %v", err)
+	}
+	if actual.ledger.FillsThroughMS() != 3000 {
+		t.Fatalf("actual Fill cursor=%d, expected 3000", actual.ledger.FillsThroughMS())
+	}
+	setFillFeeAvailableForTest(t, &actual, 1, true)
+	snapshot, _, _, err = actual.Reconcile(4000, false)
+	if err != nil {
+		t.Fatalf("repair delayed fee: %v", err)
+	}
+	var telemetry = actual.ReconciliationTelemetry()
+	if snapshot.PendingOrders != 0 || snapshot.PendingFills != 0 ||
+		len(telemetry.FillQueries) != 2 || telemetry.FillQueries[0].Kind != "discovery" ||
+		telemetry.FillQueries[0].StartMS != 3000 || telemetry.FillQueries[1].Kind != "repair" ||
+		telemetry.FillQueries[1].StartMS > 1000 || telemetry.FillQueries[1].EndMS < 1000 ||
+		telemetry.FillQueries[1].FeesEnriched != 1 || telemetry.FillQueries[1].PendingMatched != 1 {
+		t.Fatalf("unexpected repaired snapshot=%+v telemetry=%+v", snapshot, telemetry)
+	}
+	var execution, found = actual.Fill(1)
+	if !found || !execution.HasFee || !execution.Fee.Equal(decimal.RequireFromString("0.00385")) {
+		t.Fatalf("unexpected enriched Fill: %+v", execution)
+	}
+	if err = actual.Stop(); err != nil {
+		t.Fatalf("stop Account: %v", err)
+	}
+}
+
+func TestAccountKeepsFeeIncompleteClosurePendingAndFinalFinanceStatic(t *testing.T) {
+	var actual Account
+	var err = actual.Init(logging.Create(io.Discard), accountTestConfig(21, "recon"))
+	if err != nil {
+		t.Fatalf("initialize Account: %v", err)
+	}
+	var warm, _ = market.CreateBBO(1000, 100)
+	if err = actual.IngestBBO(warm); err != nil {
+		t.Fatalf("warm Account: %v", err)
+	}
+	var quantity = decimal.RequireFromString("0.11")
+	var entry = decimal.NewFromInt(100)
+	var exit = decimal.NewFromInt(110)
+	_, err = actual.PlaceOrders([]OrderSpec{
+		{Role: order.Entry, Side: order.Buy, Type: order.Limit, TimeInForce: order.IOC,
+			Quantity: quantity, Price: &entry, TimestampMS: 1000},
+		{Role: order.Stop, Side: order.Sell, Type: order.Limit, TimeInForce: order.GTC,
+			Quantity: quantity, Price: &exit, ReduceOnly: true, TimestampMS: 1000},
+	})
+	if err != nil {
+		t.Fatalf("place entry and exit: %v", err)
+	}
+	if _, _, _, err = actual.Reconcile(1000, false); err != nil {
+		t.Fatalf("reconcile entry: %v", err)
+	}
+	var closeBBO, _ = market.CreateBBO(2000, 111)
+	if err = actual.IngestBBO(closeBBO); err != nil {
+		t.Fatalf("fill exit: %v", err)
+	}
+	setFillFeeAvailableForTest(t, &actual, 2, false)
+	var pending Snapshot
+	pending, _, _, err = actual.Reconcile(2000, false)
+	if err != nil {
+		t.Fatalf("reconcile fee-incomplete exit: %v", err)
+	}
+	var pendingTrade, tradeErr = actual.Trade(1)
+	var pendingOrder, orderErr = actual.Order(2)
+	if tradeErr != nil || orderErr != nil || pending.PendingOrders != 1 || pending.PendingFills != 1 ||
+		pendingTrade.Status != trade.Closing || !pendingTrade.UnrealizedPnL.IsZero() ||
+		pendingOrder.Status == order.Filled {
+		t.Fatalf("closure appeared complete snapshot=%+v Trade=%+v", pending, pendingTrade)
+	}
+	setFillFeeAvailableForTest(t, &actual, 2, true)
+	var closed Snapshot
+	closed, _, _, err = actual.Reconcile(3000, false)
+	if err != nil {
+		t.Fatalf("finalize closure: %v", err)
+	}
+	var closedTrade trade.ReconState
+	closedTrade, tradeErr = actual.Trade(1)
+	if tradeErr != nil || closedTrade.Status != trade.Closed || !closedTrade.UnrealizedPnL.IsZero() ||
+		closed.PendingOrders != 0 || closed.PendingFills != 0 {
+		t.Fatalf("unexpected closed finance snapshot=%+v Trade=%+v", closed, closedTrade)
+	}
+	var changedMark, _ = market.CreateBBO(4000, 150)
+	if err = actual.IngestBBO(changedMark); err != nil {
+		t.Fatalf("change closed mark: %v", err)
+	}
+	if _, _, _, err = actual.Reconcile(4000, true); err != nil {
+		t.Fatalf("force closed Recon: %v", err)
+	}
+	var finalTrade trade.ReconState
+	finalTrade, tradeErr = actual.Trade(1)
+	if tradeErr != nil {
+		t.Fatalf("read final Trade: %v", tradeErr)
+	}
+	assertTradeFinanceEqual(t, finalTrade, closedTrade)
+	if err = actual.Stop(); err != nil {
+		t.Fatalf("stop Account: %v", err)
+	}
+}
+
 // Section 2 - Domain Helpers
+
+func accountTestConfig(ledgerID uint64, recon string) Config {
+	return Config{
+		LedgerID: ledgerID, CycleNumber: 2, ExecutorNumber: 3, Name: "sim",
+		Venue: "simulator", Network: "simnet", Symbol: "BTC",
+		Meta: meta.Instrument{Network: "testnet", Kind: "perp", Symbol: "BTC",
+			AssetID: 0, SizeDecimals: 5, PriceDecimals: 1},
+		MinNotionalUSDC: decimal.NewFromInt(11), EquityUSDC: decimal.NewFromInt(1000),
+		FeePct: decimal.RequireFromString("0.035"), SlippagePct: decimal.Zero,
+		PersistMode: "none", Recon: recon,
+	}
+}
+
+func assertTradeFinanceEqual(t *testing.T, actual trade.ReconState, expected trade.ReconState) {
+	t.Helper()
+	if actual.Status != expected.Status || !actual.RealizedPnL.Equal(expected.RealizedPnL) ||
+		!actual.UnrealizedPnL.Equal(expected.UnrealizedPnL) ||
+		!actual.GrossPnL.Equal(expected.GrossPnL) || !actual.Fees.Equal(expected.Fees) ||
+		!actual.NetPnL.Equal(expected.NetPnL) {
+		t.Fatalf("Trade finance mismatch actual=%+v expected=%+v", actual, expected)
+	}
+}
 
 func simulatorFailureConfig(path string, ledgerID uint64) Config {
 	return Config{
@@ -541,13 +1009,34 @@ func simulatorFailureConfig(path string, ledgerID uint64) Config {
 	}
 }
 
+func setFillFeeAvailableForTest(
+	t *testing.T,
+	actual *Account,
+	venueTID uint64,
+	available bool,
+) {
+	t.Helper()
+	var controller, supported = actual.venue.(interface {
+		SetFillFeeAvailableForTest(uint64, bool) error
+	})
+	if !supported {
+		t.Fatal("Venue does not support delayed-fee test control")
+	}
+	var err = controller.SetFillFeeAvailableForTest(venueTID, available)
+	if err != nil {
+		t.Fatalf("set Fill fee availability: %v", err)
+	}
+}
+
 func restoreSimulatorTable(db *sql.DB) error {
 	var _, err = db.Exec(`
-		CREATE TABLE simulator_state (
-			ledger_id       INTEGER PRIMARY KEY REFERENCES account_ledger(ledger_id),
+		CREATE TABLE simulator_venue_state (
+			account_name    TEXT NOT NULL,
+			symbol          TEXT NOT NULL,
 			schema_version  INTEGER NOT NULL,
 			payload_json    TEXT NOT NULL,
-			updated_ms      INTEGER NOT NULL
+			updated_ms      INTEGER NOT NULL,
+			PRIMARY KEY (account_name, symbol)
 		)`)
 	return err
 }

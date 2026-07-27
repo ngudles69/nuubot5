@@ -11,11 +11,8 @@ import (
 	"nuubot/internal/botcycle"
 	"nuubot/internal/controller"
 	"nuubot/internal/executor"
-	"nuubot/internal/fill"
 	"nuubot/internal/ledger"
-	"nuubot/internal/order"
 	"nuubot/internal/telemetry"
-	"nuubot/internal/trade"
 )
 
 // Section 1 - Program Flow
@@ -40,18 +37,10 @@ func TestBuildAndRenderSuite(t *testing.T) {
 							GrossPnL: decimal.NewFromInt(5),
 							Fees:     decimal.NewFromInt(1),
 						},
-						Ledger: ledger.Result{Trades: []trade.Snapshot{{
-							Orders: []order.Snapshot{
-								{
-									Status: order.Canceled,
-									Fills:  []fill.Snapshot{{}},
-								},
-								{
-									Input: order.Input{Role: order.Stop},
-									Fills: []fill.Snapshot{{}},
-								},
-							},
-						}}},
+						Ledger: ledger.Result{
+							Trades: 1, Orders: 2, Fills: 2,
+							Cancellations: 1, StopOrders: 1,
+						},
 					},
 				}},
 			}},

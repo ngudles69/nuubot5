@@ -15,7 +15,6 @@ import (
 	"nuubot/internal/executor"
 	"nuubot/internal/ledger"
 	"nuubot/internal/report"
-	"nuubot/internal/simulator"
 	"nuubot/internal/telemetry"
 )
 
@@ -54,11 +53,16 @@ func TestPublishWritesControllerAndReplayResult(t *testing.T) {
 	var historicalDataLoopElapsedMS int64
 	var telemetrySamples int
 	var storedReportSamples int
+	var telemetryEvents int
+	var botEndEvents int
 	err = db.QueryRow(`
 		SELECT bot_spec_id, config_toml, bot_equity, ticks_served,
 		btbot_historical_data_loop_elapsed_ms,
 		       (SELECT COUNT(*) FROM telemetry_sample),
-		       (SELECT telemetry_samples FROM run_report)
+		       (SELECT telemetry_samples FROM run_report),
+		       (SELECT COUNT(*) FROM telemetry_event),
+		       (SELECT COUNT(*) FROM telemetry_event
+		        WHERE kind='bot' AND frequency='end')
 		FROM backtest_result
 	`).Scan(
 		&botSpecID,
@@ -68,6 +72,8 @@ func TestPublishWritesControllerAndReplayResult(t *testing.T) {
 		&historicalDataLoopElapsedMS,
 		&telemetrySamples,
 		&storedReportSamples,
+		&telemetryEvents,
+		&botEndEvents,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -78,7 +84,9 @@ func TestPublishWritesControllerAndReplayResult(t *testing.T) {
 		ticks != 10 ||
 		historicalDataLoopElapsedMS != 123 ||
 		telemetrySamples != 1 ||
-		storedReportSamples != 1 {
+		storedReportSamples != 1 ||
+		telemetryEvents != 1 ||
+		botEndEvents != 1 {
 		t.Fatalf(
 			"unexpected result bot_spec=%s config=%q equity=%s ticks=%d",
 			botSpecID,
@@ -101,18 +109,13 @@ func TestPublishPreservesMaximumAccountEvidence(t *testing.T) {
 			Account: "sim", Network: "simnet", Symbol: "BTC",
 			PersistMode: ledger.Max, Path: path,
 		}},
-		Simulator: &simulator.Result{Config: simulator.Config{
-			LedgerID: 1, Name: "sim", Account: "sim", CycleNumber: 1,
-			Symbol: "BTC", Equity: decimal.NewFromInt(1000),
-			PersistMode: ledger.Max, Path: path,
-		}},
 	}
-	var err = ledger.Publish(path, accountResult.Ledger)
+	var ownedLedger ledger.Ledger
+	var err = ownedLedger.Init(accountResult.Ledger.Config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = simulator.Publish(path, *accountResult.Simulator)
-	if err != nil {
+	if err = ownedLedger.Stop(); err != nil {
 		t.Fatal(err)
 	}
 	err = publishTestResult(t, path, controller.Result{
@@ -148,22 +151,22 @@ func TestPublishPreservesMaximumAccountEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	var summary, ledgers, states int
+	var summary, ledgers, simulatorEvents int
 	err = db.QueryRow(`
 		SELECT
 			(SELECT COUNT(*) FROM backtest_result),
 			(SELECT COUNT(*) FROM account_ledger),
-			(SELECT COUNT(*) FROM simulator_state)
-	`).Scan(&summary, &ledgers, &states)
+			(SELECT COUNT(*) FROM telemetry_event WHERE kind = 'simulator')
+	`).Scan(&summary, &ledgers, &simulatorEvents)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if summary != 1 || ledgers != 1 || states != 1 {
+	if summary != 1 || ledgers != 1 || simulatorEvents != 0 {
 		t.Fatalf(
-			"summary=%d ledgers=%d simulator_states=%d",
+			"summary=%d ledgers=%d simulator_events=%d",
 			summary,
 			ledgers,
-			states,
+			simulatorEvents,
 		)
 	}
 }

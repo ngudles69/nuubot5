@@ -1,10 +1,42 @@
 # Handoff
 
-Last updated: 2026-07-26
+Last updated: 2026-07-27
 
 ## Focus
 
-Make the holistic reconciliation design implementable through complete impact analysis, adversarial review, and blocker fixes.
+Performance Chunks 1-5 are implemented. Chunk 4B became the approved
+Account-Venue-Simulator boundary hardcut. Recon2 is retired.
+
+## Active Boundary Hardcut
+
+### DONE
+
+- Confirmed canonical Recon remains one bulk Venue consistency barrier.
+- Confirmed current Account-Simulator types, persistence, results, and BBO flow violate ownership.
+- Approved deleting Recon2 instead of adapting it.
+- Deleted Recon2 source, selection, tests, template, and stale active documentation.
+- Added official Hyperliquid actions and detached JSON responses.
+- Made CLOID mandatory, opaque, and the first lookup identity.
+- Kept OID as Venue-assigned fallback identity.
+- Replaced Simulator state with one canonical Order record and one-time Fill records.
+- Moved Simulator persistence and terminal state outside Account and Ledger results.
+- Passed focused tests, full tests, full vet, and exact Bot 15 boundary parity.
+- Added transient exact Simulator matching keys.
+- Passed exact-key parity, fuzz, zero-allocation, normal Bot 15, and profiled Bot 15 proof.
+- Updated owning design and performance pages.
+- Audit round one found immediate IOC recovery could lose a CLOID-less Fill after submit persistence failure.
+- Account now enriches that Fill from same-attempt OID-to-CLOID Order evidence before Ledger application.
+- Immediate IOC recovery now proves Order, Fill, position, finance, and zero pending state.
+- Audit round two passed with no findings, missing proof, bloat, or duplicate ownership.
+- Full tests, full vet, gofmt, shell syntax, stale-route, and diff checks pass.
+
+### TODO
+
+- None.
+
+### PENDING USER APPROVAL
+
+- None.
 
 ## Active Recon Design Review Contract
 
@@ -21,6 +53,12 @@ Make the holistic reconciliation design implementable through complete impact an
 
 ### DONE
 
+- TMUX startup produced one full-height control pane and four viewer panes.
+- All four viewer roles returned the required standby response.
+- Direct targeted `send-keys` delivered viewer prompts successfully.
+- PSMux `paste-buffer` ignored its viewer target and pasted into control.
+- Dismissing the Codex composer suggestion with `Escape`, then sending `Enter`,
+  submitted the prompt.
 - Alternative-input test scope approved.
 - Current Codex manual confirms Ctrl+G external-editor input.
 - Current Codex manual confirms `codex exec -` full-prompt stdin input.
@@ -153,7 +191,7 @@ Make the holistic reconciliation design implementable through complete impact an
 - Every admitted Fill observation must classify as added, enriched, or unchanged duplicate without silent omission.
 - Dual-Recon focused Account, Ledger, Executor, and BotSpec tests pass with Go 1.26.5 and `-tags noasm`.
 - Full Go tests and vet pass with `CGO_ENABLED=0`, Go 1.26.5, and `-tags noasm`.
-- Canonical Recon and frozen Recon2 still contain the same unoptimized algorithm.
+- Before retirement, canonical Recon and Recon2 contained the same unoptimized algorithm.
 - Holistic `wiki/design/concepts/recon.md` draft is complete and awaiting replacement by the implementable rewrite.
 - The draft opens with only the corrected Recon concept, polling loop, and eight-step process.
 - Read-only holistic impact assessment completed across lifecycle, domain, Venue, persistence, telemetry, STOP, tests, and cutover.
@@ -172,30 +210,327 @@ Make the holistic reconciliation design implementable through complete impact an
 - Verify the 263-line minimal draft against current Recon source. DONE.
 - Verify every current Recon2 action maps into the ten-step design. DONE.
 - Add the exact ten-step source-comment layout contract. DONE.
-- Commit and push the complete current checkpoint before changing canonical Recon. IN PROGRESS.
-- Rewrite canonical Recon using `cmd/nuubot-bt-bot/main.go` as the readability model. TODO.
-- Preserve Recon2 unchanged as the behavior and performance control. TODO.
+- Commit and push complete checkpoint `b360335`. DONE.
+- Define Section 1 as Init plus complete Recon flow, including start and skip decisions. DONE.
+- Rewrite canonical Recon with dynamic indexes and touched-record staging. DONE.
+- Preserve Recon2 unchanged as the behavior and performance control; hashes verified. DONE.
+- Adversarial canonical Recon review round one found eight accepted current-scope blockers. DONE.
+- Fixer agent launches were canceled before sessions started; no fixer is active. DONE.
+- Recovered canceled fixer changes and removed its stray `NUL` artifact. DONE.
+- Fixed one stale `ReconSnapshot` call; focused tests pass. DONE.
+- Full tests, full vet, diff check, and Recon2 hash proof pass after fixes. DONE.
+- Added mandatory worker ownership, 30-second health, 10-minute reporting, cancellation, replacement, and no-idle rules to `AGENTS.md`. DONE.
+- No delegated worker is active; root owns current verification. DONE.
+- Earlier adversarial implementation review round two was superseded by later completed reviews. STOPPED.
+- Bot 14 exploratory runs used the current binary but are not accepted paired proof. DONE.
+- Implemented create-only `nuubot-bt-sweep`; Server and CLI remain placeholders. DONE.
+- Generated full immutable configs from templates: Sweep 11 Bot 15 Recon1; Sweep 12 Bot 16 Recon2. DONE.
+- Paired 1x exact parity passed: zero Trade, Order, Fill, finance, equity, or drawdown differences. DONE.
+- Recon1 measured 76,640 ms, 108,227.624 MB allocation, and 750 GCs. DONE.
+- Recon2 measured 88,193 ms, 146,026.709 MB allocation, and 1,092 GCs. DONE.
+- Recon1 improved BtBot time 13.1%, allocation 25.9%, and GC count 31.3%. DONE.
+- Added cumulative Recon calls, clean skips, executions, successes, and failures. DONE.
+- Added one indexed JSON `telemetry_event` table tagged by kind, frequency, owner, and parent. DONE.
+- Persist Bot, BotCycle, Executor, Account, Ledger, and Simulator end telemetry. DONE.
+- Recon1 and Recon2 each recorded 277,704 calls, 496 clean skips, 277,208 successes, and zero failures. DONE.
+- Both recorded 32d 02:59:30 inside BotCycles and 59d 21:00:29 outside BotCycles. DONE.
+- Latest Recon1 measured 77,118 ms, 108,227.373 MB allocation, and 752 GCs. DONE.
+- Latest Recon2 measured 91,058 ms, 146,026.869 MB allocation, and 1,091 GCs. DONE.
+- Profiled Recon1 at `workspace/perf/profiles/stest-s11-b15-20260726T172917Z/`. DONE.
+- Confirmed Recon consumes 42.42 cumulative CPU seconds and remains allocation-bound. DONE.
+- Confirmed open-position BBOs mark Account dirty and trigger full Recon despite unchanged execution evidence. DONE.
+- Wrote ranked analysis at `.audits/07-27-recon1-performance-audit.md`. DONE.
+- User reviewed and rejected nested domain snapshots for Recon, persistence, reporting, and terminal publication. DONE.
+- Removed nested Trade, Order, and Fill snapshots from canonical Recon1 comparison and finance traversal. DONE.
+- Canonical Recon1 now mutates Ledger-owned records directly without rollback cloning. DONE.
+- Focused Ledger, Account, and Executor tests pass after direct mutation. DONE.
+- Deleted Trade, Order, and Fill snapshot APIs and all consumers. DONE.
+- Deleted terminal Ledger graph reconstruction and publication. DONE.
+- Ledger terminal Result now contains only flat counts, cursors, and finance summary. DONE.
+- Runtime child access now follows TradeID to Orders and OrderID to Fills through owned indexes. DONE.
+- `PersistMode == none` skips Ledger, Trade, Order, Fill, and Simulator rows; terminal BtBot proof remains separate. DONE.
+- Recon2 now stores marked finance directly without snapshots. DONE.
+- Full Go test suite passes with `CGO_ENABLED=0` and `-tags noasm`. DONE.
+- Bot 15 passed exact accepted Trades, Orders, Fills, finance, equity, and drawdown after direct Recon mutation. DONE.
+- Bot 15 improved from 77,118 ms to 62,802 ms; loop improved from 71,698 ms to 57,022 ms. DONE.
+- Allocation improved from 108,227.373 MB to 64,785.435 MB; GC runs improved from 752 to 456. DONE.
+- Profiled snapshot-free Bot 15 at `workspace/perf/profiles/stest-s11-b15-20260726T184055Z/`. DONE.
+- Profiled Bot 15 passed exact Trades, Orders, Fills, finance, equity, and drawdown. DONE.
+- Snapshot-free profiled Bot 15 measured 50,906 ms BtBot, 46,733 ms loop, 46,715.107 MB allocation, and 320 GCs. DONE.
+- Original Recon1 to snapshot-free change: BtBot -34.0%, loop -34.8%, allocation -56.8%, GC -57.4%. DONE.
+- Confirmed `persist_mode = none` result contains zero Ledger, Trade, Order, Fill, or Simulator tables. DONE.
+- Updated `stest.sh` to validate summary proof under `none` and domain rows under `max`. DONE.
+- Ranked remaining bottlenecks in `.audits/07-27-recon1-remaining-performance-audit.md`. DONE.
+- Updated Recon, Account, Ledger, Trade, Order, and Performance documentation. DONE.
+- Full tests, full vet, shell syntax, diff check, and project diagnostics pass. DONE.
+- Recon frequency, local dirty classification, and future WebSocket-driven exchange-dirty detection are deferred. DONE.
+- Residual mutation-time Ledger cloning contract reviewed and direct touched-record replacement approved. DONE.
+- First Agent 1 launch was canceled by the intervening user instruction; no coder session started and no Ledger source changed. DONE.
+- Replacement Agent 1 removed whole-Ledger clones from `CreateTrade`, `AddOrders`, and `RecordSubmit`. DONE.
+- `none` performs direct mutation without persistence preparation; `max` writes touched identity, Trade, and Order rows transactionally. DONE.
+- Root reran focused ownership, touched-row persistence, and full Ledger package tests successfully. DONE.
+- Agent 2 adversarially reviewed clone removal and found no blocker. DONE.
+- Root aligned reason comments and Ledger Program Flow with direct touched-record mutation. DONE.
+- Initial full test exposed one clone-era Account fault expectation; root updated it to prove untrusted memory and durable transaction rollback separately. DONE.
+- Focused Account fault proof, full tests, full vet, formatting, shell syntax, and diff checks pass. DONE.
+- Bot 15 1x passed exact accepted domain and finance parity after clone removal. DONE.
+- Bot 15 1x measured 51,074 ms BtBot, 46,360 ms loop, 46,331.327 MB allocation, and 331 GCs. DONE.
+- First background 5x launch exited before starting and produced no attempt, log, or sentinel. DONE.
+- Root replaced it with direct canonical `./stest.sh -bot 15 -runs 5`; all five attempts passed identical results. DONE.
+- Bot 15 5x averaged 50,298.4 ms BtBot, 46,238.6 ms loop, 46,324.660 MB allocation, and 331 GCs. DONE.
+- Final Bot 15 `-pp` passed exact accepted domain and finance parity. DONE.
+- Final profile measured 49,514 ms BtBot, 45,366 ms loop, 46,354.773 MB allocation, and 318 GCs. DONE.
+- Final profile is `workspace/perf/profiles/stest-s11-b15-20260727T033944Z/`. DONE.
+- `cloneTrades` has zero samples in the canonical Bot 15 profile. DONE.
+- Compared with the immediate snapshot-free profile, allocation fell 375.563 MB and profiled runtime fell 1,343 ms. DONE.
+- Updated Ledger design, performance history, and remaining-performance audit. DONE.
+- Removed one stray untracked `NUL` artifact created during tooling and verified it absent. DONE.
+- Active clone-removal scope has no remaining authorized TODO. DONE.
+- Agent 1 implemented the approved three-consecutive-Recon-failure Controller barrier and focused tests. DONE.
+- Agent 2 reviewed the barrier; root rejected its pre-existing Recon2 drift finding and accepted missing Controller recovery proof. DONE.
+- Root added Controller recovery proof; focused Account, Executor, BotCycle, and Controller tests pass. DONE.
+- Root completed current profile analysis. DONE.
+- Full Go tests, full vet, formatting, and diff checks pass after the Recon barrier. DONE.
+- Bot 15 passed exact accepted domain and finance parity after the Recon failure barrier. DONE.
+- Barrier proof measured 50,260 ms BtBot, 45,514 ms loop, 46,351.126 MB allocation, and 330 GCs. DONE.
+- Result proof is `workspace/logs/nuubot5-stest-s11-b15-1-20260727T041230Z.log` and matching JSON. DONE.
+- Active three-consecutive-Recon-failure barrier scope has no remaining authorized TODO. DONE.
+- User approved performance Targets 1–5: incremental Ledger totals, split Trade refresh, incremental Simulator position, lower Order evidence allocation, and normalized Simulator matching. BELAYED IN ZED; EXTERNAL TOOL OWNS CONTINUATION.
+- Zed root, coder agents, reviewers, and orchestrators are stopped. No monitorable worker is active. DONE.
+- Planner split Targets 1–5 into six ordered chunks: Ledger totals, Trade refresh, Simulator position, Order comparison, Order representations, and Simulator matching. DONE.
+- Two Chunk 1 tool calls were canceled before returning session identities. Root initially reported no code changed without verifying the working tree; that report was wrong. DONE.
+- Current source proves one canceled worker wrote Chunk 1 changes despite returning no session identity. DONE.
+- Root inspected current Chunk 1 work and ran focused Ledger and Account tests successfully. DONE.
+- User authorized Codex to finish Chunk 1 acceptance and implement Chunks 2–5 in order. DONE.
+- Root completed delegated Chunk 1 acceptance. DONE.
+- Chunk 1 focused, full-test, full-vet, formatting, shell, and diff proof passes. DONE.
+- Bot 15 and Bot 16 preserve exact accepted domain counts and finance under partial Chunk 1. DONE.
+- First Chunk 1 repair regressed Bot 15 from 46,354.773 MB to 65,750.272 MB allocation. DONE.
+- Root rejected that repair after its profile exceeded the 180-second process limit. DONE.
+- Agent 1 made failed-phase Summary repair error-only and removed 528 B plus 18 allocations from the focused seam. DONE.
+- Corrected Chunk 1 Bot 15 passes exact parity at 53,101.770 MB, 55,346 ms, and 356 GCs. DONE.
+- Corrected profile is `workspace/perf/profiles/stest-s11-b15-20260727T052216Z/`. DONE.
+- Old `ReconSummary` traversal is absent; delta maintenance remains 6,746.997 MB above the pre-Chunk baseline. DONE.
+- Independent Chunk 1 acceptance review passed with no material finding. DONE.
+- Review accepted the intermediate regression because its remaining cost belongs to approved Chunk 2. DONE.
+- Added project `coder`: `gpt-5.6`, medium reasoning. DONE.
+- Added project `auditor`: `gpt-5.6`, medium reasoning, read-only. DONE.
+- Auditor reviews changed code only, reports major issues only, and passes immediately otherwise. DONE.
+- Do not audit Chunks 2–5 individually; run one full changed-code performance audit after Chunk 5. DONE.
+- Added project `planner`: `gpt-5.6`, high reasoning. DONE.
+- No delegated agent remains active. DONE.
+- User reloaded Codex so exact project agent profiles are active. DONE.
+- Updated `wiki/PERFORMANCE.md` with accepted Chunk 1 proof after reload. DONE.
+- Implemented and accepted Chunk 2 Trade refresh split. DONE.
+- Chunk 1 holistic review, full tests, Bot 15, Bot 16, profiling, and acceptance passed. DONE.
+- Chunk 2 passed focused, full, Bot 15, and profiled proof. DONE.
+- Chunk 3 maintains Simulator position and finance per accepted Fill. DONE.
+- Chunk 3 focused tests, full tests, vet, formatting, shell, and diff checks pass. DONE.
+- Chunk 3 Bot 15 and profiled Bot 15 preserve exact accepted domain and finance. DONE.
+- Chunk 3 profile measured 47,379 ms BtBot, 43,055 ms loop, 44,336.333 MB allocation, and 294 GCs. DONE.
+- Chunk 3 profile is `workspace/perf/profiles/stest-s11-b15-20260727T060536Z/`. DONE.
+- All six Chunk 3 profile artifacts are nonempty and readable. DONE.
+- Chunk 4A Order comparison and Fill ownership reads allocate nothing. DONE.
+- Chunk 4A focused tests, full tests, vet, formatting, shell, and diff checks pass. DONE.
+- Chunk 4A Bot 15 and profiled Bot 15 preserve exact accepted domain and finance. DONE.
+- Chunk 4A profile measured 44,039 ms BtBot, 39,910 ms loop, 41,489.475 MB allocation, and 274 GCs. DONE.
+- Chunk 4A profile is `workspace/perf/profiles/stest-s11-b15-20260727T062514Z/`. DONE.
+- All six Chunk 4A profile artifacts are nonempty and readable. DONE.
+- Chunk 4B caller-buffer and Simulator-cache work was rejected and fully reverted. DONE.
+- Canonical Recon uses bulk Venue evidence; exact missing-active Order status is exception handling. DONE.
+- User approved one `OrderStatusQueries` Recon telemetry count to measure that exception. ACTIVE.
+- Performance Target 6, telemetry retention and terminal publication, is documented and deferred. DONE.
+- Run accepted Recon1 5x after the clone-removal tuning round. DONE.
+- Fresh snapshot-free Bot 15 `-pp` repeat passed exact domain and finance proof. DONE.
+- Fresh repeat measured 50,857 ms BtBot, 46,689 ms loop, 46,730.336 MB allocation, and 320 GCs. DONE.
+- Fresh profile is `workspace/perf/profiles/stest-s11-b15-20260726T184654Z/`. DONE.
+- CPU, allocation, heap, block, mutex, scheduler, synchronization, and syscall evidence is readable. DONE.
+- Recon remains dominant at 26.27 CPU seconds and 30.83 GB cumulative allocation. DONE.
+- SQLite statement delay was about 0.27 seconds; database waiting is not the bottleneck. DONE.
+- Residual `cloneTrades` costs 253.57 MB outside Recon1 through mutation candidate staging. DONE.
+- Refreshed `.audits/07-27-recon1-remaining-performance-audit.md` and `wiki/PERFORMANCE.md`. DONE.
+
+## Performance Implementation Contract
+
+Codex owns authorized Chunks 2–5 continuation.
+
+Recon2 and Bot 16 are retired. Do not run Bot 16.
+
+Each remaining chunk runs one Bot 15 proof and one Bot 15 profiled proof.
+Do not run 5x stability.
+
+### Accepted Chunk 1
+
+Confirmed current source contains:
+
+```text
+Ledger.summary cached state
+Init and reload Summary rebuild
+CreateTrade Summary insertion delta
+AddOrders before-and-after Summary delta
+RecordSubmit touched-Trade Summary deltas
+ReconAttempt original Trade summaries
+UpdateReconTrades Summary replacement deltas
+ReconSummary and Summary cached reads
+complete-traversal Summary test oracle
+zero-allocation Summary read tests
+```
+
+Focused proof passed:
+
+```text
+CGO_ENABLED=0 go test -count=1 -tags noasm ./internal/ledger ./internal/account
+```
+
+Chunk 1 passed review, static proof, Bot 15, Bot 16, profiling, exact parity,
+and canonical documentation.
+
+### Approved Ordered Chunks
+
+```text
+Chunk 1  Maintain Ledger Summary totals incrementally.
+Chunk 2  Split structural Trade refresh from current-mark refresh.
+Chunk 3  Maintain Simulator position, entry, realized PnL, and fees incrementally.
+Chunk 4A Make Order comparison state allocation-free.
+Chunk 4B Dropped: caller buffers and Simulator public-output caching violate the Venue boundary.
+Chunk 5  Normalize exact Simulator matching keys without rounding.
+```
+
+#### Chunk 2
+
+- Preserve every scheduled Venue poll and current request order.
+- Structural refresh only Trades touched by changed Order or Fill evidence.
+- Mark refresh only open Trades using stored exposure.
+- Closed Trades remain static.
+- Preserve delayed-fee completion, cursor, generation, and Snapshot behavior.
+- Prove Bot 15 parity, then profile against accepted Chunk 1.
+
+#### Chunk 3
+
+- Maintain Simulator signed size, entry price, realized PnL, and fees when Fills are accepted.
+- Use maintained position for AccountState and reduce-only quantity.
+- Rebuild and validate once from persisted Fills during reload.
+- Preserve Fill sequence, StartPosition, ClosedPnL, Direction, JSON, schema, and persistence behavior.
+- Prove Bot 15 parity, then profile against accepted Chunk 2.
+
+#### Chunk 4A
+
+- Add scalar allocation-free Order comparison state.
+- Remove `Order.copyInput` and repeated decimal equality work from canonical Recon comparison.
+- Preserve duplicate idempotency, fee enrichment, zero fees, negative rebates, and terminal transitions.
+- Prove Bot 15 parity, then profile against accepted Chunk 3.
+
+#### Chunk 4B
+
+- Dropped without replacement.
+- Current bulk Venue polling and detached outputs remain canonical.
+- Exact missing-active status checks remain exceptional and gain one telemetry count.
+- Account scratch, callbacks, maps, caches, storage, and domain objects never cross into Venue.
+- Target 4 is partially complete through accepted Chunk 4A.
+
+#### Chunk 5
+
+- Build private exact comparison-only price keys once for Orders and once per BBO.
+- Canonicalize coefficient and base-ten exponent without rounding.
+- Comparison sign must equal `decimal.Decimal.Cmp` for all positive values.
+- Preserve original Decimal values, Fill prices, fees, persistence text, outputs, IOC rules, and matching order.
+- Add deterministic matrix, threshold-boundary, and fuzz parity tests.
+- Prove Bot 15 parity, then run one final profile.
+
+### Mandatory Boundaries
+
+```text
+ALWAYS use CGO_ENABLED=0 and -tags noasm.
+Do not change scheduled Recon frequency or Venue request sequence.
+Do not add WebSocket dirty shortcuts.
+Do not change the three-failure Controller barrier.
+Do not change persistence modes or database schemas.
+Do not change public finance equations.
+Do not optimize telemetry, RunReport, ResultPublisher, or terminal publication.
+Do not add dependencies, CGO, unsafe, assembly, or runtime internals.
+Do not commit or push without fresh explicit user authority.
+Update HANDOFF.md after every accepted chunk.
+```
+
+### Target 6 Deferred
+
+Do not implement during Targets 1–5:
+
+```text
+BtBot telemetry        1.61 GB cumulative allocation
+Result publication     1.67 GB cumulative allocation
+Result publication     3.60 s CPU
+```
+
+Canonical owner: `wiki/PERFORMANCE.md`.
+
+### Exact Acceptance Baseline
+
+```text
+Trades                 1,982
+Orders                 4,697
+Fills                  2,636
+Gross PnL              -15.13202
+Fees                   42.28805409
+Net PnL                -57.420074089999999993851
+Ending equity          942.579925910000000006149
+Maximum drawdown       75.791979199999999992245
+Recon calls            277,704
+Recon clean skips      496
+Recon successes        277,208
+Recon failures         0
+```
+
+Performance baseline before partial Chunk 1:
+
+```text
+BtBot                  49,514 ms
+Historical loop       45,366 ms
+Total allocation      46,354.773 MB
+GC runs                318
+Profile                workspace/perf/profiles/stest-s11-b15-20260727T033944Z/
+```
+
+Latest normal-path barrier proof:
+
+```text
+Result log             workspace/logs/nuubot5-stest-s11-b15-1-20260727T041230Z.log
+Suite report           workspace/logs/nuubot5-stest-s11-b15-1-20260727T041230Z.json
+```
+
+### Final Acceptance Gate
+
+After all chunks:
+
+```text
+CGO_ENABLED=0 go test -count=1 -tags noasm ./...
+CGO_ENABLED=0 go vet -tags noasm ./...
+bash -n stest.sh
+git diff --check
+./stest.sh -bot 15
+./stest.sh -bot 15 -pp
+```
+
+Require one final adversarial review covering finance, lifecycle, reload, persistence, aliasing, exact matching, polling, deferred Target 6, and fake performance proof.
 
 ### PENDING USER APPROVAL
 
-- Review the completed canonical Recon implementation and proof.
-- Delete Recon2 after canonical Recon parity and performance are accepted.
-- Add the chief-of-staff delegation rule to `AGENTS.md`.
+- None for the active clone-removal scope.
+- Add the chief-of-staff delegation rule to `AGENTS.md`. DONE.
 - Fail stability when deterministic results differ.
 - Preserve every stability-attempt database.
 - Add one rolling replay-input checksum.
 - Compare replay proof under Go 1.26.5 and Go 1.25.12.
 - Design the deferred equity/balance snapshot issue: configurable tiered retention and rollups.
 
-## Ledger Orchestrator Restart Contract
+## Superseded Ledger Orchestrator Restart Contract
 
-- User explicitly approved the complete planning, implementation, testing, profiling, audit, and fixing workflow.
-- Do not ask for further permission inside this scope.
+Do not execute this historical contract. The `External Performance Tool Restart Contract` above replaces it.
+
+- Historical planning, implementation, testing, profiling, audit, and fixing authority applied to the older Ledger chunk plan.
 - Do not commit or push.
-- The orchestrator is not running.
-- No implementation source change was completed by the failed orchestrator launches.
-- Two orchestrator launches were canceled when new user messages arrived during startup.
-- Launch the orchestrator before doing any implementation work.
+- The old orchestrator is not running.
+- The historical plan remains below only as evidence.
 
 Cleared plan:
 

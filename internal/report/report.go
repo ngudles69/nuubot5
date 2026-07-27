@@ -7,7 +7,6 @@ import (
 	"github.com/shopspring/decimal"
 
 	"nuubot/internal/controller"
-	"nuubot/internal/order"
 	"nuubot/internal/telemetry"
 )
 
@@ -156,19 +155,11 @@ func Build(input Input) (Run, error) {
 			}
 			grossPnL = grossPnL.Add(current.Account.Snapshot.GrossPnL)
 			fees = fees.Add(current.Account.Snapshot.Fees)
-			trades += uint64(len(current.Account.Ledger.Trades))
-			for _, ownedTrade := range current.Account.Ledger.Trades {
-				orders += uint64(len(ownedTrade.Orders))
-				for _, ownedOrder := range ownedTrade.Orders {
-					fills += uint64(len(ownedOrder.Fills))
-					if ownedOrder.Status == order.Canceled {
-						cancellations++
-					}
-					if ownedOrder.Role == order.Stop {
-						stopOrders++
-					}
-				}
-			}
+			trades += uint64(current.Account.Ledger.Trades)
+			orders += uint64(current.Account.Ledger.Orders)
+			fills += uint64(current.Account.Ledger.Fills)
+			cancellations += uint64(current.Account.Ledger.Cancellations)
+			stopOrders += uint64(current.Account.Ledger.StopOrders)
 		}
 	}
 

@@ -11,7 +11,7 @@ import (
 	"nuubot/internal/account"
 	"nuubot/internal/market"
 	"nuubot/internal/meta"
-	"nuubot/internal/order"
+
 	"nuubot/internal/toolkit/logging"
 )
 
@@ -23,7 +23,7 @@ func TestTradeExecutorRunsOneBracket(t *testing.T) {
 		t.Fatal("unobserved Account telemetry was reported")
 	}
 	var err error
-	if _, _, err = actual.Reconcile(3_000, false); err != nil {
+	if _, _, _, err = actual.Reconcile(3_000, false); err != nil {
 		t.Fatalf("reconcile initial Account: %v", err)
 	}
 	if actual.Telemetry().Account == nil {
@@ -33,7 +33,7 @@ func TestTradeExecutorRunsOneBracket(t *testing.T) {
 		t.Fatalf("submit bracket: %v", err)
 	}
 	var entrySnapshot account.Snapshot
-	entrySnapshot, _, err = actual.Reconcile(3_000, false)
+	entrySnapshot, _, _, err = actual.Reconcile(3_000, false)
 	if err != nil {
 		t.Fatalf("reconcile entry: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestTradeExecutorRunsOneBracket(t *testing.T) {
 		t.Fatalf("ingest take-profit BBO: %v", err)
 	}
 	actual.OnBBO(takeProfit)
-	if _, _, err = actual.Reconcile(4_000, false); err != nil {
+	if _, _, _, err = actual.Reconcile(4_000, false); err != nil {
 		t.Fatalf("reconcile take-profit: %v", err)
 	}
 	if err = actual.OnRecon(4_000); err != nil {
@@ -63,11 +63,8 @@ func TestTradeExecutorRunsOneBracket(t *testing.T) {
 		t.Fatalf("read Executor result: %v", err)
 	}
 	var result = *executorResult.Account
-	if len(result.Ledger.Trades) != 1 ||
-		len(result.Ledger.Trades[0].Orders) != 3 ||
-		result.Ledger.Trades[0].Status != "closed" ||
-		result.Ledger.Trades[0].Orders[0].Role != order.Entry ||
-		len(result.Simulator.Fills) != 2 {
+	if result.Ledger.Trades != 1 || result.Ledger.Orders != 3 ||
+		result.Ledger.Summary.OpenTrades != 0 || result.Ledger.Fills != 2 {
 		t.Fatalf("unexpected TradeExecutor result: %+v", result)
 	}
 }
@@ -75,13 +72,13 @@ func TestTradeExecutorRunsOneBracket(t *testing.T) {
 func TestTradeExecutorStopClosesOpenPosition(t *testing.T) {
 	var actual = newTradeExecutor(t, true, 100)
 	var err error
-	if _, _, err = actual.Reconcile(3_000, false); err != nil {
+	if _, _, _, err = actual.Reconcile(3_000, false); err != nil {
 		t.Fatalf("reconcile initial Account: %v", err)
 	}
 	if err = actual.OnRecon(3_000); err != nil {
 		t.Fatalf("submit bracket: %v", err)
 	}
-	if _, _, err = actual.Reconcile(3_000, false); err != nil {
+	if _, _, _, err = actual.Reconcile(3_000, false); err != nil {
 		t.Fatalf("reconcile entry: %v", err)
 	}
 	var later = market.BBO{TimestampMS: 4_000, Price: 100}
@@ -98,8 +95,7 @@ func TestTradeExecutorStopClosesOpenPosition(t *testing.T) {
 		t.Fatalf("read Executor result: %v", err)
 	}
 	var result = *executorResult.Account
-	if len(result.Simulator.Fills) != 2 ||
-		!result.Ledger.Trades[0].OpenQuantity.IsZero() {
+	if result.Ledger.Fills != 2 || result.Ledger.Summary.OpenTrades != 0 {
 		t.Fatalf("unexpected shutdown result: %+v", result)
 	}
 }
@@ -107,13 +103,13 @@ func TestTradeExecutorStopClosesOpenPosition(t *testing.T) {
 func TestTradeExecutorStopClosesRoundedShortPosition(t *testing.T) {
 	var actual = newTradeExecutor(t, false, 104241)
 	var err error
-	if _, _, err = actual.Reconcile(3_000, false); err != nil {
+	if _, _, _, err = actual.Reconcile(3_000, false); err != nil {
 		t.Fatalf("reconcile initial Account: %v", err)
 	}
 	if err = actual.OnRecon(3_000); err != nil {
 		t.Fatalf("submit bracket: %v", err)
 	}
-	if _, _, err = actual.Reconcile(3_000, false); err != nil {
+	if _, _, _, err = actual.Reconcile(3_000, false); err != nil {
 		t.Fatalf("reconcile entry: %v", err)
 	}
 	if err = actual.OnStop("parent_stop"); err != nil {
@@ -125,8 +121,7 @@ func TestTradeExecutorStopClosesRoundedShortPosition(t *testing.T) {
 		t.Fatalf("read Executor result: %v", err)
 	}
 	var result = *executorResult.Account
-	if len(result.Simulator.Fills) != 2 ||
-		!result.Ledger.Trades[0].OpenQuantity.IsZero() {
+	if result.Ledger.Fills != 2 || result.Ledger.Summary.OpenTrades != 0 {
 		t.Fatalf("unexpected rounded short shutdown result: %+v", result)
 	}
 }
@@ -139,13 +134,13 @@ func TestTradeExecutorRejectsPersistedTradeUntilRunnerRecoveryExists(t *testing.
 		t.Fatalf("create first TradeExecutor: %v", err)
 	}
 	var first = created.(*tradeExecutor)
-	if _, _, err = first.Reconcile(3_000, false); err != nil {
+	if _, _, _, err = first.Reconcile(3_000, false); err != nil {
 		t.Fatalf("reconcile first Account: %v", err)
 	}
 	if err = first.OnRecon(3_000); err != nil {
 		t.Fatalf("submit persisted bracket: %v", err)
 	}
-	if _, _, err = first.Reconcile(3_000, false); err != nil {
+	if _, _, _, err = first.Reconcile(3_000, false); err != nil {
 		t.Fatalf("reconcile persisted entry: %v", err)
 	}
 	if err = first.account.Stop(); err != nil {

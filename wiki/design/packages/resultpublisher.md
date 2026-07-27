@@ -6,15 +6,13 @@ Purpose: Atomically publish one complete successful backtest result.
 
 ## Ownership
 
-BtBot calls ResultPublisher only after replay verification and Controller
-shutdown succeed.
+BtBot calls ResultPublisher after replay verification and Controller shutdown.
 
 ResultPublisher owns the temporary database and final rename.
 
-Ledger and Simulator own detailed Account child serialization.
+It serializes immutable Controller, BotCycle, Executor, Account, Ledger, telemetry, RunReport, and replay results.
 
-ResultPublisher owns Controller, BotCycle, Executor, Signal, Risk, telemetry,
-RunReport, and replay serialization.
+It never owns or queries Simulator.
 
 ## Output
 
@@ -27,28 +25,29 @@ The per-Bot database contains:
 - `signal_decision`;
 - `risk_decision`;
 - `telemetry_sample`;
-- `run_report`;
-- Account Ledger, Trade, Order, and Fill tables; and
-- Simulator state.
+- `run_report`; and
+- reconciled Account Ledger, Trade, Order, and Fill tables.
 
-`backtest_result` preserves the exact admitted BotConfig TOML and hash.
+`backtest_result` preserves admitted BotConfig TOML and hash.
 
-`grid_level_result` preserves calculated economics, current Trade identity, submission state, and final Level state.
+`grid_level_result` preserves calculated economics and final Level state.
+
+Simulator private Orders, Fills, indexes, counters, and persistence payload are excluded.
 
 ## Atomic Flow
 
 ```text
 remove stale .partial
-publish every terminal Account child
+publish immutable reconciled results
 publish Controller, replay, telemetry, and RunReport
-commit every summary transaction
+commit every transaction
 rename .partial to final .db
 ```
 
-Maximum-mode children are re-materialized from terminal immutable results.
+Maximum-mode Accounts publish the same reconciled Ledger result shape.
 
-The final rename never replaces durable children with a summary-only database.
+ResultPublisher does not copy Simulator durable state into terminal results.
 
 Failure removes `.partial` and never publishes completed evidence.
 
-Foreign-key and integrity checks belong to the TradeBot harness.
+Foreign-key and integrity checks belong to the backtest harness.

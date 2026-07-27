@@ -35,6 +35,7 @@ type Bot struct {
 type Expansion struct {
 	SourcePath   string
 	TemplatePath string
+	Doc          string
 	BotSpecID    string
 	Symbol       string
 	TicksPath    string
@@ -108,6 +109,7 @@ var gridParameterPaths = map[string]bool{
 	"executors.network":               true,
 	"executors.persist_mode":          true,
 	"executors.physical_account_id":   true,
+	"executors.recon":                 true,
 	"executors.range_pct":             true,
 	"executors.role":                  true,
 	"executors.side":                  true,
@@ -145,6 +147,7 @@ func Load(path string) (Expansion, error) {
 	if err != nil {
 		return result, fmt.Errorf("load sweep template %s: %w", result.SourcePath, err)
 	}
+	result.Doc = strings.TrimSpace(raw.Sweep.Doc)
 	result.Symbol = raw.Sweep.Symbol
 	result.TicksPath = resolveSourcePath(result.SourcePath, raw.Sweep.Ticks)
 

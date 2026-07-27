@@ -1,0 +1,32 @@
+bot_spec = "macross_grid_bot"
+
+[controller]
+  max_cycles = 999
+
+[[executors]]
+  capital_usdc = "1000"
+  fee_pct = "0.05"
+  id = "grid"
+  kind = "grid"
+  levels = 30
+  min_expected_pnl_usdc = "0"
+  network = "simnet"
+  persist_mode = "none"
+  physical_account_id = "sbacktest"
+  range_pct = "0.05"
+  recon = "recon"
+  role = "grid"
+  side = "long"
+  slippage_pct = "0"
+  symbol = "BTC"
+  venue = "simulator"
+
+[[risks]]
+  kind = "balanced"
+
+[signaler]
+  fast_ma = 9
+  regime_ema = 200
+  regime_timeframe = "4h"
+  signal_timeframe = "1h"
+  slow_ma = 21

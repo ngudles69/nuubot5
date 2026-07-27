@@ -99,7 +99,11 @@ For each viewer in order:
 2. send `Enter`;
 3. return focus to control;
 4. wait until the Codex composer is ready;
-5. send:
+5. send the prompt through direct targeted `send-keys`;
+6. keep the sent prompt on one physical line; visual wrapping is valid;
+7. never use `set-buffer` or `paste-buffer`; PSMux may paste into the active
+   control pane despite an explicit viewer target;
+8. send:
 
 ```text
 For this session, you are acting as an interactive <role> agent.
@@ -126,10 +130,11 @@ PENDING USER APPROVAL
 Next: waiting for your task.
 ```
 
-6. send `Enter`;
-7. return focus to control.
+9. if Codex opens a composer suggestion, send `Escape` to dismiss it;
+10. send `Enter`;
+11. return focus to control.
 
-Wrapped prompt text is valid.
+Direct targeted `send-keys` is the proven viewer input path.
 
 ## Proof
 

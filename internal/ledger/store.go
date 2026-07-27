@@ -51,7 +51,6 @@ func (s *ledgerStore) close() error {
 // Section 2 - Domain Helpers
 
 func (s *ledgerStore) save(cfg Config, state candidate) error {
-	// ponytail: max rewrites one Ledger tree; use incremental writes only after measured pressure.
 	// stage persistence transaction
 	var transaction, err = s.db.Begin()
 	if err != nil {
@@ -60,11 +59,153 @@ func (s *ledgerStore) save(cfg Config, state candidate) error {
 	defer transaction.Rollback()
 
 	// replace complete Ledger evidence
-	var accountState = state.accountStateRaw
+	err = storeLedgerIdentity(transaction, cfg, state, "persist Ledger")
+	if err != nil {
+		return err
+	}
+	for _, table := range []string{"account_fill", "account_order", "account_trade"} {
+		_, err = transaction.Exec("DELETE FROM "+table+" WHERE ledger_id = ?", cfg.ID)
+		if err != nil {
+			return fmt.Errorf("persist Ledger: clear %s: %v", table, err)
+		}
+	}
+	var tradeIDs = sortedTradeIDs(state.trades)
+	for _, tradeID := range tradeIDs {
+		var ownedTrade = state.trades[tradeID]
+		err = storeReconTrade(transaction, cfg.ID, ownedTrade.Record())
+		if err != nil {
+			return err
+		}
+		err = ownedTrade.EachOrder(func(ownedOrder *order.Order) error {
+			var orderRecord = ownedOrder.Record()
+			var writeErr = storeReconOrder(transaction, cfg.ID, orderRecord)
+			if writeErr != nil {
+				return writeErr
+			}
+			return ownedOrder.EachFill(func(execution *fill.Fill) error {
+				return storeReconFill(transaction, cfg.ID, execution.State())
+			})
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	// commit persistence transaction
+	err = transaction.Commit()
+	if err != nil {
+		return fmt.Errorf("persist Ledger: commit transaction: %v", err)
+	}
+	return nil
+}
+
+func (s *ledgerStore) saveMutation(
+	cfg Config,
+	state candidate,
+	trades []*trade.Trade,
+	orders []*order.Order,
+) error {
+	// persist only touched rows
+	// SQLite owns database rollback; failed memory mutations recover from Venue truth.
+	var transaction, err = s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("persist Ledger mutation: begin transaction: %v", err)
+	}
+	defer transaction.Rollback()
+
+	err = storeLedgerIdentity(transaction, cfg, state, "persist Ledger mutation")
+	if err != nil {
+		return err
+	}
+	for _, owned := range trades {
+		err = storeReconTrade(transaction, cfg.ID, owned.Record())
+		if err != nil {
+			return err
+		}
+	}
+	for _, owned := range orders {
+		err = storeReconOrder(transaction, cfg.ID, owned.Record())
+		if err != nil {
+			return err
+		}
+	}
+	err = transaction.Commit()
+	if err != nil {
+		return fmt.Errorf("persist Ledger mutation: commit transaction: %v", err)
+	}
+	return nil
+}
+
+func (s *ledgerStore) saveRecon(cfg Config, attempt *ReconAttempt) error {
+	var transaction, err = s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("persist Ledger recon: begin transaction: %v", err)
+	}
+	defer transaction.Rollback()
+
+	var accountState = attempt.input.AccountStateRaw
 	if accountState == "" {
 		accountState = "{}"
 	}
 	_, err = transaction.Exec(`
+		UPDATE account_ledger
+		SET fills_through_ms = ?, last_recon_ms = ?, account_state_json = ?
+		WHERE ledger_id = ?`,
+		nullableUint(attempt.input.FillsThroughMS),
+		nullableUint(attempt.input.ObservedMS),
+		accountState,
+		cfg.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("persist Ledger recon: store cursor: %v", err)
+	}
+	var tradeIDs = sortedTradeIDs(attempt.trades)
+	for _, tradeID := range tradeIDs {
+		var ownedTrade = attempt.trades[tradeID]
+		if _, changed := attempt.touchedTrades[tradeID]; changed {
+			err = storeReconTrade(transaction, cfg.ID, ownedTrade.Record())
+			if err != nil {
+				return err
+			}
+		}
+		err = ownedTrade.EachOrder(func(ownedOrder *order.Order) error {
+			var orderRecord = ownedOrder.Record()
+			if _, changed := attempt.touchedOrders[orderRecord.OrderID]; changed {
+				var writeErr = storeReconOrder(transaction, cfg.ID, orderRecord)
+				if writeErr != nil {
+					return writeErr
+				}
+			}
+			return ownedOrder.EachFill(func(execution *fill.Fill) error {
+				var fillRecord = execution.State()
+				if _, changed := attempt.touchedFills[fillRecord.VenueTID]; changed {
+					return storeReconFill(transaction, cfg.ID, fillRecord)
+				}
+				return nil
+			})
+		})
+		if err != nil {
+			return err
+		}
+	}
+	err = transaction.Commit()
+	if err != nil {
+		return fmt.Errorf("persist Ledger recon: commit transaction: %v", err)
+	}
+	return nil
+}
+
+func storeLedgerIdentity(
+	transaction *sql.Tx,
+	cfg Config,
+	state candidate,
+	operation string,
+) error {
+	var accountState = state.accountStateRaw
+	if accountState == "" {
+		accountState = "{}"
+	}
+	var _, err = transaction.Exec(`
 		INSERT INTO account_ledger (
 			ledger_id, cycle_no, executor_no, account_name, network, symbol,
 			next_trade_id, next_trade_no, next_order_id, fills_through_ms,
@@ -96,132 +237,147 @@ func (s *ledgerStore) save(cfg Config, state candidate) error {
 		accountState,
 	)
 	if err != nil {
-		return fmt.Errorf("persist Ledger: store identity: %v", err)
+		return fmt.Errorf("%s: store identity: %v", operation, err)
 	}
-	for _, table := range []string{"account_fill", "account_order", "account_trade"} {
-		_, err = transaction.Exec("DELETE FROM "+table+" WHERE ledger_id = ?", cfg.ID)
-		if err != nil {
-			return fmt.Errorf("persist Ledger: clear %s: %v", table, err)
-		}
-	}
-	var tradeIDs = sortedTradeIDs(state.trades)
-	for _, tradeID := range tradeIDs {
-		var ownedTrade = state.trades[tradeID].State()
-		_, err = transaction.Exec(`
-			INSERT INTO account_trade (
-				ledger_id, trade_id, trade_no, symbol, status, side, open_qty,
-				avg_entry_price, realized_pnl, fees, net_pnl, opened_ms,
-				closed_ms, updated_ms
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			cfg.ID,
-			ownedTrade.TradeID,
-			ownedTrade.TradeNo,
-			ownedTrade.Symbol,
-			ownedTrade.Status,
-			ownedTrade.Side,
-			ownedTrade.OpenQuantity.String(),
-			nullableDecimal(ownedTrade.AverageEntryPrice, ownedTrade.HasAveragePrice),
-			ownedTrade.RealizedPnL.String(),
-			ownedTrade.Fees.String(),
-			ownedTrade.NetPnL.String(),
-			nullableUint(ownedTrade.OpenedMS),
-			nullableUint(ownedTrade.ClosedMS),
-			ownedTrade.UpdatedMS,
-		)
-		if err != nil {
-			return fmt.Errorf("persist Ledger: store Trade %d: %v", tradeID, err)
-		}
-		for _, ownedOrder := range ownedTrade.Orders {
-			var raw = ownedOrder.Raw
-			if raw == "" {
-				raw = "{}"
-			}
-			_, err = transaction.Exec(`
-				INSERT INTO account_order (
-					ledger_id, trade_id, order_id, account_name, cycle_no,
-					batch_no, order_pos, symbol, cloid, order_role, side,
-					order_type, time_in_force, requested_qty, requested_price,
-					trigger_price, reduce_only, submitted_ms, venue_order_id,
-					status, active, reject_reason, updated_ms, last_fill_ms,
-					filled_qty, remaining_qty, avg_fill_price, fees, raw_json
-				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-				          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-				cfg.ID,
-				ownedOrder.TradeID,
-				ownedOrder.OrderID,
-				ownedOrder.Account,
-				ownedOrder.CycleNumber,
-				ownedOrder.BatchNo,
-				ownedOrder.OrderPos,
-				ownedOrder.Symbol,
-				ownedOrder.CLOID,
-				ownedOrder.Role,
-				ownedOrder.Side,
-				ownedOrder.Type,
-				ownedOrder.TimeInForce,
-				ownedOrder.RequestedQuantity.String(),
-				nullableDecimalPointer(ownedOrder.RequestedPrice),
-				nullableDecimalPointer(ownedOrder.TriggerPrice),
-				ownedOrder.ReduceOnly,
-				ownedOrder.TimestampMS,
-				nullableUint(ownedOrder.VenueOrderID),
-				ownedOrder.Status,
-				ownedOrder.Active,
-				nullableText(ownedOrder.RejectReason),
-				nullableUint(ownedOrder.UpdatedMS),
-				nullableUint(ownedOrder.LastFillMS),
-				ownedOrder.FilledQuantity.String(),
-				ownedOrder.RemainingQuantity.String(),
-				nullableDecimal(ownedOrder.AverageFillPrice, ownedOrder.HasAveragePrice),
-				ownedOrder.Fees.String(),
-				raw,
-			)
-			if err != nil {
-				return fmt.Errorf("persist Ledger: store Order %d: %v", ownedOrder.OrderID, err)
-			}
-			for _, execution := range ownedOrder.Fills {
-				var fillRaw = execution.Raw
-				if fillRaw == "" {
-					fillRaw = "{}"
-				}
-				_, err = transaction.Exec(`
-					INSERT INTO account_fill (
-						ledger_id, trade_id, order_id, venue_tid, cloid,
-						venue_order_id, account_name, cycle_no, symbol, side,
-						qty, price, event_ms, fee, liquidity, raw_json
-					) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-					cfg.ID,
-					execution.TradeID,
-					execution.OrderID,
-					execution.VenueTID,
-					execution.CLOID,
-					execution.VenueOrderID,
-					execution.Account,
-					execution.CycleNumber,
-					execution.Symbol,
-					execution.Side,
-					execution.Quantity.String(),
-					execution.Price.String(),
-					execution.TimestampMS,
-					nullableDecimal(execution.Fee, execution.HasFee),
-					nullableText(execution.Liquidity),
-					fillRaw,
-				)
-				if err != nil {
-					return fmt.Errorf(
-						"persist Ledger: store Fill %d: %v",
-						execution.VenueTID,
-						err,
-					)
-				}
-			}
-		}
-	}
+	return nil
+}
 
-	// commit persistence transaction
-	err = transaction.Commit()
+func storeReconTrade(transaction *sql.Tx, ledgerID uint64, owned trade.Record) error {
+	var _, err = transaction.Exec(`
+		INSERT INTO account_trade (
+			ledger_id, trade_id, trade_no, symbol, status, side, open_qty,
+			avg_entry_price, realized_pnl, fees, net_pnl, opened_ms,
+			closed_ms, updated_ms
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT (ledger_id, trade_id) DO UPDATE SET
+			status = excluded.status,
+			side = excluded.side,
+			open_qty = excluded.open_qty,
+			avg_entry_price = excluded.avg_entry_price,
+			realized_pnl = excluded.realized_pnl,
+			fees = excluded.fees,
+			net_pnl = excluded.net_pnl,
+			opened_ms = excluded.opened_ms,
+			closed_ms = excluded.closed_ms,
+			updated_ms = excluded.updated_ms`,
+		ledgerID,
+		owned.TradeID,
+		owned.TradeNo,
+		owned.Symbol,
+		owned.Status,
+		owned.Side,
+		owned.OpenQuantity.String(),
+		nullableDecimal(owned.AverageEntryPrice, owned.HasAveragePrice),
+		owned.RealizedPnL.String(),
+		owned.Fees.String(),
+		owned.NetPnL.String(),
+		nullableUint(owned.OpenedMS),
+		nullableUint(owned.ClosedMS),
+		owned.UpdatedMS,
+	)
 	if err != nil {
-		return fmt.Errorf("persist Ledger: commit transaction: %v", err)
+		return fmt.Errorf("persist Ledger recon: store Trade %d: %v", owned.TradeID, err)
+	}
+	return nil
+}
+
+func storeReconOrder(transaction *sql.Tx, ledgerID uint64, owned order.Record) error {
+	var raw = owned.Raw
+	if raw == "" {
+		raw = "{}"
+	}
+	var _, err = transaction.Exec(`
+		INSERT INTO account_order (
+			ledger_id, trade_id, order_id, account_name, cycle_no,
+			batch_no, order_pos, symbol, cloid, order_role, side,
+			order_type, time_in_force, requested_qty, requested_price,
+			trigger_price, reduce_only, submitted_ms, venue_order_id,
+			status, active, reject_reason, updated_ms, last_fill_ms,
+			filled_qty, remaining_qty, avg_fill_price, fees, raw_json
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+		          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT (ledger_id, order_id) DO UPDATE SET
+			venue_order_id = excluded.venue_order_id,
+			status = excluded.status,
+			active = excluded.active,
+			reject_reason = excluded.reject_reason,
+			updated_ms = excluded.updated_ms,
+			last_fill_ms = excluded.last_fill_ms,
+			filled_qty = excluded.filled_qty,
+			remaining_qty = excluded.remaining_qty,
+			avg_fill_price = excluded.avg_fill_price,
+			fees = excluded.fees,
+			raw_json = excluded.raw_json`,
+		ledgerID,
+		owned.TradeID,
+		owned.OrderID,
+		owned.Account,
+		owned.CycleNumber,
+		owned.BatchNo,
+		owned.OrderPos,
+		owned.Symbol,
+		owned.CLOID,
+		owned.Role,
+		owned.Side,
+		owned.Type,
+		owned.TimeInForce,
+		owned.RequestedQuantity.String(),
+		nullableDecimalPointer(owned.RequestedPrice),
+		nullableDecimalPointer(owned.TriggerPrice),
+		owned.ReduceOnly,
+		owned.TimestampMS,
+		nullableUint(owned.VenueOrderID),
+		owned.Status,
+		owned.Active,
+		nullableText(owned.RejectReason),
+		nullableUint(owned.UpdatedMS),
+		nullableUint(owned.LastFillMS),
+		owned.FilledQuantity.String(),
+		owned.RemainingQuantity.String(),
+		nullableDecimal(owned.AverageFillPrice, owned.HasAveragePrice),
+		owned.Fees.String(),
+		raw,
+	)
+	if err != nil {
+		return fmt.Errorf("persist Ledger recon: store Order %d: %v", owned.OrderID, err)
+	}
+	return nil
+}
+
+func storeReconFill(transaction *sql.Tx, ledgerID uint64, execution fill.Record) error {
+	var raw = execution.Raw
+	if raw == "" {
+		raw = "{}"
+	}
+	var _, err = transaction.Exec(`
+		INSERT INTO account_fill (
+			ledger_id, trade_id, order_id, venue_tid, cloid,
+			venue_order_id, account_name, cycle_no, symbol, side,
+			qty, price, event_ms, fee, liquidity, raw_json
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT (ledger_id, venue_tid) DO UPDATE SET
+			fee = excluded.fee,
+			liquidity = excluded.liquidity,
+			raw_json = excluded.raw_json`,
+		ledgerID,
+		execution.TradeID,
+		execution.OrderID,
+		execution.VenueTID,
+		execution.CLOID,
+		execution.VenueOrderID,
+		execution.Account,
+		execution.CycleNumber,
+		execution.Symbol,
+		execution.Side,
+		execution.Quantity.String(),
+		execution.Price.String(),
+		execution.TimestampMS,
+		nullableDecimal(execution.Fee, execution.HasFee),
+		nullableText(execution.Liquidity),
+		raw,
+	)
+	if err != nil {
+		return fmt.Errorf("persist Ledger recon: store Fill %d: %v", execution.VenueTID, err)
 	}
 	return nil
 }
@@ -321,7 +477,7 @@ func (s *ledgerStore) load(cfg Config) (candidate, bool, error) {
 		return candidate{}, false, err
 	}
 	for tradeID, owned := range state.trades {
-		if owned.State().Status != storedStatuses[tradeID] {
+		if owned.ReconState().Status != storedStatuses[tradeID] {
 			return candidate{}, false, fmt.Errorf("load Ledger: Trade %d status mismatch", tradeID)
 		}
 	}
@@ -482,6 +638,7 @@ func (s *ledgerStore) loadOrders(
 		if err != nil {
 			return err
 		}
+		loadedOrder.owned.RefreshRecon()
 		var ownedTrade = trades[loadedOrder.tradeID]
 		if ownedTrade == nil {
 			return fmt.Errorf(
@@ -499,7 +656,7 @@ func (s *ledgerStore) loadOrders(
 }
 
 func (s *ledgerStore) loadFills(cfg Config, owned *order.Order) error {
-	var snapshot = owned.Snapshot()
+	var record = owned.Record()
 	var rows, err = s.db.Query(`
 		SELECT venue_tid, venue_order_id, account_name, cycle_no, symbol, cloid,
 		       side, qty, price, event_ms, fee, liquidity, raw_json
@@ -507,7 +664,7 @@ func (s *ledgerStore) loadFills(cfg Config, owned *order.Order) error {
 		WHERE ledger_id = ? AND order_id = ?
 		ORDER BY event_ms, venue_tid`,
 		cfg.ID,
-		snapshot.OrderID,
+		record.OrderID,
 	)
 	if err != nil {
 		return fmt.Errorf("load Ledger: query Fills: %v", err)
@@ -538,8 +695,8 @@ func (s *ledgerStore) loadFills(cfg Config, owned *order.Order) error {
 			return fmt.Errorf("load Ledger: scan Fill: %v", err)
 		}
 		input.LedgerID = cfg.ID
-		input.TradeID = snapshot.TradeID
-		input.OrderID = snapshot.OrderID
+		input.TradeID = record.TradeID
+		input.OrderID = record.OrderID
 		input.Quantity, err = decimal.NewFromString(quantityText)
 		if err != nil {
 			return fmt.Errorf("load Ledger: invalid Fill quantity: %v", err)
@@ -705,11 +862,5 @@ CREATE TABLE IF NOT EXISTS account_fill (
 	PRIMARY KEY (ledger_id, venue_tid),
 	FOREIGN KEY (ledger_id, trade_id, order_id, cloid)
 		REFERENCES account_order (ledger_id, trade_id, order_id, cloid)
-);
-CREATE TABLE IF NOT EXISTS simulator_state (
-	ledger_id       INTEGER PRIMARY KEY REFERENCES account_ledger(ledger_id),
-	schema_version  INTEGER NOT NULL,
-	payload_json    TEXT NOT NULL,
-	updated_ms      INTEGER NOT NULL
 );
 `

@@ -3,13 +3,12 @@ package resultpublisher
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 
-	"nuubot/internal/ledger"
 	"nuubot/internal/report"
-	"nuubot/internal/simulator"
 
 	_ "modernc.org/sqlite"
 )
@@ -21,8 +20,8 @@ func Publish(path string, input report.Input, report report.Run) error {
 	if path == "" {
 		return fmt.Errorf("publish result: path is empty")
 	}
-	var result = input.Controller
-	for _, cycle := range result.Cycles {
+	var domainPersisted bool
+	for _, cycle := range input.Controller.Cycles {
 		for _, executorResult := range cycle.Executors {
 			if executorResult.Account == nil {
 				continue
@@ -31,14 +30,24 @@ func Publish(path string, input report.Input, report report.Run) error {
 			if current.ResultPath != path {
 				return fmt.Errorf("publish result: Accounts use different result paths")
 			}
+			if current.PersistMode == "max" {
+				domainPersisted = true
+			}
 		}
 	}
 
-	// prepare temporary result path
+	// prepare result directory
 	var err = os.MkdirAll(filepath.Dir(path), 0o755)
 	if err != nil {
 		return fmt.Errorf("publish result: prepare directory: %v", err)
 	}
+
+	// append terminal proof to domain persistence
+	if domainPersisted {
+		return publishResult(path, input, report)
+	}
+
+	// prepare temporary result path
 	var partial = path + ".partial"
 	err = os.Remove(partial)
 	if err != nil && !os.IsNotExist(err) {
@@ -51,27 +60,7 @@ func Publish(path string, input report.Input, report report.Run) error {
 		}
 	}()
 
-	// publish Account children
-	for _, cycle := range result.Cycles {
-		for _, executorResult := range cycle.Executors {
-			if executorResult.Account == nil {
-				continue
-			}
-			var current = *executorResult.Account
-			err = ledger.Publish(partial, current.Ledger)
-			if err != nil {
-				return fmt.Errorf("publish result: %w", err)
-			}
-			if current.Simulator != nil {
-				err = simulator.Publish(partial, *current.Simulator)
-				if err != nil {
-					return fmt.Errorf("publish result: %w", err)
-				}
-			}
-		}
-	}
-
-	// publish Controller and replay evidence
+	// publish terminal proof only
 	err = publishResult(partial, input, report)
 	if err != nil {
 		return err
@@ -217,6 +206,17 @@ func publishResult(
 		);
 		CREATE INDEX telemetry_sample_timestamp
 			ON telemetry_sample(timestamp_ms);
+		CREATE TABLE telemetry_event (
+			sequence INTEGER PRIMARY KEY,
+			timestamp_ms INTEGER NOT NULL,
+			kind TEXT NOT NULL,
+			frequency TEXT NOT NULL,
+			owner_id TEXT NOT NULL,
+			parent_id TEXT NOT NULL,
+			payload_json TEXT NOT NULL
+		);
+		CREATE INDEX telemetry_event_kind_frequency
+			ON telemetry_event(kind, frequency);
 		CREATE TABLE run_report (
 			sweep_id INTEGER NOT NULL,
 			bot_id INTEGER NOT NULL,
@@ -359,6 +359,10 @@ func publishResult(
 			}
 		}
 	}
+	err = publishTelemetryEvents(tx, input)
+	if err != nil {
+		return err
+	}
 	for index, current := range result.Signals {
 		_, err = tx.Exec(
 			`INSERT INTO signal_decision VALUES (?, ?, ?)`,
@@ -466,4 +470,131 @@ func publishResult(
 	return nil
 }
 
+func publishTelemetryEvents(transaction *sql.Tx, input report.Input) error {
+	var sequence uint64 = 1
+	var result = input.Controller
+	for _, cycle := range result.Cycles {
+		var err = insertTelemetryEvent(
+			transaction,
+			sequence,
+			cycle.EndMS,
+			"botcycle",
+			"end",
+			fmt.Sprint(cycle.CycleNumber),
+			fmt.Sprint(result.Identity.BotID),
+			map[string]any{
+				"start_ms": cycle.StartMS, "end_ms": cycle.EndMS,
+				"duration_ms": cycle.DurationMS, "recon": cycle.Recon,
+			},
+		)
+		if err != nil {
+			return err
+		}
+		sequence++
+		for _, current := range cycle.Executors {
+			err = insertTelemetryEvent(
+				transaction,
+				sequence,
+				cycle.EndMS,
+				"executor",
+				"end",
+				current.ID,
+				fmt.Sprint(cycle.CycleNumber),
+				map[string]any{
+					"status": current.Status, "exit_reason": current.ExitReason,
+					"cancellations":  current.Cancellations,
+					"closure_orders": current.ClosureOrders,
+					"retries":        current.Retries, "round_trips": current.RoundTrips,
+				},
+			)
+			if err != nil {
+				return err
+			}
+			sequence++
+			if current.Account == nil {
+				continue
+			}
+			var accountResult = *current.Account
+			err = insertTelemetryEvent(
+				transaction,
+				sequence,
+				cycle.EndMS,
+				"account",
+				"end",
+				accountResult.Name,
+				current.ID,
+				map[string]any{"snapshot": accountResult.Snapshot, "recon": accountResult.Recon},
+			)
+			if err != nil {
+				return err
+			}
+			sequence++
+			err = insertTelemetryEvent(
+				transaction,
+				sequence,
+				cycle.EndMS,
+				"ledger",
+				"end",
+				fmt.Sprint(accountResult.Ledger.ID),
+				accountResult.Name,
+				map[string]any{
+					"fills_through_ms": accountResult.Ledger.FillsThroughMS,
+					"last_recon_ms":    accountResult.Ledger.LastReconMS,
+					"trades":           accountResult.Ledger.Trades,
+				},
+			)
+			if err != nil {
+				return err
+			}
+			sequence++
+		}
+	}
+	return insertTelemetryEvent(
+		transaction,
+		sequence,
+		result.LastMS,
+		"bot",
+		"end",
+		fmt.Sprint(result.Identity.BotID),
+		fmt.Sprint(result.Identity.SweepID),
+		map[string]any{
+			"first_ms": result.FirstMS, "last_ms": result.LastMS,
+			"time_in_cycles_ms":  result.TimeInCyclesMS,
+			"time_out_cycles_ms": result.TimeOutCyclesMS,
+			"cycles":             len(result.Cycles), "recon": result.Recon,
+			"net_pnl": result.NetPnL, "bot_equity": result.BotEquity,
+		},
+	)
+}
+
 // Section 3 - Generic Helpers
+
+func insertTelemetryEvent(
+	transaction *sql.Tx,
+	sequence uint64,
+	timestampMS uint64,
+	kind string,
+	frequency string,
+	ownerID string,
+	parentID string,
+	payload any,
+) error {
+	var encoded, err = json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("publish result: encode %s telemetry: %v", kind, err)
+	}
+	_, err = transaction.Exec(
+		`INSERT INTO telemetry_event VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		sequence,
+		timestampMS,
+		kind,
+		frequency,
+		ownerID,
+		parentID,
+		string(encoded),
+	)
+	if err != nil {
+		return fmt.Errorf("publish result: insert %s telemetry: %v", kind, err)
+	}
+	return nil
+}

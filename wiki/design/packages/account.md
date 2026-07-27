@@ -24,6 +24,10 @@ Executor supplies `order_level`.
 
 Account supplies Trade, batch, purpose, and remaining CLOID identity.
 
+These values stay inside Account and Ledger.
+
+Account sends Venue only official operation fields.
+
 Persisted `order_pos` remains request position inside one batch.
 
 ## Construction
@@ -51,6 +55,8 @@ Account publishes neither child after partial initialization failure.
 
 Simulator initialization receives no private credential.
 
+It also receives no Ledger, Trade, local Order, role, or purpose identity.
+
 ## Program Flow
 
 ```text
@@ -67,7 +73,8 @@ PlaceOrders
   resolve Trade ownership
   create CLOIDs
   commit created Trade and Orders
-  submit Venue batch
+  build and submit official Venue action
+  decode detached official JSON
   terminalize known Simulator submission failure
   validate submit response
   commit submit outcomes
@@ -75,7 +82,8 @@ PlaceOrders
 
 CancelOrders
   validate owned active Orders
-  cancel Venue batch
+  build and submit official cancel action
+  decode detached official JSON
   validate cancel response
   mark Account dirty
 
@@ -84,18 +92,19 @@ IngestBBO
   mark Account dirty when Venue or open-position marks change
 
 Recon
-  claim dirty state
-  read open Venue Orders
-  read bounded Venue Fills
-  read missing active Order statuses
-  read Venue account state
-  validate complete Venue evidence
-  reconcile Ledger
-  publish Account snapshot
+  prepare attempt
+  download current Order evidence
+  download Fill history and bounded missing-fee repairs
+  download current Account state
+  update Fill records
+  update Order records
+  update Trade records
+  update Account Snapshot
+  persist and publish
+  finalize Recon outcome and return
 
 Result
   get immutable Ledger result
-  get immutable Simulator result
   return immutable Account result
 
 Stop
@@ -122,7 +131,13 @@ Account persists `created` intent before Venue I/O.
 
 Every request receives one explicit success or rejection.
 
-One known Simulator submission failure maps every local Order to `error`.
+Every Nuubot request carries one mandatory opaque official CLOID.
+
+Venue assigns OID once after accepting the request.
+
+Account binds ordered acknowledgement to the local Order.
+
+One known Venue submission failure maps every local Order to `error`.
 
 Malformed or incomplete responses leave recoverable `created` evidence.
 
@@ -134,20 +149,36 @@ Account never retries uncertain mutation outcomes automatically.
 
 Immediate Fills still enter Ledger through reconciliation.
 
+Fill history may omit CLOID while retaining Venue OID.
+
+Account enriches it from same-attempt Order evidence before Ledger Fill application.
+
+Duplicate or contradictory identity evidence fails the reconciliation attempt.
+
 HTTP mutation responses are acknowledgement evidence, not final lifecycle truth.
 
 ## Reconciliation
 
 ### Current Implementation
 
-Account queries Simulator in this order:
+Account queries Venue in this order:
 
 1. Open Orders.
-2. Fills from the inclusive Ledger cursor.
-3. Exact status for missing active local Orders.
+2. Exact status for selected active local Orders missing from the bulk response.
+3. Fills from the inclusive Ledger cursor.
 4. Transient account state.
 
-Account validates untrusted Venue shapes once.
+Every query returns fresh detached official JSON.
+
+Account validates each untrusted response through `internal/hyperliquid`.
+
+Open Order evidence resolves CLOID-first and OID-fallback.
+
+Fill evidence normally resolves OID because official Fill rows may omit CLOID.
+
+If both CLOID and OID exist, they must identify the same local Order.
+
+Exact status lookup is exception handling. Recon telemetry counts every attempted lookup.
 
 Ledger receives normalized concrete values.
 
@@ -161,6 +192,8 @@ Failed reconciliation restores dirty state. It advances no cursor or success tim
 
 Normal live reconciliation queries `openOrders`, paginated `userFillsByTime`, exact
 `orderStatus` for missing active Orders, then Account state.
+
+Exact `orderStatus` is not the normal Order download. Telemetry proves its observed frequency.
 
 Hyperliquid Fill history has no symbol filter. Responses cap at 2,000 rows, and
 `userFillsByTime` retains only the latest 10,000 Fills.
@@ -234,28 +267,35 @@ See [AccountSnapshot](../concepts/account-snapshot.md).
 
 Observed telemetry returns the latest snapshot without mutation or Venue access.
 
-## Live Failure and Publication
+## Recon Failure and Publication
 
-Future live execution retains the last published generation through one or two consecutive whole-reconciliation failures.
+Account increments its consecutive failure count exactly once for each failed Recon.
 
-Success resets the failure count. The third consecutive failure begins stoppage.
+One successful executed Recon resets the count. A valid clean skip leaves it unchanged.
 
-Sweep fails on the first error.
+Account returns the count explicitly with the Snapshot, refresh fact, and error.
 
-Account stages exact normalized deltas and validates the Ledger and Account candidate before publication.
+Account makes no Controller, BotCycle, Sweep, retry, skip, or stoppage decision.
+
+BotCycle publishes no Snapshot barrier when any capable running Executor Recon fails.
+
+Controller skips the remaining pass after failures one and two and returns an error at three.
+
+Persistence or execution failures outside Account Recon remain immediately fatal.
+
+Account validates normalized identities before Ledger mutation.
 
 Maximum persistence writes dirty rows in one SQL transaction.
 
-Memory publication follows commit and must not fail. No complete graph clone exists for rollback.
+No complete graph clone or memory rollback exists.
 
-A failed attempt may publish operational telemetry. It publishes no domain state, cursor, or successful Account observation.
+A persistence failure leaves Ledger memory untrusted and publishes no successful Account Snapshot.
 
 ## Capacity
 
-Each Runner or BtBot Account initialization reserves reusable capacity for
-1,000 Trades, 2,000 Orders, and 2,000 Fills, plus evidence buffers.
+Account and Ledger use dynamic maps and per-attempt slices.
 
-Capacity reserves containers, not domain objects. These reserves are not automatic hard limits.
+They reserve no fixed Trade, Order, Fill, or evidence-buffer capacity.
 
 ## Persistence
 
@@ -263,13 +303,13 @@ Account receives store operations only for `max`.
 
 `none` opens no database during Account execution.
 
-Account receives `persist_mode` and passes it to Ledger and Simulator.
+Account receives `persist_mode` and passes policy to Ledger and Simulator.
 
-`none` keeps both children in memory until one successful final export.
+`none` performs no Ledger, Trade, Order, Fill, or Simulator database writes.
 
 `max` persists every accepted Ledger mutation and every Simulator state change.
 
-`max` currently proves durable Ledger and Simulator child-state reload.
+`max` proves independent Ledger and Simulator state reload.
 
 Full Bot resume requires Runner, replay, Controller, Signaler, and
 TradeExecutor cursor ownership.
@@ -294,11 +334,7 @@ Before child teardown, Account creates one immutable terminal result.
 
 `account.Result` contains identity, Venue kind, `persist_mode`, and `ledger.Result`.
 
-Simulator-backed Accounts also contain one explicit optional `simulator.Result`.
-
-Live and testnet Hyperliquid Accounts leave Simulator evidence absent.
-
-They never fabricate a zero Simulator result.
+It contains no Simulator result, pointer, private record, counter, or persistence payload.
 
 Slices and maps are copied. The result aliases no mutable child state.
 
@@ -312,6 +348,7 @@ The terminal result travels upward without Account, Ledger, or Simulator pointer
 - Match Simulator Orders.
 - Mutate Order or Fill fields directly.
 - Expose raw Venue payloads to Executor.
+- Expose Simulator private state through Result.
 - Share mutable Accounts between Executors.
 - Log returned errors.
 - Persist telemetry.

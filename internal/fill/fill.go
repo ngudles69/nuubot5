@@ -40,8 +40,8 @@ type Fill struct {
 	raw       string
 }
 
-// Snapshot contains one immutable-by-contract Fill value.
-type Snapshot struct {
+// Record contains one immutable Fill value.
+type Record struct {
 	LedgerID     uint64
 	TradeID      uint64
 	OrderID      uint64
@@ -116,10 +116,9 @@ func (f *Fill) Enrich(input Input) error {
 	return nil
 }
 
-// Snapshot returns one immutable-by-contract Fill value.
-func (f *Fill) Snapshot() Snapshot {
-	// return immutable Fill values
-	return Snapshot{
+// State returns one allocation-free Fill value.
+func (f *Fill) State() Record {
+	return Record{
 		LedgerID:     f.input.LedgerID,
 		TradeID:      f.input.TradeID,
 		OrderID:      f.input.OrderID,
@@ -138,6 +137,11 @@ func (f *Fill) Snapshot() Snapshot {
 		Liquidity:    f.liquidity,
 		Raw:          f.raw,
 	}
+}
+
+// HasFee reports whether Venue fee evidence is complete.
+func (f *Fill) HasFee() bool {
+	return f.hasFee
 }
 
 // Clone returns one independently owned Fill.

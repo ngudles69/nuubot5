@@ -28,6 +28,14 @@ start or stop one BotCycle
 
 Reconciliation precedes Risk and Executor policy.
 
+A failed barrier with maximum consecutive count one or two ends that control pass.
+
+Those passes run no Risk assessment, Executor `OnRecon`, or BotCycle `Run`.
+
+A failed barrier with any count at least three returns an error and fails the Sweep.
+
+Persistence and execution failures outside Account Recon remain immediately fatal.
+
 Risk decisions are `Allow`, `BlockCycleStart`, `StopCycle`, and
 `StopController`.
 

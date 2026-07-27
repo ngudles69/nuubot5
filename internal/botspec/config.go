@@ -336,7 +336,7 @@ func admitTradeExecutor(raw tradeExecutorConfig) (executor.Spec, error) {
 		values[4].IsNegative() ||
 		values[5].IsNegative() ||
 		(raw.PersistMode != "none" && raw.PersistMode != "max") ||
-		(raw.Recon != "" && raw.Recon != "recon" && raw.Recon != "recon2") {
+		(raw.Recon != "" && raw.Recon != "recon") {
 		return executor.Spec{}, fmt.Errorf("invalid %s Trade Executor", MacrossTrade)
 	}
 	return executor.Spec{
@@ -391,7 +391,7 @@ func admitGridExecutor(raw gridExecutorConfig) (executor.Spec, error) {
 		values[3].IsNegative() ||
 		values[4].IsNegative() ||
 		(raw.PersistMode != "none" && raw.PersistMode != "max") ||
-		(raw.Recon != "" && raw.Recon != "recon" && raw.Recon != "recon2") {
+		(raw.Recon != "" && raw.Recon != "recon") {
 		return executor.Spec{}, fmt.Errorf("invalid %s Grid Executor", MacrossGrid)
 	}
 	return executor.Spec{

@@ -75,40 +75,63 @@ type VenueState struct {
 	Raw          string
 }
 
-// Snapshot contains one immutable-by-contract Order value.
-type Snapshot struct {
+// Record contains one flat Order database value.
+type Record struct {
 	Input
-	VenueOrderID      uint64
-	Status            Status
-	Active            bool
-	RejectReason      string
-	UpdatedMS         uint64
-	LastFillMS        uint64
-	FilledQuantity    decimal.Decimal
-	RemainingQuantity decimal.Decimal
-	AverageFillPrice  decimal.Decimal
-	HasAveragePrice   bool
-	Fees              decimal.Decimal
-	Raw               string
-	Fills             []fill.Snapshot
+	VenueOrderID          uint64
+	Status                Status
+	Active                bool
+	ReconciliationPending bool
+	RejectReason          string
+	UpdatedMS             uint64
+	LastFillMS            uint64
+	FilledQuantity        decimal.Decimal
+	RemainingQuantity     decimal.Decimal
+	AverageFillPrice      decimal.Decimal
+	HasAveragePrice       bool
+	Fees                  decimal.Decimal
+	Raw                   string
+	FillCount             int
+}
+
+// ReconState is the flat Order value used by reconciliation decisions.
+type ReconState = Record
+
+// ActiveState contains the fields required to reconcile or cancel an active Order.
+type ActiveState struct {
+	OrderID      uint64
+	CLOID        string
+	Role         string
+	Status       Status
+	VenueOrderID uint64
+}
+
+// Summary contains allocation-free reconciliation counts.
+type Summary struct {
+	Active                bool
+	ReconciliationPending bool
+	Fills                 int
+	PendingFills          int
 }
 
 // Order preserves one immutable request and its advancing Venue evidence.
 type Order struct {
-	input             Input
-	venueOrderID      uint64
-	status            Status
-	active            bool
-	rejectReason      string
-	updatedMS         uint64
-	lastFillMS        uint64
-	filledQuantity    decimal.Decimal
-	remainingQuantity decimal.Decimal
-	averageFillPrice  decimal.Decimal
-	hasAveragePrice   bool
-	fees              decimal.Decimal
-	raw               string
-	fills             map[uint64]*fill.Fill
+	input                 Input
+	venueOrderID          uint64
+	status                Status
+	active                bool
+	reconciliationPending bool
+	rejectReason          string
+	updatedMS             uint64
+	lastFillMS            uint64
+	filledQuantity        decimal.Decimal
+	remainingQuantity     decimal.Decimal
+	averageFillPrice      decimal.Decimal
+	hasAveragePrice       bool
+	fees                  decimal.Decimal
+	raw                   string
+	fills                 map[uint64]*fill.Fill
+	comparisonState       uint64
 }
 
 // Section 1 - Program Flow
@@ -134,22 +157,29 @@ func New(input Input) (*Order, error) {
 
 // RecordSubmit preserves one complete submission acknowledgement.
 func (o *Order) RecordSubmit(venueOrderID uint64, rejectReason string, raw string) error {
+	if o.status != Created && o.status != Submitted {
+		return fmt.Errorf("record order submit: order is already %s", o.status)
+	}
+	var changed = o.status != Submitted || o.rejectReason != rejectReason
+
 	// preserve venue identity
 	if venueOrderID != 0 {
 		if o.venueOrderID != 0 && o.venueOrderID != venueOrderID {
 			return fmt.Errorf("record order submit: changed venue order identity")
 		}
+		changed = changed || o.venueOrderID != venueOrderID
 		o.venueOrderID = venueOrderID
 	}
 
 	// record acknowledgement
-	if o.status != Created && o.status != Submitted {
-		return fmt.Errorf("record order submit: order is already %s", o.status)
-	}
 	o.status = Submitted
 	o.rejectReason = rejectReason
 	if raw != "" {
+		changed = changed || o.raw != raw
 		o.raw = raw
+	}
+	if changed {
+		o.comparisonState++
 	}
 	return nil
 }
@@ -169,24 +199,42 @@ func (o *Order) ApplyVenueState(state VenueState) error {
 	if !transitionAllowed(o.status, state.Status) {
 		return fmt.Errorf("apply order state: invalid transition %s to %s", o.status, state.Status)
 	}
+	if (state.VenueOrderID == 0 || o.venueOrderID == state.VenueOrderID) &&
+		o.status == state.Status &&
+		o.rejectReason == state.RejectReason &&
+		o.updatedMS == state.TimestampMS &&
+		(state.Raw == "" || o.raw == state.Raw) {
+		return nil
+	}
+	var changed = o.status != state.Status ||
+		o.active != !isTerminal(state.Status) ||
+		o.reconciliationPending ||
+		o.rejectReason != state.RejectReason ||
+		o.updatedMS != state.TimestampMS
 
 	// preserve Venue identity
 	if state.VenueOrderID != 0 {
 		if o.venueOrderID != 0 && o.venueOrderID != state.VenueOrderID {
 			return fmt.Errorf("apply order state: changed venue order identity")
 		}
+		changed = changed || o.venueOrderID != state.VenueOrderID
 		o.venueOrderID = state.VenueOrderID
 	}
 
 	// advance lifecycle
 	o.status = state.Status
 	o.active = !isTerminal(state.Status)
+	o.reconciliationPending = false
 	o.rejectReason = state.RejectReason
 	o.updatedMS = state.TimestampMS
 
 	// preserve raw evidence
 	if state.Raw != "" {
+		changed = changed || o.raw != state.Raw
 		o.raw = state.Raw
+	}
+	if changed {
+		o.comparisonState++
 	}
 	return nil
 }
@@ -210,6 +258,7 @@ func (o *Order) ApplyFill(input fill.Input) error {
 
 	// add or enrich Fill
 	var existing = o.fills[input.VenueTID]
+	var changed = existing == nil
 	if existing == nil {
 		var created *fill.Fill
 		var err error
@@ -223,6 +272,10 @@ func (o *Order) ApplyFill(input fill.Input) error {
 		}
 		o.fills[input.VenueTID] = created
 	} else {
+		var previous = existing.State()
+		changed = (!previous.HasFee && input.Fee != nil) ||
+			(previous.Liquidity == "" && input.Liquidity != "") ||
+			(input.Raw != "" && previous.Raw != input.Raw)
 		var err = existing.Enrich(input)
 		if err != nil {
 			return fmt.Errorf("apply order fill: %w", err)
@@ -231,32 +284,122 @@ func (o *Order) ApplyFill(input fill.Input) error {
 
 	// refresh Fill totals
 	o.refreshFills()
+	if changed {
+		o.comparisonState++
+	}
 	return nil
 }
 
-// Snapshot returns one immutable-by-contract Order value.
-func (o *Order) Snapshot() Snapshot {
-	// return immutable Order values
-	var fills = make([]fill.Snapshot, 0, len(o.fills))
+// RefreshRecon prevents Venue-filled evidence from becoming locally complete before its Fills and fees.
+func (o *Order) RefreshRecon() {
+	if o.status != Filled {
+		return
+	}
+	if len(o.fills) == 0 {
+		var changed = !o.active || !o.reconciliationPending
+		o.active = true
+		o.reconciliationPending = true
+		if changed {
+			o.comparisonState++
+		}
+		return
+	}
+	var status = o.status
+	var active = o.active
+	var pending = o.reconciliationPending
+	o.refreshFills()
+	if o.status != status || o.active != active || o.reconciliationPending != pending {
+		o.comparisonState++
+	}
+}
+
+// Record returns one flat Order database value.
+func (o *Order) Record() Record {
+	return o.ReconState()
+}
+
+// ReconState returns allocation-free Order identity and mutable state.
+func (o *Order) ReconState() ReconState {
+	return ReconState{
+		Input:                 copyInput(o.input),
+		VenueOrderID:          o.venueOrderID,
+		Status:                o.status,
+		Active:                o.active,
+		ReconciliationPending: o.reconciliationPending,
+		RejectReason:          o.rejectReason,
+		UpdatedMS:             o.updatedMS,
+		LastFillMS:            o.lastFillMS,
+		FilledQuantity:        o.filledQuantity,
+		RemainingQuantity:     o.remainingQuantity,
+		AverageFillPrice:      o.averageFillPrice,
+		HasAveragePrice:       o.hasAveragePrice,
+		Fees:                  o.fees,
+		Raw:                   o.raw,
+		FillCount:             len(o.fills),
+	}
+}
+
+// ComparisonState returns the allocation-free Order mutation revision.
+func (o *Order) ComparisonState() uint64 {
+	return o.comparisonState
+}
+
+// FillIdentity returns allocation-free ownership for one Order Fill.
+func (o *Order) FillIdentity() fill.Input {
+	return fill.Input{
+		LedgerID:     o.input.LedgerID,
+		TradeID:      o.input.TradeID,
+		OrderID:      o.input.OrderID,
+		Account:      o.input.Account,
+		CycleNumber:  o.input.CycleNumber,
+		Symbol:       o.input.Symbol,
+		CLOID:        o.input.CLOID,
+		VenueOrderID: o.venueOrderID,
+		Side:         o.input.Side,
+	}
+}
+
+// ActiveState returns focused active Order evidence.
+func (o *Order) ActiveState() ActiveState {
+	return ActiveState{
+		OrderID:      o.input.OrderID,
+		CLOID:        o.input.CLOID,
+		Role:         o.input.Role,
+		Status:       o.status,
+		VenueOrderID: o.venueOrderID,
+	}
+}
+
+// Summary returns allocation-free reconciliation counts.
+func (o *Order) Summary() Summary {
+	var result = Summary{
+		Active:                o.active,
+		ReconciliationPending: o.reconciliationPending,
+		Fills:                 len(o.fills),
+	}
 	for _, execution := range o.fills {
-		fills = append(fills, execution.Snapshot())
+		if !execution.HasFee() {
+			result.PendingFills++
+		}
 	}
-	return Snapshot{
-		Input:             copyInput(o.input),
-		VenueOrderID:      o.venueOrderID,
-		Status:            o.status,
-		Active:            o.active,
-		RejectReason:      o.rejectReason,
-		UpdatedMS:         o.updatedMS,
-		LastFillMS:        o.lastFillMS,
-		FilledQuantity:    o.filledQuantity,
-		RemainingQuantity: o.remainingQuantity,
-		AverageFillPrice:  o.averageFillPrice,
-		HasAveragePrice:   o.hasAveragePrice,
-		Fees:              o.fees,
-		Raw:               o.raw,
-		Fills:             fills,
+	return result
+}
+
+// EachFill visits every owned Fill without allocating a collection.
+func (o *Order) EachFill(visit func(*fill.Fill) error) error {
+	for _, execution := range o.fills {
+		var err = visit(execution)
+		if err != nil {
+			return err
+		}
 	}
+	return nil
+}
+
+// Fill returns one owned Fill by Venue identity.
+func (o *Order) Fill(venueTID uint64) (*fill.Fill, bool) {
+	var execution, exists = o.fills[venueTID]
+	return execution, exists
 }
 
 // Clone returns one independently owned Order.
@@ -273,19 +416,23 @@ func (o *Order) Clone() *Order {
 // Section 2 - Domain Helpers
 
 func (o *Order) refreshFills() {
+	var venueComplete = o.status == Filled
 	var quantity = decimal.Zero
 	var notional = decimal.Zero
 	var fees = decimal.Zero
+	var feesComplete = true
 	var lastMS uint64
 	for _, execution := range o.fills {
-		var snapshot = execution.Snapshot()
-		quantity = quantity.Add(snapshot.Quantity)
-		notional = notional.Add(snapshot.Quantity.Mul(snapshot.Price))
-		if snapshot.HasFee {
-			fees = fees.Add(snapshot.Fee)
+		var current = execution.State()
+		quantity = quantity.Add(current.Quantity)
+		notional = notional.Add(current.Quantity.Mul(current.Price))
+		if current.HasFee {
+			fees = fees.Add(current.Fee)
+		} else {
+			feesComplete = false
 		}
-		if snapshot.TimestampMS > lastMS {
-			lastMS = snapshot.TimestampMS
+		if current.TimestampMS > lastMS {
+			lastMS = current.TimestampMS
 		}
 	}
 	o.filledQuantity = quantity
@@ -296,12 +443,14 @@ func (o *Order) refreshFills() {
 	if o.hasAveragePrice {
 		o.averageFillPrice = notional.Div(quantity)
 	}
-	if quantity.Equal(o.input.RequestedQuantity) {
+	if quantity.Equal(o.input.RequestedQuantity) && feesComplete {
 		o.status = Filled
 		o.active = false
-	} else if quantity.IsPositive() && !isTerminal(o.status) {
+		o.reconciliationPending = false
+	} else if quantity.IsPositive() {
 		o.status = PartiallyFilled
 		o.active = true
+		o.reconciliationPending = !feesComplete || venueComplete
 	}
 }
 

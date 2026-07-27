@@ -87,19 +87,18 @@ func TestReconSelectionValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read Grid template: %v", err)
 	}
-	for _, value := range []string{"recon", "recon2"} {
-		var config = strings.Replace(string(content), `recon = "recon"`, `recon = "`+value+`"`, 1)
-		var admitted, admitErr = admit(MacrossGrid, config)
-		if admitErr != nil {
-			t.Fatalf("admit %s: %v", value, admitErr)
-		}
-		if admitted.executors[0].Recon != value {
-			t.Fatalf("admitted Recon = %q, want %q", admitted.executors[0].Recon, value)
-		}
+	var admitted, admitErr = admit(MacrossGrid, string(content))
+	if admitErr != nil {
+		t.Fatalf("admit recon: %v", admitErr)
 	}
-	var invalid = strings.Replace(string(content), `recon = "recon"`, `recon = "invalid"`, 1)
-	if err = Validate(MacrossGrid, invalid); err == nil {
-		t.Fatal("invalid reconciliation selection was accepted")
+	if admitted.executors[0].Recon != "recon" {
+		t.Fatalf("admitted Recon = %q, want recon", admitted.executors[0].Recon)
+	}
+	for _, value := range []string{"recon2", "invalid"} {
+		var invalid = strings.Replace(string(content), `recon = "recon"`, `recon = "`+value+`"`, 1)
+		if err = Validate(MacrossGrid, invalid); err == nil {
+			t.Fatalf("%s reconciliation selection was accepted", value)
+		}
 	}
 }
 

@@ -2,12 +2,14 @@ package controller
 
 import (
 	"bytes"
+	"errors"
 	"reflect"
 	"testing"
 
 	"github.com/shopspring/decimal"
 
 	"nuubot/internal/bot"
+	"nuubot/internal/botcycle"
 	"nuubot/internal/executor"
 	"nuubot/internal/market"
 	"nuubot/internal/risk"
@@ -45,7 +47,130 @@ func (r *decisionRisk) Assess(risk.Input) risk.Decision {
 
 func (*decisionRisk) Stop() {}
 
+type testCycle struct {
+	reconResults []botcycle.ReconResult
+	reconErrors  []error
+	onReconErr   error
+	runErr       error
+	reconciles   int
+	onRecons     int
+	runs         int
+}
+
+func (c *testCycle) Reconcile(uint64, bool) (botcycle.ReconResult, error) {
+	var index = c.reconciles
+	c.reconciles++
+	return c.reconResults[index], c.reconErrors[index]
+}
+
+func (c *testCycle) OnRecon(uint64) error {
+	c.onRecons++
+	return c.onReconErr
+}
+
+func (c *testCycle) Run(uint64) (bool, error) {
+	c.runs++
+	return false, c.runErr
+}
+
+func (*testCycle) Stop(string) (string, error)   { return "test", nil }
+func (*testCycle) IngestBBO(market.BBO) error    { return nil }
+func (*testCycle) OnBBO(market.BBO)              {}
+func (*testCycle) Result() botcycle.Result       { return botcycle.Result{} }
+func (*testCycle) Telemetry() botcycle.Telemetry { return botcycle.Telemetry{} }
+
 // Section 1 - Program Flow
+
+func TestControllerReconFailureBarrier(t *testing.T) {
+	var reconErr = errors.New("Account Recon failed")
+	var cycle = &testCycle{
+		reconResults: []botcycle.ReconResult{
+			{Failed: true, MaxConsecutiveFailures: 1},
+			{Failed: true, MaxConsecutiveFailures: 2},
+			{Failed: true, MaxConsecutiveFailures: 3},
+		},
+		reconErrors: []error{reconErr, reconErr, reconErr},
+	}
+	var policy = &decisionRisk{decision: risk.Allow}
+	var controller = barrierController(cycle, policy)
+	for failure := 1; failure <= 2; failure++ {
+		var stop, err = controller.Run(uint64(failure) * 1_000)
+		if err != nil || stop {
+			t.Fatalf("failure %d returned stop=%t error=%v", failure, stop, err)
+		}
+	}
+	if policy.assessments != 0 || cycle.onRecons != 0 || cycle.runs != 0 {
+		t.Fatalf(
+			"first two failures ran decisions risk=%d on_recon=%d run=%d",
+			policy.assessments,
+			cycle.onRecons,
+			cycle.runs,
+		)
+	}
+	var stop, err = controller.Run(3_000)
+	if err == nil || !errors.Is(err, reconErr) || stop {
+		t.Fatalf("third failure returned stop=%t error=%v", stop, err)
+	}
+	if policy.assessments != 0 || cycle.onRecons != 0 || cycle.runs != 0 {
+		t.Fatalf(
+			"third failure ran decisions risk=%d on_recon=%d run=%d",
+			policy.assessments,
+			cycle.onRecons,
+			cycle.runs,
+		)
+	}
+}
+
+func TestControllerResumesAfterReconRecovery(t *testing.T) {
+	var reconErr = errors.New("Account Recon failed")
+	var cycle = &testCycle{
+		reconResults: []botcycle.ReconResult{
+			{Failed: true, MaxConsecutiveFailures: 1},
+			{Failed: true, MaxConsecutiveFailures: 2},
+			{},
+		},
+		reconErrors: []error{reconErr, reconErr, nil},
+	}
+	var policy = &decisionRisk{decision: risk.Allow}
+	var controller = barrierController(cycle, policy)
+	for pass := 1; pass <= 3; pass++ {
+		var stop, err = controller.Run(uint64(pass) * 1_000)
+		if err != nil || stop {
+			t.Fatalf("pass %d returned stop=%t error=%v", pass, stop, err)
+		}
+	}
+	if policy.assessments != 1 || cycle.onRecons != 1 || cycle.runs != 1 {
+		t.Fatalf(
+			"recovered Recon did not resume decisions risk=%d on_recon=%d run=%d",
+			policy.assessments,
+			cycle.onRecons,
+			cycle.runs,
+		)
+	}
+}
+
+func TestControllerKeepsNonReconErrorsFatal(t *testing.T) {
+	var executionErr = errors.New("Executor OnRecon failed")
+	var cycle = &testCycle{
+		reconResults: []botcycle.ReconResult{{}},
+		reconErrors:  []error{nil},
+		onReconErr:   executionErr,
+	}
+	var policy = &decisionRisk{decision: risk.Allow}
+	var controller = barrierController(cycle, policy)
+	var stop, err = controller.Run(1_000)
+	if err == nil || !errors.Is(err, executionErr) || stop {
+		t.Fatalf("ordinary execution failure returned stop=%t error=%v", stop, err)
+	}
+	if policy.assessments != 1 || cycle.onRecons != 1 || cycle.runs != 0 {
+		t.Fatalf(
+			"unexpected decision calls risk=%d on_recon=%d run=%d",
+			policy.assessments,
+			cycle.onRecons,
+			cycle.runs,
+		)
+	}
+}
 
 func TestControllerReusesCurrentStartActionAfterCycleCompletes(t *testing.T) {
 	var start, err = signaler.CreatePackage(
@@ -243,5 +368,18 @@ func TestStopCycleRiskBlocksCycleStart(t *testing.T) {
 }
 
 // Section 2 - Domain Helpers
+
+func barrierController(cycle cycleControl, policy risk.Risk) Controller {
+	return Controller{
+		definition: bot.Definition{
+			Signaler: &testSignaler{},
+			Risks:    []risk.Risk{policy},
+		},
+		cycle:          cycle,
+		lastRisk:       make([]risk.Decision, 1),
+		resourceEquity: make(map[executor.Resource]decimal.Decimal),
+		started:        true,
+	}
+}
 
 // Section 3 - Generic Helpers

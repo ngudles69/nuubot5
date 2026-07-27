@@ -20,6 +20,20 @@ separate pre-action confirmation.
 
 Report current state and next action in a `READY.` response.
 
+## Windows Tooling
+
+- The workspace shell is Git Bash on Windows.
+- Run repository shell scripts directly from Git Bash, for example
+  `./stest.sh -bot 15`.
+- PowerShell is not the repository shell.
+- Use native Windows Go 1.26.5 at
+  `C:\Users\PC\.local\go1.26.5\go\bin\go.exe`.
+- Git Bash is installed at `C:\Program Files\Git\bin\bash.exe`.
+- If a command runner starts in PowerShell, invoke that exact Git Bash path.
+- Never invoke bare `bash` from PowerShell.
+- `C:\Windows\System32\bash.exe` is the WSL launcher. Never use it.
+- Never use WSL, `wsl.exe`, `wslpath`, `/mnt/*`, or WSL path translation.
+
 ## Before Action
 
 Before editing, running task commands, installing software, or taking external
@@ -66,11 +80,17 @@ Before coding:
 - After each completion, failure, or user message, the root MUST continue or delegate the next authorized `TODO` immediately.
 - Stopping is permitted only when every `TODO` is `DONE`, genuinely blocked, or moved to `PENDING USER APPROVAL`.
 - The root MUST NOT serialize independent work without a stated reason.
+- The root MUST delegate execution unless the user requests direct work or the task is genuinely trivial; the root remains accountable for scope and proof.
 - `HANDOFF.md` MUST record the active task immediately.
 - `HANDOFF.md` MUST update proof when work completes. It is not only a closeout report.
 - Verification MUST be proportional to change risk.
 - Deterministic mechanical fixes MUST close with direct proof, without another reviewer.
 - Re-audit MUST occur only when behavior, ownership, contracts, or unresolved judgment changed.
+- Every executable authorized `TODO` MUST have an active root or delegated owner; zero active work is prohibited.
+- Confirm delegated workers after 30 seconds, then report every 10 minutes as `AGENT N - task - Alive and working` or exact failure.
+- The root remains accountable when another orchestrator monitors workers.
+- Report cancellation, silence, failure, or missing identity immediately; replace the worker or resume directly.
+- Never claim unconfirmed activity; when polling is unavailable, execute directly or delegate work small enough for immediate verification.
 
 ## Prose Contract
 

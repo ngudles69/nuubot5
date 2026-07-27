@@ -363,6 +363,10 @@ All kinds use one telemetry schema. `recon_kind` tags records for filtering, cha
 
 It records attempt reason, stage, success, duration, consecutive failures, work counts, dirty identities, rows written, and unresolved state.
 
+`order_status_queries` counts exact missing-active Order status requests attempted during one Recon.
+
+It is zero when bulk open-Order evidence covers every selected active Order.
+
 Every physical Fill-history request contributes one `FillQueryTelemetry` entry.
 
 [Hyperliquid Exchange](hyperliquid/exchange.md#fee-completion-observability)

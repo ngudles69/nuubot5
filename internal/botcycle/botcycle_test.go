@@ -7,6 +7,7 @@ import (
 
 	"github.com/shopspring/decimal"
 
+	"nuubot/internal/account"
 	"nuubot/internal/executor"
 	"nuubot/internal/market"
 	"nuubot/internal/meta"
@@ -14,7 +15,61 @@ import (
 	"nuubot/internal/toolkit/logging"
 )
 
+type reconExecutor struct {
+	snapshot            account.Snapshot
+	consecutiveFailures uint64
+	reconErr            error
+	reconciles          int
+	status              executor.Status
+}
+
+func (e *reconExecutor) OnInit(executor.Context) error { return nil }
+func (e *reconExecutor) OnStop(string) error           { return nil }
+func (e *reconExecutor) Status() executor.Status       { return e.status }
+func (e *reconExecutor) ExitReason() string            { return "" }
+func (e *reconExecutor) Telemetry() executor.Telemetry { return executor.Telemetry{} }
+func (e *reconExecutor) Result() (executor.Result, error) {
+	return executor.Result{}, nil
+}
+func (e *reconExecutor) Reconcile(uint64, bool) (account.Snapshot, bool, uint64, error) {
+	e.reconciles++
+	return e.snapshot, e.reconErr == nil, e.consecutiveFailures, e.reconErr
+}
+
 // Section 1 - Program Flow
+
+func TestBotCycleReconHasNoPartialSnapshotBarrier(t *testing.T) {
+	var first = &reconExecutor{
+		consecutiveFailures: 1,
+		reconErr:            errors.New("first Recon failed"),
+		status:              executor.Running,
+	}
+	var second = &reconExecutor{
+		consecutiveFailures: 2,
+		reconErr:            errors.New("second Recon failed"),
+		status:              executor.Running,
+	}
+	var third = &reconExecutor{
+		snapshot: account.Snapshot{ExecutorNumber: 3, ObservedMS: 1_000},
+		status:   executor.Running,
+	}
+	var cycle = Control{executors: []executor.Executor{first, second, third}}
+	var result, err = cycle.Reconcile(1_000, false)
+	if err == nil {
+		t.Fatal("failed reconciliation barrier returned nil error")
+	}
+	if !result.Failed || result.MaxConsecutiveFailures != 2 || result.Snapshots != nil {
+		t.Fatalf("unexpected reconciliation barrier: %+v", result)
+	}
+	if first.reconciles != 1 || second.reconciles != 1 || third.reconciles != 1 {
+		t.Fatalf(
+			"reconcile calls first=%d second=%d third=%d, expected one each",
+			first.reconciles,
+			second.reconciles,
+			third.reconciles,
+		)
+	}
+}
 
 func TestBotCycleDispatchesObserverBBO(t *testing.T) {
 	var signal = cycleSignal(t, true)

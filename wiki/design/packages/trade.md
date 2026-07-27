@@ -43,8 +43,9 @@ Terminal Trade values never reopen.
 
 - Attach only Orders with matching Ledger, Account, cycle, symbol, and Trade identity.
 - Derive position size and average entry price.
-- Aggregate realized PnL and fees.
-- Mark open exposure from current BBO.
+- Store realized, unrealized, gross, fee, and net finance.
+- Recalculate structure only after changed Order or Fill evidence.
+- Recalculate open exposure from stored Trade state at the current mark.
 - Derive status from Fill and active Order evidence.
 - Lock final values when terminal.
 
@@ -80,12 +81,20 @@ AddOrder
 Refresh
   order Fills by event time
   calculate exposure
-  calculate PnL
+  calculate realized PnL and fees
   derive status
-  lock terminal values
+  lock fee-complete terminal values
 
-Snapshot
-  return immutable Trade values
+RefreshMark
+  leave terminal and flat Trades unchanged
+  calculate unrealized PnL from stored exposure and the current mark
+  store gross and net PnL
+
+Record
+  return one flat Trade database value
+
+EachOrder
+  visit directly owned Orders without copying them
 ```
 
 These are domain operations, not lifecycle phases.
@@ -94,7 +103,9 @@ These are domain operations, not lifecycle phases.
 
 See [Trading Schema](../concepts/trading-schema.md).
 
-SQLite stores decimal values as canonical text.
+SQLite stores one flat Trade row with decimal values as canonical text.
+
+Orders remain separate rows linked by `trade_id`. Fills remain separate rows linked by `order_id`.
 
 ## Required Proof
 

@@ -1,6 +1,6 @@
 # Hyperliquid
 
-Status: Clearinghouse-state REST slice implemented. Remaining boundary pending.
+Status: Official mutation and Recon JSON protocol implemented. Live mutation transport remains pending.
 
 Covers: `internal/hyperliquid/**`
 
@@ -69,6 +69,12 @@ internal/hyperliquid/
 
 Account uses Hyperliquid through the common Venue boundary.
 
+The current Simulator implements that boundary.
+
+Account sends official action values and receives detached JSON.
+
+`internal/hyperliquid` validates and translates each response.
+
 Meta uses the Hyperliquid information client for raw exchange metadata.
 
 The selected live transport owner uses the Hyperliquid WebSocket boundary.
@@ -89,6 +95,40 @@ Shared versus process-local WebSocket ownership remains TBD.
 - Hyperliquid errors and rate-limit evidence.
 - Mapping between Venue values and Hyperliquid payloads.
 - Protocol response types constructed by Simulator for parity proof.
+
+## Implemented Protocol
+
+`protocol.go` owns official values for:
+
+- Order requests and limit or trigger types;
+- order actions and batch grouping;
+- cancel-by-CLOID actions;
+- submit and cancel acknowledgements;
+- open Orders;
+- exact Order status; and
+- user Fills.
+
+`state.go` owns clearinghouse response validation.
+
+Every Nuubot Order carries one mandatory official CLOID.
+
+CLOID remains opaque to Hyperliquid protocol and Simulator.
+
+Venue assigns OID after accepting the request.
+
+Submit responses preserve item order and expose assigned OID.
+
+Open and exact status rows may include CLOID.
+
+Official Fill rows may omit CLOID.
+
+Account resolves those rows through OID and validates TID uniqueness.
+
+`Encode` creates fresh JSON.
+
+Strict decoders reject malformed envelopes, missing identity, and incomplete rows.
+
+Protocol types contain no Ledger, Trade, local Order, role, or purpose fields.
 
 ## Out
 

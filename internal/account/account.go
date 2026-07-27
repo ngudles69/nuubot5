@@ -9,11 +9,11 @@ import (
 
 	"nuubot/internal/cloid"
 	"nuubot/internal/fill"
+	"nuubot/internal/hyperliquid"
 	"nuubot/internal/ledger"
 	"nuubot/internal/market"
 	"nuubot/internal/meta"
 	"nuubot/internal/order"
-	"nuubot/internal/simulator"
 	"nuubot/internal/toolkit/logging"
 	"nuubot/internal/trade"
 )
@@ -73,12 +73,12 @@ type OrderSpec struct {
 // PlaceResult contains one admitted local Trade and ordered submission evidence.
 type PlaceResult struct {
 	TradeID uint64
-	Orders  []order.Snapshot
-	Submit  simulator.SubmitResponse
+	Orders  []order.Record
 }
 
 // Snapshot contains one immutable coherent post-recon Account value.
 type Snapshot struct {
+	Generation       uint64
 	CycleNumber      int
 	ExecutorNumber   int
 	Account          string
@@ -90,6 +90,7 @@ type Snapshot struct {
 	Withdrawable     decimal.Decimal
 	PositionQuantity decimal.Decimal
 	EntryPrice       decimal.Decimal
+	RealizedPnL      decimal.Decimal
 	UnrealizedPnL    decimal.Decimal
 	GrossPnL         decimal.Decimal
 	Fees             decimal.Decimal
@@ -97,14 +98,70 @@ type Snapshot struct {
 	OpenTrades       int
 	ActiveOrders     int
 	Fills            int
+	PendingOrders    int
+	PendingFills     int
 }
 
 // Result contains one immutable terminal Account result.
 type Result struct {
 	Config
-	Snapshot  Snapshot
-	Ledger    ledger.Result
-	Simulator *simulator.Result
+	Snapshot Snapshot
+	Recon    ReconStats
+	Ledger   ledger.Result
+}
+
+// ReconStats contains cumulative reconciliation outcomes.
+type ReconStats struct {
+	Calls        uint64
+	SkippedClean uint64
+	Executed     uint64
+	Succeeded    uint64
+	Failed       uint64
+}
+
+// ReconOutcome identifies one complete canonical reconciliation result.
+type ReconOutcome string
+
+const (
+	// ReconSkipped retained one trusted Snapshot without Venue work.
+	ReconSkipped ReconOutcome = "skipped"
+	// ReconSucceeded published one new trusted Snapshot generation.
+	ReconSucceeded ReconOutcome = "succeeded"
+	// ReconFailed published no decision Snapshot.
+	ReconFailed ReconOutcome = "failed"
+)
+
+// FillQueryTelemetry contains one physical Fill-history request observation.
+type FillQueryTelemetry struct {
+	Kind           string
+	StartMS        uint64
+	EndMS          uint64
+	Rows           int
+	DurationMS     int64
+	FillsAdded     int
+	FillsUnchanged int
+	FeesEnriched   int
+	PendingMatched int
+	Error          string
+}
+
+// ReconTelemetry contains one canonical reconciliation observation.
+type ReconTelemetry struct {
+	Kind                string
+	Outcome             ReconOutcome
+	Stage               string
+	ObservedMS          uint64
+	DurationMS          int64
+	ConsecutiveFailures uint64
+	Orders              int
+	OrderStatusQueries  int
+	Fills               int
+	PendingOrdersBefore int
+	PendingFillsBefore  int
+	PendingOrders       int
+	PendingFills        int
+	FillQueries         []FillQueryTelemetry
+	Error               string
 }
 
 type stats struct {
@@ -113,86 +170,37 @@ type stats struct {
 	bbosIngested uint64
 }
 
-// Account owns one Simulator and one Ledger.
+type venue interface {
+	PlaceOrders(hyperliquid.PlaceOrderAction, uint64) ([]byte, error)
+	CancelOrders(hyperliquid.CancelByCLOIDAction, uint64) ([]byte, error)
+	IngestBBO(market.BBO) (bool, error)
+	OpenOrders(string) ([]byte, error)
+	Fills(string, uint64, uint64) ([]byte, error)
+	OrderStatus(string, string) ([]byte, error)
+	AccountState(string) ([]byte, error)
+	Stop() error
+}
+
+// Account owns one Venue and one Ledger.
 type Account struct {
-	log          *logging.Logger
-	config       Config
-	ledger       ledger.Ledger
-	simulator    simulator.Simulator
-	lastBBO      market.BBO
-	lastSnapshot Snapshot
-	stats        stats
-	dirty        bool
-	hasBBO       bool
-	started      bool
-	stopped      bool
+	log            *logging.Logger
+	config         Config
+	ledger         ledger.Ledger
+	venue          venue
+	lastBBO        market.BBO
+	lastSnapshot   Snapshot
+	reconTelemetry ReconTelemetry
+	reconStats     ReconStats
+	stats          stats
+	generation     uint64
+	failureCount   uint64
+	dirty          bool
+	hasBBO         bool
+	started        bool
+	stopped        bool
 }
 
 // Section 1 - Program Flow
-
-// Init prepares one Simulator-backed Account.
-func (a *Account) Init(log *logging.Logger, cfg Config) error {
-	a.log = log
-	a.config = cfg
-
-	// validate Account identity
-	if log == nil || cfg.LedgerID == 0 || cfg.CycleNumber <= 0 ||
-		cfg.ExecutorNumber <= 0 || cfg.Name == "" || cfg.Symbol == "" {
-		return fmt.Errorf("initialize Account: complete identity is required")
-	}
-	if cfg.Venue != "simulator" || cfg.Network != "simnet" {
-		return fmt.Errorf("initialize Account: first trading tranche requires simulator simnet")
-	}
-	if cfg.Meta.Symbol != cfg.Symbol || cfg.Meta.IsDelisted || cfg.Meta.Retired {
-		return fmt.Errorf("initialize Account: symbol Meta is unavailable")
-	}
-	if !cfg.MinNotionalUSDC.IsPositive() || !cfg.EquityUSDC.IsPositive() {
-		return fmt.Errorf("initialize Account: notional floor and equity must be positive")
-	}
-
-	// validate persistence mode
-	if cfg.PersistMode != ledger.None && cfg.PersistMode != ledger.Max {
-		return fmt.Errorf("initialize Account: invalid persistence mode %q", cfg.PersistMode)
-	}
-
-	// initialize Ledger with persistence mode
-	var err = a.ledger.Init(ledger.Config{
-		ID:             cfg.LedgerID,
-		CycleNumber:    cfg.CycleNumber,
-		ExecutorNumber: cfg.ExecutorNumber,
-		Account:        cfg.Name,
-		Network:        cfg.Network,
-		Symbol:         cfg.Symbol,
-		PersistMode:    cfg.PersistMode,
-		Path:           cfg.ResultPath,
-	})
-	if err != nil {
-		return fmt.Errorf("initialize Account: %w", err)
-	}
-
-	// initialize Venue with persistence mode
-	err = a.simulator.Init(simulator.Config{
-		LedgerID:    cfg.LedgerID,
-		Name:        cfg.Name,
-		Account:     cfg.Name,
-		CycleNumber: cfg.CycleNumber,
-		Symbol:      cfg.Symbol,
-		Equity:      cfg.EquityUSDC,
-		FeePct:      cfg.FeePct,
-		SlippagePct: cfg.SlippagePct,
-		PersistMode: cfg.PersistMode,
-		Path:        cfg.ResultPath,
-	})
-	if err != nil {
-		a.ledger.Stop()
-		return fmt.Errorf("initialize Account: %w", err)
-	}
-
-	// initialize Account
-	a.dirty = true
-	a.started = true
-	return nil
-}
 
 // PlaceOrders submits one complete validated Order batch.
 func (a *Account) PlaceOrders(specs []OrderSpec) (PlaceResult, error) {
@@ -220,19 +228,15 @@ func (a *Account) PlaceOrders(specs []OrderSpec) (PlaceResult, error) {
 		tradeInput = plan.Trade
 		orderIDs = plan.OrderIDs
 	} else {
-		var current trade.Snapshot
-		current, err = a.ledger.Trade(normalized[0].TradeID, a.markPrice())
+		var current trade.ReconState
+		current, err = a.ledger.TradeState(normalized[0].TradeID)
 		if err != nil {
 			return PlaceResult{}, fmt.Errorf("place Account Orders: %w", err)
 		}
 		tradeInput = current.Input
-		for _, existing := range current.Orders {
-			if existing.BatchNo >= batchNo {
-				batchNo = existing.BatchNo + 1
-			}
-		}
-		if batchNo > 1000 {
-			return PlaceResult{}, fmt.Errorf("place Account Orders: Trade exceeded 1000 batches")
+		batchNo, err = a.ledger.NextBatchNo(normalized[0].TradeID)
+		if err != nil {
+			return PlaceResult{}, fmt.Errorf("place Account Orders: %w", err)
 		}
 		orderIDs, err = a.ledger.PlanOrders(len(normalized))
 		if err != nil {
@@ -242,7 +246,7 @@ func (a *Account) PlaceOrders(specs []OrderSpec) (PlaceResult, error) {
 
 	// create CLOIDs
 	var created = make([]*order.Order, 0, len(normalized))
-	var requests = make([]simulator.OrderRequest, 0, len(normalized))
+	var requests = make([]hyperliquid.OrderRequest, 0, len(normalized))
 	for index, spec := range normalized {
 		var value string
 		value, err = a.createCLOID(
@@ -279,21 +283,12 @@ func (a *Account) PlaceOrders(specs []OrderSpec) (PlaceResult, error) {
 			return PlaceResult{}, fmt.Errorf("place Account Orders: %w", err)
 		}
 		created = append(created, createdOrder)
-		requests = append(requests, simulator.OrderRequest{
-			CLOID:        value,
-			Symbol:       a.config.Symbol,
-			TradeID:      tradeInput.TradeID,
-			OrderID:      orderIDs[index],
-			Role:         spec.Role,
-			Side:         spec.Side,
-			Type:         spec.Type,
-			TimeInForce:  spec.TimeInForce,
-			Quantity:     spec.Quantity,
-			Price:        spec.Price,
-			TriggerPrice: spec.TriggerPrice,
-			ReduceOnly:   spec.ReduceOnly,
-			TimestampMS:  spec.TimestampMS,
-		})
+		var request hyperliquid.OrderRequest
+		request, err = a.venueOrderRequest(spec, value)
+		if err != nil {
+			return PlaceResult{}, err
+		}
+		requests = append(requests, request)
 	}
 
 	// commit created Trade and Orders
@@ -308,10 +303,14 @@ func (a *Account) PlaceOrders(specs []OrderSpec) (PlaceResult, error) {
 
 	// submit Venue batch
 	a.dirty = true
-	var response simulator.SubmitResponse
-	response, err = a.simulator.PlaceOrders(requests)
+	var payload []byte
+	payload, err = a.venue.PlaceOrders(hyperliquid.PlaceOrderAction{
+		Type:     "order",
+		Orders:   requests,
+		Grouping: venueGrouping(normalized),
+	}, normalized[0].TimestampMS)
 	if err != nil {
-		var submitErr = fmt.Errorf("place Account Orders: submit Simulator batch: %w", err)
+		var submitErr = fmt.Errorf("place Account Orders: submit Venue batch: %w", err)
 		var outcomes = make([]ledger.SubmitOutcome, len(orderIDs))
 		for index, orderID := range orderIDs {
 			outcomes[index] = ledger.SubmitOutcome{
@@ -328,24 +327,63 @@ func (a *Account) PlaceOrders(specs []OrderSpec) (PlaceResult, error) {
 	}
 
 	// validate submit response
+	var response hyperliquid.SubmitResponse
+	response, err = hyperliquid.DecodeSubmitResponse(payload)
+	if err != nil {
+		return PlaceResult{TradeID: tradeInput.TradeID}, fmt.Errorf(
+			"place Account Orders: %w",
+			err,
+		)
+	}
 	var partial = PlaceResult{
 		TradeID: tradeInput.TradeID,
-		Submit:  response,
 	}
-	if response.Status != "ok" || response.Type != "order" ||
-		len(response.Statuses) != len(created) {
-		return partial, fmt.Errorf("place Account Orders: malformed Simulator response")
+	if len(response.Statuses) != len(created) {
+		return partial, fmt.Errorf("place Account Orders: malformed Venue response")
 	}
 	var outcomes = make([]ledger.SubmitOutcome, 0, len(response.Statuses))
 	var rejected = false
 	for index, status := range response.Statuses {
+		var expectedCLOID = created[index].ReconState().CLOID
+		if status.CLOID != "" && status.CLOID != expectedCLOID {
+			return partial, fmt.Errorf(
+				"place Account Orders: response %d changed CLOID",
+				index,
+			)
+		}
+		var hasIdentity = status.CLOID == expectedCLOID || status.VenueOrderID != 0
 		switch status.Kind {
-		case "resting", "filled", simulator.WaitingForFill, simulator.WaitingForTrigger:
-			if status.VenueOrderID == 0 {
+		case "resting":
+			if !hasIdentity {
 				return partial, fmt.Errorf(
 					"place Account Orders: response %d lacks Venue identity",
 					index,
 				)
+			}
+		case "filled":
+			if !hasIdentity {
+				return partial, fmt.Errorf(
+					"place Account Orders: response %d lacks Venue identity",
+					index,
+				)
+			}
+			var total, totalErr = decimal.NewFromString(status.TotalSize)
+			var average, averageErr = decimal.NewFromString(status.AveragePrice)
+			if totalErr != nil || averageErr != nil ||
+				!total.IsPositive() || !average.IsPositive() {
+				return partial, fmt.Errorf(
+					"place Account Orders: response %d has invalid Fill",
+					index,
+				)
+			}
+			if status.Fee != nil {
+				var _, feeErr = decimal.NewFromString(*status.Fee)
+				if feeErr != nil {
+					return partial, fmt.Errorf(
+						"place Account Orders: response %d has invalid fee",
+						index,
+					)
+				}
 			}
 		case "error":
 			if status.Error == "" {
@@ -371,6 +409,7 @@ func (a *Account) PlaceOrders(specs []OrderSpec) (PlaceResult, error) {
 			OrderID:      orderIDs[index],
 			VenueOrderID: status.VenueOrderID,
 			Error:        status.Error,
+			Raw:          response.Raw,
 			Status:       terminalStatus,
 			TimestampMS:  timestampMS,
 		})
@@ -385,18 +424,17 @@ func (a *Account) PlaceOrders(specs []OrderSpec) (PlaceResult, error) {
 	// mark Account dirty
 	a.dirty = true
 	a.stats.ordersPlaced += uint64(len(created))
-	var snapshots []order.Snapshot
-	snapshots, err = a.ledger.Orders(orderIDs)
+	var records []order.Record
+	records, err = a.ledger.Orders(orderIDs)
 	if err != nil {
 		return partial, fmt.Errorf("place Account Orders: %w", err)
 	}
 	var result = PlaceResult{
 		TradeID: tradeInput.TradeID,
-		Orders:  snapshots,
-		Submit:  response,
+		Orders:  records,
 	}
 	if rejected {
-		return result, fmt.Errorf("place Account Orders: Simulator rejected one or more Orders")
+		return result, fmt.Errorf("place Account Orders: Venue rejected one or more Orders")
 	}
 	return result, nil
 }
@@ -419,15 +457,38 @@ func (a *Account) CancelOrders(cloids []string, timestampMS uint64) error {
 	}
 
 	// cancel Venue batch
-	var response, err = a.simulator.CancelOrders(cloids, timestampMS)
+	var cancels = make([]hyperliquid.CancelByCLOIDRequest, 0, len(cloids))
+	for _, value := range cloids {
+		cancels = append(cancels, hyperliquid.CancelByCLOIDRequest{
+			Asset: int(a.config.Meta.AssetID),
+			CLOID: value,
+		})
+	}
+	var payload, err = a.venue.CancelOrders(hyperliquid.CancelByCLOIDAction{
+		Type:    "cancelByCloid",
+		Cancels: cancels,
+	}, timestampMS)
 	if err != nil {
 		return fmt.Errorf("cancel Account Orders: %w", err)
 	}
 
 	// validate cancel response
-	if response.Status != "ok" || response.Type != "cancel" ||
-		len(response.Statuses) != len(cloids) {
-		return fmt.Errorf("cancel Account Orders: malformed Simulator response")
+	var response hyperliquid.CancelResponse
+	response, err = hyperliquid.DecodeCancelResponse(payload)
+	if err != nil {
+		return fmt.Errorf("cancel Account Orders: %w", err)
+	}
+	if len(response.Statuses) != len(cloids) {
+		return fmt.Errorf("cancel Account Orders: malformed Venue response")
+	}
+	for index, status := range response.Statuses {
+		if !status.Success {
+			return fmt.Errorf(
+				"cancel Account Orders: Venue rejected Order %d: %s",
+				index,
+				status.Error,
+			)
+		}
 	}
 
 	// mark Account dirty
@@ -449,7 +510,7 @@ func (a *Account) IngestBBO(bbo market.BBO) error {
 	}
 
 	// ingest Venue BBO
-	var changed, err = a.simulator.IngestBBO(bbo)
+	var changed, err = a.venue.IngestBBO(bbo)
 	if err != nil {
 		return fmt.Errorf("ingest Account BBO: %w", err)
 	}
@@ -467,20 +528,17 @@ func (a *Account) IngestBBO(bbo market.BBO) error {
 // Result returns one immutable terminal Account result.
 func (a *Account) Result() (Result, error) {
 	// get immutable Ledger result
-	var ledgerResult, err = a.ledger.Result(a.markPrice())
+	var ledgerResult, err = a.ledger.Result()
 	if err != nil {
 		return Result{}, fmt.Errorf("read Account result: %w", err)
 	}
 
-	// get immutable Simulator result
-	var simulatorResult = a.simulator.Result()
-
 	// return immutable Account result
 	return Result{
-		Config:    a.config,
-		Snapshot:  a.lastSnapshot,
-		Ledger:    ledgerResult,
-		Simulator: &simulatorResult,
+		Config:   a.config,
+		Snapshot: a.lastSnapshot,
+		Recon:    a.reconStats,
+		Ledger:   ledgerResult,
 	}, nil
 }
 
@@ -492,37 +550,26 @@ func (a *Account) Telemetry() (Snapshot, bool) {
 	return a.lastSnapshot, true
 }
 
-// Clone returns one independently owned Account result.
-func (r Result) Clone() Result {
-	var clone = r
-	clone.Ledger.Trades = make([]trade.Snapshot, len(r.Ledger.Trades))
-	for tradeIndex, ownedTrade := range r.Ledger.Trades {
-		var tradeClone = ownedTrade
-		tradeClone.Orders = make([]order.Snapshot, len(ownedTrade.Orders))
-		for orderIndex, ownedOrder := range ownedTrade.Orders {
-			var orderClone = ownedOrder
-			orderClone.Fills = append([]fill.Snapshot(nil), ownedOrder.Fills...)
-			tradeClone.Orders[orderIndex] = orderClone
-		}
-		clone.Ledger.Trades[tradeIndex] = tradeClone
-	}
-	if r.Simulator != nil {
-		var simulatorClone = *r.Simulator
-		simulatorClone.Orders = append([]simulator.OrderState(nil), r.Simulator.Orders...)
-		simulatorClone.Fills = append([]simulator.FillState(nil), r.Simulator.Fills...)
-		clone.Simulator = &simulatorClone
-	}
-	return clone
+// ReconciliationTelemetry returns the latest canonical Recon outcome.
+func (a *Account) ReconciliationTelemetry() ReconTelemetry {
+	var current = a.reconTelemetry
+	current.FillQueries = append([]FillQueryTelemetry(nil), current.FillQueries...)
+	return current
 }
 
-// Stop releases the owned Simulator and Ledger.
+// Clone returns one independently owned Account result.
+func (r Result) Clone() Result {
+	return r
+}
+
+// Stop releases the owned Venue and Ledger.
 func (a *Account) Stop() error {
 	if a.stopped {
 		return nil
 	}
 
 	// stop Venue
-	var venueErr = a.simulator.Stop()
+	var venueErr = a.venue.Stop()
 
 	// stop Ledger
 	var ledgerErr = a.ledger.Stop()
@@ -531,12 +578,17 @@ func (a *Account) Stop() error {
 	a.started = false
 	a.stopped = true
 	a.log.Info(fmt.Sprintf(
-		"account stopped cycle=%d executor=%d account=%s orders=%d reconciles=%d ingested_bbos=%d",
+		"account stopped cycle=%d executor=%d account=%s orders=%d reconciles=%d recon_calls=%d recon_skipped_clean=%d recon_executed=%d recon_succeeded=%d recon_failed=%d ingested_bbos=%d",
 		a.config.CycleNumber,
 		a.config.ExecutorNumber,
 		a.config.Name,
 		a.stats.ordersPlaced,
 		a.stats.reconciles,
+		a.reconStats.Calls,
+		a.reconStats.SkippedClean,
+		a.reconStats.Executed,
+		a.reconStats.Succeeded,
+		a.reconStats.Failed,
 		a.stats.bbosIngested,
 	))
 	return errors.Join(venueErr, ledgerErr)
@@ -545,18 +597,52 @@ func (a *Account) Stop() error {
 // Section 2 - Domain Helpers
 
 // ActiveOrders returns current active local Order snapshots.
-func (a *Account) ActiveOrders() []order.Snapshot {
+func (a *Account) ActiveOrders() []order.ActiveState {
 	return a.ledger.ActiveOrders()
 }
 
-// Trade returns one current owned Trade snapshot.
-func (a *Account) Trade(tradeID uint64) (trade.Snapshot, error) {
-	return a.ledger.Trade(tradeID, a.markPrice())
+// Trade returns focused current Trade state.
+func (a *Account) Trade(tradeID uint64) (trade.ReconState, error) {
+	return a.ledger.TradeState(tradeID)
+}
+
+// OpenTrades returns focused state for current open exposure.
+func (a *Account) OpenTrades() []trade.ReconState {
+	return a.ledger.OpenTrades()
+}
+
+// CountOrders returns the number of Orders matching role and status.
+func (a *Account) CountOrders(role string, status order.Status) uint64 {
+	return a.ledger.CountOrders(role, status)
+}
+
+// TradeOrders returns flat Order records linked by Trade identity.
+func (a *Account) TradeOrders(tradeID uint64) ([]order.Record, error) {
+	return a.ledger.TradeOrders(tradeID)
+}
+
+// Order returns one flat Order record by local identity.
+func (a *Account) Order(orderID uint64) (order.Record, error) {
+	var records, err = a.ledger.Orders([]uint64{orderID})
+	if err != nil {
+		return order.Record{}, err
+	}
+	return records[0], nil
+}
+
+// Fill returns one flat Fill record by Venue identity.
+func (a *Account) Fill(venueTID uint64) (fill.Record, bool) {
+	return a.ledger.Fill(venueTID)
 }
 
 // PositionQuantity returns the latest reconciled signed exposure.
 func (a *Account) PositionQuantity() decimal.Decimal {
 	return a.lastSnapshot.PositionQuantity
+}
+
+// HasPendingRecon reports unresolved Order or Fill evidence.
+func (a *Account) HasPendingRecon() bool {
+	return a.ledger.HasPendingRecon()
 }
 
 func (a *Account) normalizeSpecs(specs []OrderSpec) ([]OrderSpec, error) {
@@ -571,7 +657,8 @@ func (a *Account) normalizeSpecs(specs []OrderSpec) ([]OrderSpec, error) {
 		if spec.Role == order.Entry {
 			entries++
 		}
-		if spec.TradeID != tradeID || spec.Quantity.IsNegative() || spec.Quantity.IsZero() ||
+		if spec.TradeID != tradeID || spec.TimestampMS != specs[0].TimestampMS ||
+			spec.Quantity.IsNegative() || spec.Quantity.IsZero() ||
 			spec.Price == nil || !spec.Price.IsPositive() || spec.TimestampMS == 0 {
 			return nil, fmt.Errorf("place Account Orders: invalid or mixed batch")
 		}
@@ -664,64 +751,66 @@ func (a *Account) markPrice() *decimal.Decimal {
 	return &price
 }
 
-func orderEvidence(state simulator.OrderState) ledger.OrderEvidence {
-	return ledger.OrderEvidence{
-		CLOID:        state.CLOID,
-		VenueOrderID: state.VenueOrderID,
-		Status:       state.Status,
-		TimestampMS:  state.TimestampMS,
-		Raw:          state.Raw,
+func (a *Account) venueOrderRequest(
+	spec OrderSpec,
+	value string,
+) (hyperliquid.OrderRequest, error) {
+	var request = hyperliquid.OrderRequest{
+		Asset:      int(a.config.Meta.AssetID),
+		IsBuy:      spec.Side == order.Buy,
+		Price:      spec.Price.String(),
+		Size:       spec.Quantity.String(),
+		ReduceOnly: spec.ReduceOnly,
+		CLOID:      value,
 	}
+	switch spec.Type {
+	case order.Limit:
+		request.Type.Limit = &hyperliquid.LimitOrderType{
+			TimeInForce: spec.TimeInForce,
+		}
+	case order.Market:
+		request.Type.Limit = &hyperliquid.LimitOrderType{
+			TimeInForce: order.IOC,
+		}
+	case order.Trigger:
+		var tpsl string
+		switch spec.Role {
+		case order.TakeProfit:
+			tpsl = "tp"
+		case order.StopLoss:
+			tpsl = "sl"
+		default:
+			return hyperliquid.OrderRequest{}, fmt.Errorf(
+				"place Account Orders: trigger role %q is invalid",
+				spec.Role,
+			)
+		}
+		if spec.TriggerPrice == nil || !spec.TriggerPrice.IsPositive() {
+			return hyperliquid.OrderRequest{}, fmt.Errorf(
+				"place Account Orders: positive trigger price is required",
+			)
+		}
+		request.Type.Trigger = &hyperliquid.TriggerOrderType{
+			IsMarket:     false,
+			TriggerPrice: spec.TriggerPrice.String(),
+			TPSL:         tpsl,
+		}
+	default:
+		return hyperliquid.OrderRequest{}, fmt.Errorf(
+			"place Account Orders: unknown Order type %q",
+			spec.Type,
+		)
+	}
+	return request, nil
 }
 
-func accountSnapshot(
-	cfg Config,
-	nowMS uint64,
-	state simulator.AccountState,
-	result ledger.Result,
-) Snapshot {
-	var gross = decimal.Zero
-	var fees = decimal.Zero
-	var net = decimal.Zero
-	var openTrades int
-	var fills int
-	var activeOrders int
-	for _, ownedTrade := range result.Trades {
-		gross = gross.Add(ownedTrade.GrossPnL)
-		fees = fees.Add(ownedTrade.Fees)
-		net = net.Add(ownedTrade.NetPnL)
-		if ownedTrade.Status != trade.Closed &&
-			ownedTrade.Status != trade.Canceled &&
-			ownedTrade.Status != trade.Error {
-			openTrades++
-		}
-		for _, ownedOrder := range ownedTrade.Orders {
-			if ownedOrder.Active {
-				activeOrders++
-			}
-			fills += len(ownedOrder.Fills)
+func venueGrouping(specs []OrderSpec) string {
+	for _, spec := range specs {
+		if spec.Role == order.TakeProfit || spec.Role == order.StopLoss {
+			return "normalTpsl"
 		}
 	}
-	return Snapshot{
-		CycleNumber:      cfg.CycleNumber,
-		ExecutorNumber:   cfg.ExecutorNumber,
-		Account:          cfg.Name,
-		Venue:            cfg.Venue,
-		Network:          cfg.Network,
-		Symbol:           cfg.Symbol,
-		ObservedMS:       nowMS,
-		AccountValue:     state.AccountValue,
-		Withdrawable:     state.Withdrawable,
-		PositionQuantity: state.PositionSize,
-		EntryPrice:       state.EntryPrice,
-		UnrealizedPnL:    state.UnrealizedPnL,
-		GrossPnL:         gross,
-		Fees:             fees,
-		NetPnL:           net,
-		OpenTrades:       openTrades,
-		ActiveOrders:     activeOrders,
-		Fills:            fills,
-	}
+	return "na"
 }
 
 // Section 3 - Generic Helpers

@@ -26,7 +26,7 @@ func TestGridExecutorRunsAllLevelsAndFlattensAtBound(t *testing.T) {
 	if err = actual.OnStart(); err != nil {
 		t.Fatalf("start GridExecutor: %v", err)
 	}
-	if _, _, err = actual.Reconcile(3_000, false); err != nil {
+	if _, _, _, err = actual.Reconcile(3_000, false); err != nil {
 		t.Fatalf("reconcile initial Account: %v", err)
 	}
 	if err = actual.OnRecon(3_000); err != nil {
@@ -36,15 +36,19 @@ func TestGridExecutorRunsAllLevelsAndFlattensAtBound(t *testing.T) {
 	if resultErr != nil {
 		t.Fatalf("read initial Grid result: %v", resultErr)
 	}
-	if len(initial.Ledger.Trades) != 8 || countOrders(initial) != 16 {
+	if initial.Ledger.Trades != 8 || initial.Ledger.Orders != 16 {
 		t.Fatalf(
 			"actual trades=%d orders=%d, expected trades=8 orders=16",
-			len(initial.Ledger.Trades),
-			countOrders(initial),
+			initial.Ledger.Trades,
+			initial.Ledger.Orders,
 		)
 	}
-	for _, owned := range initial.Ledger.Trades {
-		for _, submitted := range owned.Orders {
+	for _, index := range actual.activeLevelIndexes() {
+		var orders, orderErr = actual.account.TradeOrders(actual.levels[index].CurrentTradeID)
+		if orderErr != nil {
+			t.Fatalf("read Grid Orders: %v", orderErr)
+		}
+		for _, submitted := range orders {
 			var identity cloid.Fields
 			identity, err = cloid.Decode(submitted.CLOID)
 			if err != nil {
@@ -70,7 +74,7 @@ func TestGridExecutorRunsAllLevelsAndFlattensAtBound(t *testing.T) {
 		t.Fatalf("ingest middle BBO: %v", err)
 	}
 	actual.OnBBO(middle)
-	var snapshot, _, reconErr = actual.Reconcile(4_000, false)
+	var snapshot, _, _, reconErr = actual.Reconcile(4_000, false)
 	if reconErr != nil {
 		t.Fatalf("reconcile middle BBO: %v", reconErr)
 	}
@@ -99,14 +103,7 @@ func TestGridExecutorRunsAllLevelsAndFlattensAtBound(t *testing.T) {
 		t.Fatalf("read GridExecutor result: %v", err)
 	}
 	var result = *executorResult.Account
-	var stopOrders int
-	for _, owned := range result.Ledger.Trades {
-		for _, submitted := range owned.Orders {
-			if submitted.Role == order.Stop {
-				stopOrders++
-			}
-		}
-	}
+	var stopOrders = result.Ledger.StopOrders
 	if !result.Snapshot.PositionQuantity.IsZero() ||
 		result.Snapshot.ActiveOrders != 0 ||
 		executorResult.ClosureOrders != 8 ||
@@ -157,7 +154,7 @@ func TestShortGridSubmitsTopDown(t *testing.T) {
 	if err = actual.OnStart(); err != nil {
 		t.Fatalf("start short GridExecutor: %v", err)
 	}
-	if _, _, err = actual.Reconcile(3_000, false); err != nil {
+	if _, _, _, err = actual.Reconcile(3_000, false); err != nil {
 		t.Fatalf("reconcile short Account: %v", err)
 	}
 	if err = actual.OnRecon(3_000); err != nil {
@@ -169,9 +166,14 @@ func TestShortGridSubmitsTopDown(t *testing.T) {
 		t.Fatalf("read short Grid result: %v", err)
 	}
 	var expected = uint16(8)
-	for _, owned := range result.Ledger.Trades {
+	for tradeID := 1; tradeID <= result.Ledger.Trades; tradeID++ {
+		var orders []order.Record
+		orders, err = actual.account.TradeOrders(uint64(tradeID))
+		if err != nil {
+			t.Fatalf("read short Grid Orders: %v", err)
+		}
 		var identity cloid.Fields
-		identity, err = cloid.Decode(owned.Orders[0].CLOID)
+		identity, err = cloid.Decode(orders[0].CLOID)
 		if err != nil {
 			t.Fatalf("decode short Grid CLOID: %v", err)
 		}
@@ -195,7 +197,7 @@ func TestGridCountsBoundaryTickRoundTrips(t *testing.T) {
 	if err = actual.OnStart(); err != nil {
 		t.Fatalf("start GridExecutor: %v", err)
 	}
-	if _, _, err = actual.Reconcile(3_000, false); err != nil {
+	if _, _, _, err = actual.Reconcile(3_000, false); err != nil {
 		t.Fatalf("reconcile initial Account: %v", err)
 	}
 	if err = actual.OnRecon(3_000); err != nil {
