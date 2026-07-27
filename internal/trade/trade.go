@@ -111,14 +111,14 @@ type Trade struct {
 
 // New creates one pending Trade.
 func New(input Input) (*Trade, error) {
-	// validate Trade identity
+	// Step 1: validate Trade identity
 	if input.LedgerID == 0 || input.TradeID == 0 ||
 		input.TradeNo == 0 || input.TradeNo > 0x001fffff ||
 		input.Account == "" || input.CycleNumber <= 0 || input.Symbol == "" {
 		return nil, fmt.Errorf("create trade: complete identity is required")
 	}
 
-	// initialize pending Trade
+	// Step 2: initialize pending Trade
 	return &Trade{
 		input:   input,
 		metrics: metrics{status: Pending, side: Flat},
@@ -128,7 +128,7 @@ func New(input Input) (*Trade, error) {
 
 // AddOrder attaches one owned Order and refreshes the Trade.
 func (t *Trade) AddOrder(created *order.Order) error {
-	// validate Order ownership
+	// Step 1: validate Order ownership
 	if created == nil {
 		return fmt.Errorf("add trade order: order is required")
 	}
@@ -152,10 +152,10 @@ func (t *Trade) AddOrder(created *order.Order) error {
 		}
 	}
 
-	// attach Order
+	// Step 2: attach Order
 	t.orders[state.OrderID] = created
 
-	// refresh Trade
+	// Step 3: refresh Trade
 	var err = t.Refresh()
 	if err != nil {
 		delete(t.orders, state.OrderID)
@@ -166,10 +166,10 @@ func (t *Trade) AddOrder(created *order.Order) error {
 
 // Refresh derives Trade state and economics from owned Orders and Fills.
 func (t *Trade) Refresh() error {
-	// order Fill evidence
+	// Step 1: order Fill evidence
 	var executions, activeOrders, activeCloseOrders, pendingFills = t.executions()
 
-	// calculate exposure
+	// Step 2: calculate exposure and finance
 	var calculated, err = calculate(executions, activeOrders, activeCloseOrders, pendingFills)
 	if err != nil {
 		return fmt.Errorf("refresh trade: %w", err)
@@ -182,7 +182,7 @@ func (t *Trade) Refresh() error {
 		return fmt.Errorf("refresh trade: terminal trade values changed")
 	}
 
-	// derive status
+	// Step 3: publish derived Trade state
 	t.metrics = calculated
 	t.finalized = isTerminal(calculated.status)
 	return nil
@@ -190,7 +190,10 @@ func (t *Trade) Refresh() error {
 
 // RefreshRecon derives and stores canonical reconciliation finance at one mark.
 func (t *Trade) RefreshRecon(markPrice *decimal.Decimal) error {
+	// Step 1: order Fill evidence
 	var executions, activeOrders, activeCloseOrders, pendingFills = t.executions()
+
+	// Step 2: calculate reconciled exposure and finance
 	var calculated, err = calculate(executions, activeOrders, activeCloseOrders, pendingFills)
 	if err != nil {
 		return fmt.Errorf("refresh trade recon: %w", err)
@@ -202,6 +205,8 @@ func (t *Trade) RefreshRecon(markPrice *decimal.Decimal) error {
 	if t.finalized && !sameMetrics(calculated, t.metrics) {
 		return fmt.Errorf("refresh trade recon: terminal trade values changed")
 	}
+
+	// Step 3: publish reconciled Trade state
 	t.metrics = calculated
 	t.finalized = isTerminal(calculated.status)
 	return nil
@@ -209,9 +214,12 @@ func (t *Trade) RefreshRecon(markPrice *decimal.Decimal) error {
 
 // RefreshMark updates stored finance from existing exposure without reading Orders or Fills.
 func (t *Trade) RefreshMark(markPrice *decimal.Decimal) error {
+	// Step 1: skip terminal or flat Trade
 	if t.finalized || !t.metrics.openQuantity.IsPositive() {
 		return nil
 	}
+
+	// Step 2: publish marked Trade finance
 	var calculated, err = calculateFinance(t.metrics, markPrice)
 	if err != nil {
 		return fmt.Errorf("refresh trade recon: %w", err)
@@ -304,6 +312,8 @@ func (t *Trade) EachOrder(visit func(*order.Order) error) error {
 
 // Section 2 - Domain Helpers
 
+// Section 2.1 - Records and Executions
+
 func (t *Trade) record(
 	markPrice *decimal.Decimal,
 	requireMark bool,
@@ -377,6 +387,8 @@ func (t *Trade) executions() ([]execution, int, int, int) {
 	})
 	return executions, activeOrders, activeCloseOrders, pendingFills
 }
+
+// Section 2.2 - Trade Calculations
 
 func calculate(
 	executions []execution,

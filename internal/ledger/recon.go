@@ -24,35 +24,35 @@ type ReconAttempt struct {
 
 // Init prepares one empty or restored Ledger.
 func (l *Ledger) Init(cfg Config) error {
-	// bind Ledger inputs
+	// Step 1: bind Ledger inputs
 	var err = l.bindInputs(cfg)
 	if err != nil {
 		return err
 	}
 
-	// validate persistence mode
+	// Step 2: validate persistence mode
 	err = l.validateConfig()
 	if err != nil {
 		return err
 	}
 
-	// initialize Ledger
+	// Step 3: initialize Ledger
 	l.initializeState()
 
-	// open Ledger identity when configured
+	// Step 4: open Ledger identity when configured
 	err = l.openState()
 	if err != nil {
 		return err
 	}
 
-	// load Ledger evidence when configured
+	// Step 5: load Ledger evidence when configured
 	err = l.loadState()
 	if err != nil {
 		l.closeStore()
 		return err
 	}
 
-	// rebuild indexes and cached Summary
+	// Step 6: rebuild indexes and cached Summary
 	err = l.validateAndIndexState()
 	if err != nil {
 		l.closeStore()
@@ -64,26 +64,37 @@ func (l *Ledger) Init(cfg Config) error {
 
 // Recon atomically applies one complete normalized Venue observation.
 func (l *Ledger) Recon(input ReconInput) error {
+	// Step 1: prepare Recon attempt
 	var attempt, err = l.PrepareRecon(input)
 	if err != nil {
 		return err
 	}
+
+	// Step 2: update Fill records
 	err = l.UpdateReconFills(attempt, input.Fills)
 	if err != nil {
 		return err
 	}
+
+	// Step 3: update Order records
 	err = l.UpdateReconOrders(attempt, input.Orders)
 	if err != nil {
 		return err
 	}
+
+	// Step 4: update Trade records
 	err = l.UpdateReconTrades(attempt, nil)
 	if err != nil {
 		return err
 	}
+
+	// Step 5: commit Recon attempt
 	return l.CommitRecon(attempt)
 }
 
 // Section 2 - Domain Helpers
+
+// Section 2.1 - Initialization
 
 func (l *Ledger) bindInputs(cfg Config) error {
 	if l.started || l.stopped {
@@ -167,6 +178,8 @@ func (l *Ledger) closeStore() {
 		l.store = nil
 	}
 }
+
+// Section 2.2 - Reconciliation
 
 // PrepareRecon creates one unpublished canonical Ledger attempt.
 func (l *Ledger) PrepareRecon(input ReconInput) (*ReconAttempt, error) {

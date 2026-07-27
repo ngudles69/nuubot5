@@ -37,48 +37,53 @@ type reconAttempt struct {
 
 // Init prepares one Venue-backed Account.
 func (a *Account) Init(cfg Config) error {
-	// bind Account inputs
+	// Step 1: bind Account inputs
 	a.bindInputs(cfg)
 
-	// validate Account identity
+	// Step 2: validate Account identity
 	var err = a.validateIdentity()
 	if err != nil {
 		return err
 	}
 
-	// validate persistence mode
+	// Step 3: validate persistence mode
 	err = a.validatePersistence()
 	if err != nil {
 		return err
 	}
 
-	// initialize Ledger with persistence mode
+	// Step 4: initialize Ledger with persistence mode
 	err = a.initializeLedger()
 	if err != nil {
 		return err
 	}
 
-	// initialize Venue with persistence mode
+	// Step 5: initialize Venue with persistence mode
 	err = a.initializeVenue()
 	if err != nil {
 		a.ledger.Stop()
 		return err
 	}
 
-	// initialize Account
+	// Step 6: initialize Account
 	a.initializeAccount()
 	return nil
 }
 
 // Reconcile creates one coherent Account snapshot and reports consecutive failures.
 func (a *Account) Reconcile(nowMS uint64, forced bool) (Snapshot, bool, uint64, error) {
+	// Step 1: record reconciliation call
 	a.reconStats.Calls++
+
+	// Step 2: execute reconciliation
 	var snapshot, refreshed, err = a.reconcile(nowMS, forced)
 	if err != nil {
 		a.failureCount++
 	} else if refreshed {
 		a.failureCount = 0
 	}
+
+	// Step 3: publish reconciliation outcome
 	var telemetry = a.reconTelemetry
 	telemetry.ConsecutiveFailures = a.failureCount
 	a.reconTelemetry = telemetry
@@ -87,65 +92,67 @@ func (a *Account) Reconcile(nowMS uint64, forced bool) (Snapshot, bool, uint64, 
 }
 
 func (a *Account) reconcile(nowMS uint64, forced bool) (Snapshot, bool, error) {
-	// Step 1 - Prepare Attempt
+	// Step 1: prepare attempt
 	var attempt, skipped, err = a.prepareRecon(nowMS, forced)
 	if err != nil || skipped {
 		return a.finalizeRecon(attempt, err)
 	}
 
-	// Step 2 - Download Current Order Evidence
+	// Step 2: download current Order evidence
 	err = a.downloadOrderEvidence(attempt)
 	if err != nil {
 		return a.finalizeRecon(attempt, err)
 	}
 
-	// Step 3 - Download Fill History
+	// Step 3: download Fill history
 	err = a.downloadFillEvidence(attempt)
 	if err != nil {
 		return a.finalizeRecon(attempt, err)
 	}
 
-	// Step 4 - Download Current Account State
+	// Step 4: download current Account state
 	err = a.downloadAccountState(attempt)
 	if err != nil {
 		return a.finalizeRecon(attempt, err)
 	}
 
-	// Step 5 - Update Fill Records
+	// Step 5: update Fill records
 	err = a.updateFillRecords(attempt)
 	if err != nil {
 		return a.finalizeRecon(attempt, err)
 	}
 
-	// Step 6 - Update Order Records
+	// Step 6: update Order records
 	err = a.updateOrderRecords(attempt)
 	if err != nil {
 		return a.finalizeRecon(attempt, err)
 	}
 
-	// Step 7 - Update Trade Records
+	// Step 7: update Trade records
 	err = a.updateTradeRecords(attempt)
 	if err != nil {
 		return a.finalizeRecon(attempt, err)
 	}
 
-	// Step 8 - Update Account Snapshot
+	// Step 8: update Account Snapshot
 	err = a.updateAccountSnapshot(attempt)
 	if err != nil {
 		return a.finalizeRecon(attempt, err)
 	}
 
-	// Step 9 - Persist and Publish
+	// Step 9: persist and publish
 	err = a.persistAndPublishRecon(attempt)
 	if err != nil {
 		return a.finalizeRecon(attempt, err)
 	}
 
-	// Step 10 - Finalize Recon Outcome and Return
+	// Step 10: finalize Recon outcome and return
 	return a.finalizeRecon(attempt, nil)
 }
 
 // Section 2 - Domain Helpers
+
+// Section 2.1 - Initialization
 
 func (a *Account) recordReconOutcome(refreshed bool, err error) {
 	if err != nil {
@@ -239,6 +246,8 @@ func (a *Account) initializeAccount() {
 	a.dirty = true
 	a.started = true
 }
+
+// Section 2.2 - Reconciliation Pipeline
 
 func (a *Account) prepareRecon(nowMS uint64, forced bool) (*reconAttempt, bool, error) {
 	var attempt = &reconAttempt{
@@ -668,6 +677,8 @@ func (a *Account) finalizeRecon(
 	a.reconTelemetry = telemetry
 	return attempt.snapshot, true, nil
 }
+
+// Section 2.3 - Venue Evidence
 
 func (a *Account) orderEvidence(
 	current hyperliquid.OpenOrder,

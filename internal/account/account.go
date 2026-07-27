@@ -206,13 +206,13 @@ func (a *Account) PlaceOrders(specs []OrderSpec) (PlaceResult, error) {
 		return PlaceResult{}, fmt.Errorf("place Account Orders: invalid lifecycle state")
 	}
 
-	// validate complete order batch
+	// Step 1: validate complete Order batch
 	var normalized, err = a.normalizeSpecs(specs)
 	if err != nil {
 		return PlaceResult{}, err
 	}
 
-	// resolve Trade ownership
+	// Step 2: resolve Trade ownership
 	var newTrade = normalized[0].Role == order.Entry
 	var tradeInput trade.Input
 	var orderIDs []uint64
@@ -242,7 +242,7 @@ func (a *Account) PlaceOrders(specs []OrderSpec) (PlaceResult, error) {
 		}
 	}
 
-	// create CLOIDs
+	// Step 3: create CLOIDs
 	var created = make([]*order.Order, 0, len(normalized))
 	var requests = make([]hyperliquid.OrderRequest, 0, len(normalized))
 	for index, spec := range normalized {
@@ -289,7 +289,7 @@ func (a *Account) PlaceOrders(specs []OrderSpec) (PlaceResult, error) {
 		requests = append(requests, request)
 	}
 
-	// commit created Trade and Orders
+	// Step 4: commit created Trade and Orders
 	if newTrade {
 		err = a.ledger.CreateTrade(tradeInput, created)
 	} else {
@@ -299,7 +299,7 @@ func (a *Account) PlaceOrders(specs []OrderSpec) (PlaceResult, error) {
 		return PlaceResult{}, fmt.Errorf("place Account Orders: %w", err)
 	}
 
-	// submit Venue batch
+	// Step 5: submit Venue batch
 	a.dirty = true
 	var payload []byte
 	payload, err = a.venue.PlaceOrders(hyperliquid.PlaceOrderAction{
@@ -324,7 +324,7 @@ func (a *Account) PlaceOrders(specs []OrderSpec) (PlaceResult, error) {
 		}, errors.Join(ErrNotSubmitted, submitErr, ledgerErr)
 	}
 
-	// validate submit response
+	// Step 6: validate submit response
 	var response hyperliquid.SubmitResponse
 	response, err = hyperliquid.DecodeSubmitResponse(payload)
 	if err != nil {
@@ -413,13 +413,13 @@ func (a *Account) PlaceOrders(specs []OrderSpec) (PlaceResult, error) {
 		})
 	}
 
-	// commit submit outcomes
+	// Step 7: commit submit outcomes
 	err = a.ledger.RecordSubmit(outcomes)
 	if err != nil {
 		return partial, fmt.Errorf("place Account Orders: %w", err)
 	}
 
-	// mark Account dirty
+	// Step 8: mark Account dirty
 	a.dirty = true
 	a.stats.ordersPlaced += uint64(len(created))
 	var records []order.Record
@@ -443,7 +443,7 @@ func (a *Account) CancelOrders(cloids []string, timestampMS uint64) error {
 		return fmt.Errorf("cancel Account Orders: invalid lifecycle state")
 	}
 
-	// validate owned active Orders
+	// Step 1: validate owned active Orders
 	var active = make(map[string]struct{})
 	for _, current := range a.ledger.ActiveOrders() {
 		active[current.CLOID] = struct{}{}
@@ -454,7 +454,7 @@ func (a *Account) CancelOrders(cloids []string, timestampMS uint64) error {
 		}
 	}
 
-	// cancel Venue batch
+	// Step 2: cancel Venue batch
 	var cancels = make([]hyperliquid.CancelByCLOIDRequest, 0, len(cloids))
 	for _, value := range cloids {
 		cancels = append(cancels, hyperliquid.CancelByCLOIDRequest{
@@ -470,7 +470,7 @@ func (a *Account) CancelOrders(cloids []string, timestampMS uint64) error {
 		return fmt.Errorf("cancel Account Orders: %w", err)
 	}
 
-	// validate cancel response
+	// Step 3: validate cancel response
 	var response hyperliquid.CancelResponse
 	response, err = hyperliquid.DecodeCancelResponse(payload)
 	if err != nil {
@@ -489,7 +489,7 @@ func (a *Account) CancelOrders(cloids []string, timestampMS uint64) error {
 		}
 	}
 
-	// mark Account dirty
+	// Step 4: mark Account dirty
 	a.dirty = true
 	return nil
 }
@@ -507,7 +507,7 @@ func (a *Account) IngestBBO(bbo market.BBO) error {
 		)
 	}
 
-	// ingest Venue BBO
+	// Step 1: ingest Venue BBO
 	var changed, err = a.venue.IngestBBO(bbo)
 	if err != nil {
 		return fmt.Errorf("ingest Account BBO: %w", err)
@@ -516,7 +516,7 @@ func (a *Account) IngestBBO(bbo market.BBO) error {
 	a.hasBBO = true
 	a.stats.bbosIngested++
 
-	// mark Account dirty when Venue or open-position marks change
+	// Step 2: mark Account dirty when Venue or open-position marks change
 	if changed || !a.lastSnapshot.PositionQuantity.IsZero() {
 		a.dirty = true
 	}
@@ -525,13 +525,13 @@ func (a *Account) IngestBBO(bbo market.BBO) error {
 
 // Result returns one immutable terminal Account result.
 func (a *Account) Result() (Result, error) {
-	// get immutable Ledger result
+	// Step 1: get immutable Ledger result
 	var ledgerResult, err = a.ledger.Result()
 	if err != nil {
 		return Result{}, fmt.Errorf("read Account result: %w", err)
 	}
 
-	// return immutable Account result
+	// Step 2: return immutable Account result
 	return Result{
 		Config:   a.config,
 		Snapshot: a.lastSnapshot,
@@ -566,13 +566,13 @@ func (a *Account) Stop() error {
 		return nil
 	}
 
-	// stop Venue
+	// Step 1: stop Venue
 	var venueErr = a.venue.Stop()
 
-	// stop Ledger
+	// Step 2: stop Ledger
 	var ledgerErr = a.ledger.Stop()
 
-	// stop Account
+	// Step 3: stop Account
 	a.started = false
 	a.stopped = true
 	a.log.Info(fmt.Sprintf(
@@ -593,6 +593,8 @@ func (a *Account) Stop() error {
 }
 
 // Section 2 - Domain Helpers
+
+// Section 2.1 - Ledger Observation
 
 // ActiveOrders returns current active local Order snapshots.
 func (a *Account) ActiveOrders() []order.ActiveState {
@@ -642,6 +644,8 @@ func (a *Account) PositionQuantity() decimal.Decimal {
 func (a *Account) HasPendingRecon() bool {
 	return a.ledger.HasPendingRecon()
 }
+
+// Section 2.2 - Order Preparation
 
 func (a *Account) normalizeSpecs(specs []OrderSpec) ([]OrderSpec, error) {
 	if len(specs) == 0 || len(specs) > 1000 {

@@ -175,7 +175,7 @@ func (l *Ledger) CreateTrade(input trade.Input, orders []*order.Order) error {
 		return fmt.Errorf("create ledger trade: invalid lifecycle state")
 	}
 
-	// prepare Trade and initial Orders
+	// Step 1: prepare Trade and initial Orders
 	if input != l.nextTradeInput() || len(orders) == 0 {
 		return fmt.Errorf("create ledger trade: unexpected Trade identity or empty Orders")
 	}
@@ -197,7 +197,7 @@ func (l *Ledger) CreateTrade(input trade.Input, orders []*order.Order) error {
 		return fmt.Errorf("create ledger trade: %w", err)
 	}
 
-	// persist new Trade and Orders when configured
+	// Step 2: persist new Trade and Orders when configured
 	if l.config.PersistMode == Max {
 		var state = l.currentCandidate()
 		state.nextTradeID++
@@ -209,7 +209,7 @@ func (l *Ledger) CreateTrade(input trade.Input, orders []*order.Order) error {
 		}
 	}
 
-	// publish Trade, Orders, and exact Summary delta
+	// Step 3: publish Trade, Orders, and exact Summary delta
 	l.trades[input.TradeID] = staged
 	l.replaceTradeSummary(nil, staged.Summary())
 	l.nextTradeID++
@@ -228,7 +228,7 @@ func (l *Ledger) AddOrders(tradeID uint64, orders []*order.Order) error {
 		return fmt.Errorf("add ledger orders: invalid lifecycle state")
 	}
 
-	// validate new Orders
+	// Step 1: validate new Orders
 	var owned = l.trades[tradeID]
 	if owned == nil || len(orders) == 0 {
 		return fmt.Errorf("add ledger orders: unknown Trade or empty Orders")
@@ -237,7 +237,7 @@ func (l *Ledger) AddOrders(tradeID uint64, orders []*order.Order) error {
 	if err != nil {
 		return fmt.Errorf("add ledger orders: %w", err)
 	}
-	// attach validated Orders directly
+	// Step 2: attach validated Orders directly
 	// Venue truth owns recovery; copying unchanged Ledger records cannot restore trust.
 	var previousSummary = owned.Summary()
 	defer func() {
@@ -251,7 +251,7 @@ func (l *Ledger) AddOrders(tradeID uint64, orders []*order.Order) error {
 		}
 	}
 
-	// persist touched Trade and Orders when configured
+	// Step 3: persist touched Trade and Orders when configured
 	if l.config.PersistMode == Max {
 		var state = l.currentCandidate()
 		state.nextOrderID += uint64(len(orders))
@@ -261,7 +261,7 @@ func (l *Ledger) AddOrders(tradeID uint64, orders []*order.Order) error {
 		}
 	}
 
-	// publish Orders and exact Trade Summary delta
+	// Step 4: publish Orders and exact Trade Summary delta
 	l.nextOrderID += uint64(len(orders))
 	l.addValidatedTradeIndexes(tradeID, owned)
 	return nil
@@ -273,7 +273,7 @@ func (l *Ledger) RecordSubmit(outcomes []SubmitOutcome) error {
 		return fmt.Errorf("record ledger submit: invalid lifecycle state")
 	}
 
-	// validate submitted Orders
+	// Step 1: validate submitted Orders
 	if len(outcomes) == 0 {
 		return fmt.Errorf("record ledger submit: outcomes are required")
 	}
@@ -282,7 +282,7 @@ func (l *Ledger) RecordSubmit(outcomes []SubmitOutcome) error {
 		return err
 	}
 
-	// apply ordered outcomes directly
+	// Step 2: apply ordered outcomes directly
 	// Venue truth owns recovery; copying unchanged Ledger records cannot restore trust.
 	var previousSummaries = make(map[uint64]trade.Summary, len(touchedTrades))
 	for _, ownedTrade := range touchedTrades {
@@ -322,7 +322,7 @@ func (l *Ledger) RecordSubmit(outcomes []SubmitOutcome) error {
 		}
 	}
 
-	// persist touched submission rows when configured
+	// Step 3: persist touched submission rows when configured
 	if l.config.PersistMode == Max {
 		err = l.store.saveMutation(l.config, l.currentCandidate(), touchedTrades, submitted)
 		if err != nil {
@@ -330,7 +330,7 @@ func (l *Ledger) RecordSubmit(outcomes []SubmitOutcome) error {
 		}
 	}
 
-	// refresh touched indexes and exact Trade Summary deltas
+	// Step 4: refresh touched indexes and exact Trade Summary deltas
 	for _, ownedTrade := range touchedTrades {
 		var state = ownedTrade.ReconState()
 		l.addValidatedTradeIndexes(state.TradeID, ownedTrade)
@@ -340,9 +340,12 @@ func (l *Ledger) RecordSubmit(outcomes []SubmitOutcome) error {
 
 // Result returns one terminal Ledger summary.
 func (l *Ledger) Result() (Result, error) {
+	// Step 1: validate result state
 	if !l.started && !l.stopped {
 		return Result{}, fmt.Errorf("read ledger result: ledger is not initialized")
 	}
+
+	// Step 2: aggregate terminal domain counts
 	var orders int
 	var fills int
 	var cancellations int
@@ -364,6 +367,8 @@ func (l *Ledger) Result() (Result, error) {
 			return Result{}, err
 		}
 	}
+
+	// Step 3: return terminal Ledger result
 	return Result{
 		Config:         l.config,
 		FillsThroughMS: l.fillsThroughMS,
@@ -384,7 +389,7 @@ func (l *Ledger) Stop() error {
 		return nil
 	}
 
-	// stop Ledger
+	// Step 1: stop Ledger
 	var err error
 	if l.store != nil {
 		err = l.store.close()
@@ -395,6 +400,8 @@ func (l *Ledger) Stop() error {
 }
 
 // Section 2 - Domain Helpers
+
+// Section 2.1 - Identity Planning
 
 // PlanTrade returns the next synchronous Trade and Order identities.
 func (l *Ledger) PlanTrade(orderCount int) (Plan, error) {
@@ -419,6 +426,8 @@ func (l *Ledger) PlanOrders(orderCount int) ([]uint64, error) {
 	}
 	return ids, nil
 }
+
+// Section 2.2 - Domain Observation
 
 // ActiveOrders returns focused current active Order evidence.
 func (l *Ledger) ActiveOrders() []order.ActiveState {
@@ -595,6 +604,8 @@ func (l *Ledger) Summary() Summary {
 	return l.summary
 }
 
+// Section 2.3 - Mutation Validation
+
 func (l *Ledger) validateAddedOrders(
 	tradeID uint64,
 	owned *trade.Trade,
@@ -732,6 +743,8 @@ func (l *Ledger) nextTradeInput() trade.Input {
 		Symbol:      l.config.Symbol,
 	}
 }
+
+// Section 2.4 - State and Indexes
 
 type candidate struct {
 	trades          map[uint64]*trade.Trade

@@ -78,36 +78,37 @@ Simulator never creates detached private Order history copies.
 ## Program Flow
 
 ```text
+Init
+  validate Simulator config
+  initialize Simulator state
+  restore durable Simulator state when configured
+  mark Simulator started
+
 PlaceOrders
-  validate official action and CLOIDs
-  stage durable mutation
-  allocate each OID once
-  infer private batch relationships
+  validate official Order action
+  stage Order mutation
   match marketable Orders
-  persist when required
-  commit canonical truth
-  build fresh ordered official JSON
+  persist and publish Order mutation
+  return official Order response
 
 CancelOrders
-  validate official action
-  stage canonical mutations
-  cancel selected Orders and private children
-  persist when required
-  commit canonical truth
-  build fresh official JSON
+  validate official cancel action
+  stage cancel mutation
+  persist and publish cancel mutation
+  return official cancel response
 
 IngestBBO
-  validate market input
-  warm or stage matching
-  match active Orders
-  create each Fill once
-  persist changed truth
-  commit canonical truth
+  validate and normalize BBO
+  warm initial BBO state
+  stage BBO matching
+  persist changed Venue truth
+  publish BBO outcome
 
-Queries
-  read canonical truth
-  build fresh official JSON
-  return detached bytes
+Stop
+  ignore repeated stop
+  persist Simulator state
+  close Simulator store
+  mark Simulator stopped
 ```
 
 ## Private Bracket State

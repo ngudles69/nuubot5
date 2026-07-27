@@ -70,8 +70,8 @@ Fill processing must reject a Trade reversal.
 
 ```text
 New
-  keep admitted identity
-  keep admitted state
+  validate Trade identity
+  initialize pending Trade
 
 AddOrder
   validate Order ownership
@@ -79,22 +79,18 @@ AddOrder
   refresh Trade
 
 Refresh
-  order Fills by event time
-  calculate exposure
-  calculate realized PnL and fees
-  derive status
-  lock fee-complete terminal values
+  order Fill evidence
+  calculate exposure and finance
+  publish derived Trade state
+
+RefreshRecon
+  order Fill evidence
+  calculate reconciled exposure and finance
+  publish reconciled Trade state
 
 RefreshMark
-  leave terminal and flat Trades unchanged
-  calculate unrealized PnL from stored exposure and the current mark
-  store gross and net PnL
-
-Record
-  return one flat Trade database value
-
-EachOrder
-  visit directly owned Orders without copying them
+  skip terminal or flat Trade
+  publish marked Trade finance
 ```
 
 These are domain operations, not lifecycle phases.

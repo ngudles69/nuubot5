@@ -74,6 +74,7 @@ type storedState struct {
 // Section 1 - Program Flow
 
 func openSimulatorStore(path string) (*simulatorStore, error) {
+	// Step 1: open Simulator store
 	var dsn = "file:" + filepath.ToSlash(path) +
 		"?_txlock=immediate&_pragma=busy_timeout(30000)&_pragma=foreign_keys(1)"
 	var db, err = sql.Open("sqlite", dsn)
@@ -81,6 +82,8 @@ func openSimulatorStore(path string) (*simulatorStore, error) {
 		return nil, fmt.Errorf("open Simulator store: %v", err)
 	}
 	db.SetMaxOpenConns(1)
+
+	// Step 2: prepare Simulator table
 	_, err = db.Exec(`
 		CREATE TABLE IF NOT EXISTS simulator_venue_state (
 			account_name   TEXT NOT NULL,
@@ -108,10 +111,13 @@ func (s *simulatorStore) close() error {
 // Section 2 - Domain Helpers
 
 func (s *simulatorStore) save(cfg Config, state storedState) error {
+	// Step 1: encode Simulator state
 	var payload, err = json.Marshal(state)
 	if err != nil {
 		return fmt.Errorf("persist Simulator: encode state: %v", err)
 	}
+
+	// Step 2: persist Simulator state
 	_, err = s.db.Exec(`
 		INSERT INTO simulator_venue_state (
 			account_name, symbol, schema_version, payload_json, updated_ms
@@ -133,6 +139,7 @@ func (s *simulatorStore) save(cfg Config, state storedState) error {
 }
 
 func (s *simulatorStore) load(cfg Config) (storedState, bool, error) {
+	// Step 1: load Simulator state
 	var schemaVersion int
 	var payload string
 	var err = s.db.QueryRow(`
@@ -154,6 +161,8 @@ func (s *simulatorStore) load(cfg Config) (storedState, bool, error) {
 			schemaVersion,
 		)
 	}
+
+	// Step 2: validate Simulator state
 	var state storedState
 	err = json.Unmarshal([]byte(payload), &state)
 	if err != nil {

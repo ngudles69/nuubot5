@@ -65,17 +65,17 @@ type Record struct {
 
 // New creates one Fill from normalized execution evidence.
 func New(input Input) (*Fill, error) {
-	// validate complete execution identity
+	// Step 1: validate complete execution identity
 	var err = validateInput(input)
 	if err != nil {
 		return nil, err
 	}
 
-	// keep immutable execution
+	// Step 2: keep immutable execution
 	var created = &Fill{input: input}
 	created.input.Fee = nil
 
-	// keep available metadata
+	// Step 3: keep available metadata
 	if input.Fee != nil {
 		created.fee = *input.Fee
 		created.hasFee = true
@@ -87,7 +87,7 @@ func New(input Input) (*Fill, error) {
 
 // Enrich applies later metadata without changing execution identity.
 func (f *Fill) Enrich(input Input) error {
-	// reject changed execution
+	// Step 1: reject changed execution
 	var err = validateInput(input)
 	if err != nil {
 		return err
@@ -102,7 +102,7 @@ func (f *Fill) Enrich(input Input) error {
 		return fmt.Errorf("enrich fill: changed liquidity for venue tid %d", input.VenueTID)
 	}
 
-	// accept later metadata
+	// Step 2: accept later metadata
 	if input.Fee != nil {
 		f.fee = *input.Fee
 		f.hasFee = true
@@ -151,6 +151,8 @@ func (f *Fill) Clone() *Fill {
 }
 
 // Section 2 - Domain Helpers
+
+// Section 2.1 - Validation and Identity
 
 func (f *Fill) sameExecution(input Input) bool {
 	return f.input.LedgerID == input.LedgerID &&

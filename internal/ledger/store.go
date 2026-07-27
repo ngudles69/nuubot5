@@ -21,7 +21,7 @@ type ledgerStore struct {
 // Section 1 - Program Flow
 
 func openLedgerStore(path string) (*ledgerStore, error) {
-	// open Ledger store
+	// Step 1: open Ledger store
 	var dsn = "file:" + filepath.ToSlash(path) +
 		"?_txlock=immediate&_pragma=busy_timeout(30000)&_pragma=foreign_keys(1)"
 	var db, err = sql.Open("sqlite", dsn)
@@ -30,7 +30,7 @@ func openLedgerStore(path string) (*ledgerStore, error) {
 	}
 	db.SetMaxOpenConns(1)
 
-	// prepare Ledger tables
+	// Step 2: prepare Ledger tables
 	var _, prepareErr = db.Exec(ledgerDDL)
 	if prepareErr != nil {
 		db.Close()
@@ -40,7 +40,7 @@ func openLedgerStore(path string) (*ledgerStore, error) {
 }
 
 func (s *ledgerStore) close() error {
-	// close Ledger store
+	// Step 1: close Ledger store
 	var err = s.db.Close()
 	if err != nil {
 		return fmt.Errorf("close Ledger store: %v", err)
@@ -51,14 +51,14 @@ func (s *ledgerStore) close() error {
 // Section 2 - Domain Helpers
 
 func (s *ledgerStore) save(cfg Config, state candidate) error {
-	// stage persistence transaction
+	// Step 1: stage persistence transaction
 	var transaction, err = s.db.Begin()
 	if err != nil {
 		return fmt.Errorf("persist Ledger: begin transaction: %v", err)
 	}
 	defer transaction.Rollback()
 
-	// replace complete Ledger evidence
+	// Step 2: replace complete Ledger evidence
 	err = storeLedgerIdentity(transaction, cfg, state, "persist Ledger")
 	if err != nil {
 		return err
@@ -91,7 +91,7 @@ func (s *ledgerStore) save(cfg Config, state candidate) error {
 		}
 	}
 
-	// commit persistence transaction
+	// Step 3: commit persistence transaction
 	err = transaction.Commit()
 	if err != nil {
 		return fmt.Errorf("persist Ledger: commit transaction: %v", err)
@@ -105,7 +105,7 @@ func (s *ledgerStore) saveMutation(
 	trades []*trade.Trade,
 	orders []*order.Order,
 ) error {
-	// persist only touched rows
+	// Step 1: persist touched rows
 	// SQLite owns database rollback; failed memory mutations recover from Venue truth.
 	var transaction, err = s.db.Begin()
 	if err != nil {
@@ -137,12 +137,14 @@ func (s *ledgerStore) saveMutation(
 }
 
 func (s *ledgerStore) saveRecon(cfg Config, attempt *ReconAttempt) error {
+	// Step 1: stage Recon transaction
 	var transaction, err = s.db.Begin()
 	if err != nil {
 		return fmt.Errorf("persist Ledger recon: begin transaction: %v", err)
 	}
 	defer transaction.Rollback()
 
+	// Step 2: persist Recon cursor and touched rows
 	var accountState = attempt.input.AccountStateRaw
 	if accountState == "" {
 		accountState = "{}"
@@ -188,6 +190,8 @@ func (s *ledgerStore) saveRecon(cfg Config, attempt *ReconAttempt) error {
 			return err
 		}
 	}
+
+	// Step 3: commit Recon transaction
 	err = transaction.Commit()
 	if err != nil {
 		return fmt.Errorf("persist Ledger recon: commit transaction: %v", err)
@@ -383,7 +387,7 @@ func storeReconFill(transaction *sql.Tx, ledgerID uint64, execution fill.Record)
 }
 
 func (s *ledgerStore) load(cfg Config) (candidate, bool, error) {
-	// load Ledger identity
+	// Step 1: load Ledger identity
 	var state candidate
 	var cycleNumber int
 	var executorNumber int
@@ -426,7 +430,7 @@ func (s *ledgerStore) load(cfg Config) (candidate, bool, error) {
 	state.lastReconMS = uint64(max(lastRecon.Int64, 0))
 	state.trades = make(map[uint64]*trade.Trade)
 
-	// load Trade evidence
+	// Step 2: load Trade evidence
 	var rows *sql.Rows
 	rows, err = s.db.Query(`
 		SELECT trade_id, trade_no, symbol, status
@@ -471,7 +475,7 @@ func (s *ledgerStore) load(cfg Config) (candidate, bool, error) {
 		return candidate{}, false, fmt.Errorf("load Ledger: close Trades: %v", err)
 	}
 
-	// load Order and Fill evidence
+	// Step 3: load Order and Fill evidence
 	err = s.loadOrders(cfg, state.trades)
 	if err != nil {
 		return candidate{}, false, err

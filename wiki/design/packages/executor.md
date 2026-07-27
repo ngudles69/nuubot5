@@ -42,6 +42,14 @@ Executor reads only the fields required by its BotSpec.
 
 BotCycle owns capability dispatch.
 
+## Program Flow
+
+```text
+Create
+  select Executor
+  initialize Executor
+```
+
 `Telemetry()` returns current status and optional Account state.
 
 It performs no reconciliation, mutation, logging, or persistence.

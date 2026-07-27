@@ -69,10 +69,25 @@ Account-Venue-Simulator boundary hardcut. Recon2 is retired.
 - Final Observer suite report is `workspace/logs/nuubot5-stest-s6-b9-1-20260727T130730Z.json`.
 - User authorized the final commit and push after manual Controller review.
 - User authorized commit and push of the testing-boundary cleanup.
+- Reorganized approved Executor, Account, Ledger, Trade, Order, Fill, and Simulator production files without behavior changes.
+- Added contiguous `Step N:` intent comments and grouped Section 2 concerns across all approved files.
+- Aligned Executor, TradeExecutor, GridExecutor, Account, Ledger, Trade, Order, Fill, and Simulator Program Flow documentation.
+- Formatting, project diagnostics, full Go tests, full vet, and diff checks pass.
+- Grid Bot 15 passed 1 of 1 through `./stest.sh -bot 15` without profiling.
+- Grid suite total was 68,763 ms; BtBot was 63,860 ms; replay was 59,905 ms.
+- Grid result log is `workspace/logs/nuubot5-stest-s11-b15-1-20260727T143233Z.log`.
+- Grid suite report is `workspace/logs/nuubot5-stest-s11-b15-1-20260727T143233Z.json`.
+- Trade Bot 13 runtime completed 7,948,800 ticks, 794,880 runs, 193 cycles, 193 Trades, 626 Orders, and 386 Fills.
+- Trade result database integrity passed and foreign-key check returned no rows.
+- Fixed `stest.sh` Trade validation so `result_config_match` is evaluated for every persistence mode.
+- Trade Bot 13 passed 1 of 1 through `./stest.sh -bot 13` without profiling.
+- Trade suite total was 17,838 ms; BtBot was 14,073 ms; replay was 10,781 ms.
+- Trade result log is `workspace/logs/nuubot5-stest-s9-b13-1-20260727T143744Z.log`.
+- Trade suite report is `workspace/logs/nuubot5-stest-s9-b13-1-20260727T143744Z.json`.
 
 ### TODO
 
-- None.
+- Root: commit and push the completed code reorganization and proof-harness fix.
 
 ### PENDING USER APPROVAL
 
@@ -119,6 +134,9 @@ Account-Venue-Simulator boundary hardcut. Recon2 is retired.
 - `recordBBOGap` measures the gap since the prior BBO; do not add min/max BBO-gap metrics until required.
 - Clock is shared Nuubot infrastructure attached after initialization by BtBot or Runner.
 - Controller, BotCycle, and children read current time through `nuubot.Clock.NowMS()`; `Run` and `OnRecon` do not receive timestamp arguments.
+- BotCycle directly owns and manages Executors only.
+- Each Executor directly owns its Account; each Account directly owns Ledger and Venue or Simulator.
+- BotCycle affects Accounts only through Executor lifecycle and capability calls.
 
 ## Active Boundary Hardcut
 

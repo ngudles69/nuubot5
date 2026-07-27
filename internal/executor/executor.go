@@ -155,7 +155,7 @@ type SignalHandler interface {
 
 // Create selects and initializes the configured Executor.
 func Create(ctx Context) (Executor, error) {
-	// select executor
+	// Step 1: select Executor
 	var selected Executor
 	switch ctx.Spec.Kind {
 	case "observer":
@@ -168,7 +168,7 @@ func Create(ctx Context) (Executor, error) {
 		return nil, fmt.Errorf("unknown executor: %s", ctx.Spec.Kind)
 	}
 
-	// initialize executor
+	// Step 2: initialize Executor
 	var err = selected.OnInit(ctx)
 	if err != nil {
 		return nil, err

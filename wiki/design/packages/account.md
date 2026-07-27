@@ -69,21 +69,18 @@ Init
   initialize Account
 
 PlaceOrders
-  validate complete order batch
+  validate complete Order batch
   resolve Trade ownership
   create CLOIDs
   commit created Trade and Orders
-  build and submit official Venue action
-  decode detached official JSON
-  terminalize known Simulator submission failure
+  submit Venue batch
   validate submit response
   commit submit outcomes
   mark Account dirty
 
 CancelOrders
   validate owned active Orders
-  build and submit official cancel action
-  decode detached official JSON
+  cancel Venue batch
   validate cancel response
   mark Account dirty
 
@@ -91,10 +88,15 @@ IngestBBO
   ingest Venue BBO
   mark Account dirty when Venue or open-position marks change
 
-Recon
+Reconcile
+  record reconciliation call
+  execute reconciliation
+  publish reconciliation outcome
+
+reconcile
   prepare attempt
   download current Order evidence
-  download Fill history and bounded missing-fee repairs
+  download Fill history
   download current Account state
   update Fill records
   update Order records

@@ -138,13 +138,13 @@ type Order struct {
 
 // New creates one Order in created state.
 func New(input Input) (*Order, error) {
-	// validate order request
+	// Step 1: validate Order request
 	var err = validateInput(input)
 	if err != nil {
 		return nil, err
 	}
 
-	// initialize created state
+	// Step 2: initialize created state
 	var created = &Order{
 		input:             copyInput(input),
 		status:            Created,
@@ -162,7 +162,7 @@ func (o *Order) RecordSubmit(venueOrderID uint64, rejectReason string, raw strin
 	}
 	var changed = o.status != Submitted || o.rejectReason != rejectReason
 
-	// preserve venue identity
+	// Step 1: preserve Venue identity
 	if venueOrderID != 0 {
 		if o.venueOrderID != 0 && o.venueOrderID != venueOrderID {
 			return fmt.Errorf("record order submit: changed venue order identity")
@@ -171,7 +171,7 @@ func (o *Order) RecordSubmit(venueOrderID uint64, rejectReason string, raw strin
 		o.venueOrderID = venueOrderID
 	}
 
-	// record acknowledgement
+	// Step 2: record acknowledgement
 	o.status = Submitted
 	o.rejectReason = rejectReason
 	if raw != "" {
@@ -186,7 +186,7 @@ func (o *Order) RecordSubmit(venueOrderID uint64, rejectReason string, raw strin
 
 // ApplyVenueState advances one Order from canonical Venue evidence.
 func (o *Order) ApplyVenueState(state VenueState) error {
-	// reject invalid transition
+	// Step 1: reject invalid transition
 	if state.TimestampMS == 0 || !validStatus(state.Status) {
 		return fmt.Errorf("apply order state: invalid status or timestamp")
 	}
@@ -212,7 +212,7 @@ func (o *Order) ApplyVenueState(state VenueState) error {
 		o.rejectReason != state.RejectReason ||
 		o.updatedMS != state.TimestampMS
 
-	// preserve Venue identity
+	// Step 2: preserve Venue identity
 	if state.VenueOrderID != 0 {
 		if o.venueOrderID != 0 && o.venueOrderID != state.VenueOrderID {
 			return fmt.Errorf("apply order state: changed venue order identity")
@@ -221,14 +221,14 @@ func (o *Order) ApplyVenueState(state VenueState) error {
 		o.venueOrderID = state.VenueOrderID
 	}
 
-	// advance lifecycle
+	// Step 3: advance lifecycle
 	o.status = state.Status
 	o.active = !isTerminal(state.Status)
 	o.reconciliationPending = false
 	o.rejectReason = state.RejectReason
 	o.updatedMS = state.TimestampMS
 
-	// preserve raw evidence
+	// Step 4: preserve raw evidence
 	if state.Raw != "" {
 		changed = changed || o.raw != state.Raw
 		o.raw = state.Raw
@@ -241,7 +241,7 @@ func (o *Order) ApplyVenueState(state VenueState) error {
 
 // ApplyFill admits one owned execution and refreshes Fill totals.
 func (o *Order) ApplyFill(input fill.Input) error {
-	// validate Fill ownership
+	// Step 1: validate Fill ownership
 	if input.LedgerID != o.input.LedgerID ||
 		input.TradeID != o.input.TradeID ||
 		input.OrderID != o.input.OrderID ||
@@ -256,7 +256,7 @@ func (o *Order) ApplyFill(input fill.Input) error {
 		return fmt.Errorf("apply order fill: venue order identity mismatch")
 	}
 
-	// add or enrich Fill
+	// Step 2: add or enrich Fill
 	var existing = o.fills[input.VenueTID]
 	var changed = existing == nil
 	if existing == nil {
@@ -282,7 +282,7 @@ func (o *Order) ApplyFill(input fill.Input) error {
 		}
 	}
 
-	// refresh Fill totals
+	// Step 3: refresh Fill totals
 	o.refreshFills()
 	if changed {
 		o.comparisonState++
@@ -415,6 +415,8 @@ func (o *Order) Clone() *Order {
 
 // Section 2 - Domain Helpers
 
+// Section 2.1 - Fill Aggregation
+
 func (o *Order) refreshFills() {
 	var venueComplete = o.status == Filled
 	var quantity = decimal.Zero
@@ -453,6 +455,8 @@ func (o *Order) refreshFills() {
 		o.reconciliationPending = !feesComplete || venueComplete
 	}
 }
+
+// Section 2.2 - Validation and Transitions
 
 func validateInput(input Input) error {
 	if input.LedgerID == 0 || input.TradeID == 0 || input.OrderID == 0 ||

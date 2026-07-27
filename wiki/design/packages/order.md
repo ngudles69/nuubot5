@@ -70,8 +70,12 @@ Venue `filled` remains reconciliation-pending and active until quantity and ever
 
 ```text
 New
-  keep admitted request
+  validate Order request
   initialize created state
+
+RecordSubmit
+  preserve Venue identity
+  record acknowledgement
 
 ApplyVenueState
   reject invalid transition
@@ -81,25 +85,8 @@ ApplyVenueState
 
 ApplyFill
   validate Fill ownership
-  reject changed execution
   add or enrich Fill
   refresh Fill totals
-
-RefreshRecon
-  keep fee-incomplete or Fill-incomplete acknowledgements pending
-  complete only quantity-exact fee-complete Orders
-
-ComparisonState
-  return the allocation-free mutation revision
-
-FillIdentity
-  return allocation-free immutable ownership for one Fill update
-
-Record
-  return one flat Order database value
-
-EachFill
-  visit directly owned Fills without copying them
 ```
 
 These are domain operations, not lifecycle phases.

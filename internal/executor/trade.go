@@ -46,15 +46,18 @@ var _ ReconHandler = (*tradeExecutor)(nil)
 
 // OnInit initializes TradeExecutor without submitting Orders.
 func (e *tradeExecutor) OnInit(ctx Context) error {
+	// Step 1: bind TradeExecutor inputs
 	e.log = ctx.Nuubot.Log
 	e.nuubot = ctx.Nuubot
 	e.spec = ctx.Spec
+
+	// Step 2: validate TradeExecutor state
 	if e.status != Configured {
 		return fmt.Errorf("trade executor cannot initialize from current state")
 	}
 	e.status = Starting
 
-	// validate trade config
+	// Step 3: validate TradeExecutor config
 	e.notional = ctx.Spec.OrderSizeUSDC
 	e.takeProfitPct = ctx.Spec.TakeProfitPct
 	e.stopLossPct = ctx.Spec.StopLossPct
@@ -75,14 +78,14 @@ func (e *tradeExecutor) OnInit(ctx Context) error {
 		return fmt.Errorf("trade executor config is invalid")
 	}
 
-	// admit fixed side
+	// Step 4: validate fixed side
 	e.side = ctx.Spec.Side
 	if e.side != Long && e.side != Short {
 		e.status = Error
 		return fmt.Errorf("%w: trade executor requires one configured side", ErrRejected)
 	}
 
-	// admit current BBO
+	// Step 5: retain current BBO and identity
 	if ctx.LatestBBO.TimestampMS == 0 || ctx.LatestBBO.Price <= 0 {
 		e.status = Error
 		return fmt.Errorf("%w: trade executor requires current BBO", ErrRejected)
@@ -92,7 +95,7 @@ func (e *tradeExecutor) OnInit(ctx Context) error {
 	e.executorNumber = ctx.ExecutorNumber
 	e.signalMS = ctx.Signal.TimestampMS()
 
-	// initialize Account
+	// Step 6: initialize Account
 	var ledgerID = uint64(ctx.CycleNumber)<<32 | uint64(ctx.ExecutorNumber)
 	var err = e.account.Init(account.Config{
 		Nuubot:         ctx.Nuubot,
@@ -130,8 +133,10 @@ func (e *tradeExecutor) OnInit(ctx Context) error {
 		))
 	}
 
-	// initialize TradeExecutor
+	// Step 7: mark TradeExecutor running
 	e.status = Running
+
+	// Step 8: log init completed
 	e.log.Info(fmt.Sprintf(
 		"executor initialized cycle=%d executor=%d kind=trade side=%s signal_ts_ms=%d",
 		e.cycleNumber,
@@ -144,24 +149,27 @@ func (e *tradeExecutor) OnInit(ctx Context) error {
 
 // OnStop closes exposure and stops TradeExecutor.
 func (e *tradeExecutor) OnStop(reason string) error {
+	// Step 1: validate stop state
 	if e.status == Stopped {
 		return nil
 	}
 	if e.status == Error {
 		return fmt.Errorf("stop trade executor: executor is in error state")
 	}
+
+	// Step 2: mark TradeExecutor stopping
 	e.status = Stopping
 	if e.exitReason == "" {
 		e.exitReason = reason
 	}
 
-	// reconcile current Account truth
+	// Step 3: reconcile current Account truth
 	var snapshot, _, _, err = e.account.Reconcile(e.lastBBO.TimestampMS, true)
 	if err != nil {
 		return e.stopError(fmt.Errorf("stop trade executor: %w", err))
 	}
 
-	// cancel active Orders
+	// Step 4: cancel active Orders
 	var active = e.account.ActiveOrders()
 	if len(active) > 0 {
 		var cloids = make([]string, len(active))
@@ -178,7 +186,7 @@ func (e *tradeExecutor) OnStop(reason string) error {
 		}
 	}
 
-	// close open exposure
+	// Step 5: close open exposure
 	if !snapshot.PositionQuantity.IsZero() {
 		var side = order.Sell
 		if snapshot.PositionQuantity.IsNegative() {
@@ -201,7 +209,7 @@ func (e *tradeExecutor) OnStop(reason string) error {
 		}
 	}
 
-	// reconcile final Venue truth
+	// Step 6: reconcile final Venue truth
 	snapshot, _, _, err = e.account.Reconcile(e.lastBBO.TimestampMS, true)
 	if err != nil {
 		return e.stopError(fmt.Errorf("stop trade executor: %w", err))
@@ -215,24 +223,26 @@ func (e *tradeExecutor) OnStop(reason string) error {
 		))
 	}
 
-	// capture terminal Account result
+	// Step 7: capture terminal Account result
 	var result account.Result
 	result, err = e.account.Result()
 	if err != nil {
 		return e.stopError(fmt.Errorf("stop trade executor: %w", err))
 	}
 
-	// stop Account
+	// Step 8: stop Account
 	err = e.account.Stop()
 	if err != nil {
 		e.status = Error
 		return fmt.Errorf("stop trade executor: %w", err)
 	}
 
-	// cache terminal Account result
+	// Step 9: cache terminal Account result
 	e.accountResult = result.Clone()
 	e.hasResult = true
 	e.status = Stopped
+
+	// Step 10: log stop completed
 	e.log.Info(fmt.Sprintf(
 		"executor stopped cycle=%d executor=%d kind=trade trades=%d fills=%d stop_reason=%s",
 		e.cycleNumber,
@@ -245,6 +255,8 @@ func (e *tradeExecutor) OnStop(reason string) error {
 }
 
 // Section 2 - Domain Helpers
+
+// Section 2.1 - Market Data
 
 // IngestBBO advances the owned Simulator before policy handling.
 func (e *tradeExecutor) IngestBBO(bbo market.BBO) error {
@@ -262,6 +274,8 @@ func (e *tradeExecutor) OnBBO(bbo market.BBO) {
 	e.lastBBO = bbo
 }
 
+// Section 2.2 - Reconciliation and Policy
+
 // Reconcile refreshes the owned Account when dirty or forced.
 func (e *tradeExecutor) Reconcile(
 	nowMS uint64,
@@ -276,7 +290,7 @@ func (e *tradeExecutor) OnRecon() error {
 		return nil
 	}
 
-	// submit bracket when no Trade exists
+	// Step 1: submit bracket when no Trade exists
 	if e.tradeID == 0 {
 		var entry = decimal.NewFromFloat(e.lastBBO.Price)
 		var quantity = e.notional.Div(entry)
@@ -330,7 +344,7 @@ func (e *tradeExecutor) OnRecon() error {
 		return nil
 	}
 
-	// check owned Trade completion
+	// Step 2: check owned Trade completion
 	var owned, err = e.account.Trade(e.tradeID)
 	if err != nil {
 		return fmt.Errorf("run trade executor recon: %w", err)
@@ -342,6 +356,8 @@ func (e *tradeExecutor) OnRecon() error {
 	}
 	return nil
 }
+
+// Section 2.3 - Observation
 
 // Status returns TradeExecutor's canonical lifecycle state.
 func (e *tradeExecutor) Status() Status {

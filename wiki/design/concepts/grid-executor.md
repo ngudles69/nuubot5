@@ -103,18 +103,24 @@ Failure is fatal before BotCycle admission completes.
 
 ```text
 OnInit
-  validate grid config
-  admit fixed side
-  admit current BBO
-  calculate grid levels
+  bind GridExecutor inputs
+  validate GridExecutor state
+  validate GridExecutor config
+  validate fixed side
+  retain current BBO and identity
+  calculate Grid levels
   initialize Account
-  log validated grid table
+  log validated Grid table
 
 OnStart
-  submit initial levels at cycle-start BBO
-  initialize GridExecutor
+  validate start state
+  submit initial Grid at cycle-start BBO
+  mark GridExecutor running
+  log start completed
 
 OnStop
+  validate stop state
+  mark GridExecutor stopping
   reconcile current Account truth
   cancel active Orders
   close open Trades
@@ -122,8 +128,10 @@ OnStop
   capture terminal Account result
   stop Account
   cache terminal Account result
+  log stop completed
 
 OnRecon
+  read current Nuubot time
   re-enter completed levels
 ```
 

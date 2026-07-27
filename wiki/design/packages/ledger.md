@@ -66,20 +66,16 @@ RecordSubmit
   refresh touched indexes and exact Trade Summary deltas
 
 Recon
-  prepare attempt
-  stage selected Fill updates
-  stage selected Order updates
-  recalculate touched Trade structure
-  remark active Trade exposure from stored state
-  apply exact old-to-new Trade Summary deltas
-  validate candidate index deltas
-  persist dirty rows and cursor when configured
-  publish recon result without failure
+  prepare Recon attempt
+  update Fill records
+  update Order records
+  update Trade records
+  commit Recon attempt
 
 Result
-  aggregate terminal flat domain counts
-  copy reconciliation cursor and cached Ledger Summary
-  return summary-only Ledger result
+  validate result state
+  aggregate terminal domain counts
+  return terminal Ledger result
 
 Stop
   stop Ledger

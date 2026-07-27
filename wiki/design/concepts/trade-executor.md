@@ -21,9 +21,35 @@ Signal contains no direction.
 
 ## Lifecycle
 
-`OnInit` builds Account and ingests the latest matching BBO.
+```text
+OnInit
+  bind TradeExecutor inputs
+  validate TradeExecutor state
+  validate TradeExecutor config
+  validate fixed side
+  retain current BBO and identity
+  initialize Account
+  mark TradeExecutor running
+  log init completed
 
-It performs no Order mutation.
+OnStop
+  validate stop state
+  mark TradeExecutor stopping
+  reconcile current Account truth
+  cancel active Orders
+  close open exposure
+  reconcile final Venue truth
+  capture terminal Account result
+  stop Account
+  cache terminal Account result
+  log stop completed
+
+OnRecon
+  submit bracket when no Trade exists
+  check owned Trade completion
+```
+
+`OnInit` performs no Order mutation.
 
 The first accepted `OnRecon` submits one entry, take-profit, and stop-loss
 bracket.

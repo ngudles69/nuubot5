@@ -242,6 +242,7 @@ type fundingResponse struct {
 
 // Init prepares one Simulator.
 func (s *Simulator) Init(cfg Config) error {
+	// Step 1: validate Simulator config
 	if s.started || s.stopped {
 		return fmt.Errorf("initialize simulator: invalid lifecycle state")
 	}
@@ -258,6 +259,7 @@ func (s *Simulator) Init(cfg Config) error {
 		return fmt.Errorf("initialize simulator: max persistence requires path")
 	}
 
+	// Step 2: initialize Simulator state
 	s.config = cfg
 	s.nextVenueOrderID = 1
 	s.nextVenueTID = 1
@@ -265,6 +267,7 @@ func (s *Simulator) Init(cfg Config) error {
 	s.ordersByCLOID = make(map[string]*simOrder)
 	s.activeOrders = make(map[uint64]*simOrder)
 
+	// Step 3: restore durable Simulator state when configured
 	if cfg.PersistMode == "max" {
 		var err error
 		s.store, err = openSimulatorStore(cfg.Path)
@@ -289,6 +292,7 @@ func (s *Simulator) Init(cfg Config) error {
 		}
 	}
 
+	// Step 4: mark Simulator started
 	s.started = true
 	return nil
 }
@@ -308,6 +312,7 @@ func (s *Simulator) PlaceOrders(
 		return nil, fmt.Errorf("place simulator Orders: invalid action")
 	}
 
+	// Step 1: validate official Order action
 	var seen = make(map[string]struct{}, len(action.Orders))
 	for _, request := range action.Orders {
 		if err := s.validateRequest(request); err != nil {
@@ -320,6 +325,7 @@ func (s *Simulator) PlaceOrders(
 		seen[request.CLOID] = struct{}{}
 	}
 
+	// Step 2: stage Order mutation
 	var staged = s.stage()
 	staged.observedMS = max(staged.observedMS, timestampMS)
 	var batchID = staged.nextBatchID
@@ -345,14 +351,19 @@ func (s *Simulator) PlaceOrders(
 		staged.activeOrders[row.venueOrderID] = row
 		added = append(added, row)
 	}
+
+	// Step 3: match marketable Orders
 	if staged.hasBBO {
 		staged.matchAdded(added, staged.lastTimestampMS)
 	}
+
+	// Step 4: persist and publish Order mutation
 	if err := staged.persist(); err != nil {
 		return nil, err
 	}
 	s.commit(staged)
 
+	// Step 5: return official Order response
 	var statuses = make([]any, 0, len(added))
 	for _, original := range added {
 		var row = s.ordersByCLOID[original.cloid]
@@ -392,6 +403,8 @@ func (s *Simulator) CancelOrders(
 	if action.Type != "cancelByCloid" || len(action.Cancels) == 0 || timestampMS == 0 {
 		return nil, fmt.Errorf("cancel simulator Orders: invalid action")
 	}
+
+	// Step 1: validate official cancel action
 	var seen = make(map[string]struct{}, len(action.Cancels))
 	for _, cancel := range action.Cancels {
 		var row = s.ordersByCLOID[cancel.CLOID]
@@ -404,6 +417,7 @@ func (s *Simulator) CancelOrders(
 		seen[cancel.CLOID] = struct{}{}
 	}
 
+	// Step 2: stage cancel mutation
 	var staged = s.stage()
 	staged.observedMS = max(staged.observedMS, timestampMS)
 	for _, cancel := range action.Cancels {
@@ -413,11 +427,14 @@ func (s *Simulator) CancelOrders(
 			staged.cancelChildren(row.batchID, timestampMS)
 		}
 	}
+
+	// Step 3: persist and publish cancel mutation
 	if err := staged.persist(); err != nil {
 		return nil, err
 	}
 	s.commit(staged)
 
+	// Step 4: return official cancel response
 	var statuses = make([]any, len(action.Cancels))
 	for index := range statuses {
 		statuses[index] = "success"
@@ -440,8 +457,12 @@ func (s *Simulator) IngestBBO(bbo market.BBO) (bool, error) {
 		(s.hasBBO && bbo.TimestampMS < s.lastTimestampMS) {
 		return false, fmt.Errorf("ingest simulator BBO: invalid timestamp or price")
 	}
+
+	// Step 1: validate and normalize BBO
 	var price = decimal.NewFromFloat(bbo.Price)
 	var priceKey = newComparisonKey(price)
+
+	// Step 2: warm initial BBO state
 	if !s.hasBBO {
 		s.lastPrice = price
 		s.lastPriceKey = priceKey
@@ -451,41 +472,55 @@ func (s *Simulator) IngestBBO(bbo market.BBO) (bool, error) {
 		return false, nil
 	}
 
+	// Step 3: stage BBO matching
 	var staged = s.stage()
 	var changed = staged.match(priceKey, bbo.TimestampMS)
 	staged.lastPrice = price
 	staged.lastPriceKey = priceKey
 	staged.lastTimestampMS = bbo.TimestampMS
 	staged.observedMS = max(staged.observedMS, bbo.TimestampMS)
+
+	// Step 4: persist changed Venue truth
 	if changed {
 		if err := staged.persist(); err != nil {
 			return false, err
 		}
 	}
+
+	// Step 5: publish BBO outcome
 	s.commit(staged)
 	return changed, nil
 }
 
 // Stop stops Simulator admission.
 func (s *Simulator) Stop() error {
+	// Step 1: ignore repeated stop
 	if s.stopped {
 		return nil
 	}
+
+	// Step 2: persist Simulator state
 	if err := s.persist(); err != nil {
 		return err
 	}
+
+	// Step 3: close Simulator store
 	if s.store != nil {
 		if err := s.store.close(); err != nil {
 			return err
 		}
 		s.store = nil
 	}
+
+	// Step 4: mark Simulator stopped
 	s.started = false
 	s.stopped = true
 	return nil
 }
 
 // Section 2 - Domain Helpers
+
+// Section 2.1 - Official Queries
 
 // OpenOrders returns fresh detached official Hyperliquid JSON.
 func (s *Simulator) OpenOrders(account string) ([]byte, error) {
@@ -640,6 +675,8 @@ func (s *Simulator) SetFillFeeAvailableForTest(venueTID uint64, available bool) 
 	return fmt.Errorf("set simulator Fill fee availability: unknown Venue TID %d", venueTID)
 }
 
+// Section 2.2 - Validation and Construction
+
 func (s *Simulator) validateAccount(account string) error {
 	if !s.started || s.stopped {
 		return fmt.Errorf("query simulator: invalid lifecycle state")
@@ -727,6 +764,8 @@ func (s *Simulator) newOrder(
 	row.comparisonKey = newComparisonKey(orderPrice(row))
 	return row, nil
 }
+
+// Section 2.3 - Matching and Position
 
 func (s *Simulator) match(price comparisonKey, timestampMS uint64) bool {
 	var changed = false
@@ -941,6 +980,8 @@ func (s *Simulator) position() (position, error) {
 	}
 	return result, nil
 }
+
+// Section 2.4 - Persistence State
 
 func (s *Simulator) persist() error {
 	if s.config.PersistMode == "none" {

@@ -67,15 +67,6 @@ validate_trade() {
     stop_orders="$stop_order_count"
     equity_carry=1
     result_equity_match=1
-    if [[ "$domain_persisted" == "1" ]]; then
-        close_orders="$(
-        sqlite3 "$result_db" \
-            "SELECT COUNT(*) FROM account_order WHERE order_role='close';"
-    )"
-    stop_orders="$(
-        sqlite3 "$result_db" \
-            "SELECT COUNT(*) FROM account_order WHERE order_role='stop';"
-    )"
     result_config_match="$(
         sqlite3 "$result_db" "
             ATTACH DATABASE '$source_db_sql' AS source;
@@ -85,6 +76,15 @@ validate_trade() {
             JOIN source.bot source ON source.bot_id=result.bot_id
             WHERE source.sweep_id=result.sweep_id;
         "
+    )"
+    if [[ "$domain_persisted" == "1" ]]; then
+        close_orders="$(
+        sqlite3 "$result_db" \
+            "SELECT COUNT(*) FROM account_order WHERE order_role='close';"
+    )"
+    stop_orders="$(
+        sqlite3 "$result_db" \
+            "SELECT COUNT(*) FROM account_order WHERE order_role='stop';"
     )"
     equity_carry="$(
         sqlite3 "$result_db" "

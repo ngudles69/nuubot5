@@ -53,9 +53,6 @@ New
 Enrich
   reject changed execution
   accept later metadata
-
-Snapshot
-  return immutable Fill values
 ```
 
 These are domain operations, not lifecycle phases.
