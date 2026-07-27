@@ -7,6 +7,56 @@ Last updated: 2026-07-27
 Performance Chunks 1-5 are implemented. Chunk 4B became the approved
 Account-Venue-Simulator boundary hardcut. Recon2 is retired.
 
+## Active User Code Review
+
+### DONE
+
+- Renamed the local `admission` variable to `nuubotSetup` in `internal/btbot/btbot.go`.
+- Renamed the BtBot config key to `btbot.controller_timer_interval_ms` and the Go field to `ControllerTimerIntervalMS`.
+- BotSpec now contains BotSpecID plus typed Controller, Signaler, Risk, and Executor specifications.
+- BotSpec decoding validates, applies defined defaults, and shapes exact BotConfig TOML.
+- BotSpec no longer carries App Config, Meta, replay inputs, ResultPath, Bot identity, runtime objects, or runtime state.
+- Controller now receives complete Setup plus typed BotSpec and constructs runtime Signaler and Risk objects.
+- Minimum-notional checks now read Setup App Config instead of BotSpec or Executor specifications.
+- Removed obsolete `bot.Definition`, Controller unit tests, and BotSpec unit tests.
+- Added `wiki/testing.md` with unit, integration, system, and RTest boundaries.
+- Full Go tests, full vet, and diff check passed after the architecture hardcut.
+- Reordered BtBot `Init` into grouped dependency order.
+- Added complete `Step N:` intent comments to BtBot `Init`, `Start`, `Loop`, and `Stop`.
+- Added mandatory numbered multi-step flow rules to `wiki/coding/STYLE.md` and `wiki/coding/RULES.md`.
+- Named `internal/btbot/btbot.go` as the canonical numbered-flow example.
+- BtBot cleanup formatting, diagnostics, and scoped diff check pass.
+- Aligned Setup, BotSpec, Controller, BtBot, architecture, project, design, and BotSpec concept documentation.
+- Full Go tests and full vet pass after final source and documentation alignment.
+- Fast Observer RTest passed 1 of 1 through `./stest.sh -bot 9`.
+- Final Observer attempted one run; suite total was 5,966 ms and BtBot average was 5,644 ms.
+- Final Observer historical replay timing was 2,190 ms.
+- Final Observer result log is `workspace/logs/nuubot5-stest-s6-b9-1-20260727T114142Z.log`.
+- Final Observer suite report is `workspace/logs/nuubot5-stest-s6-b9-1-20260727T114142Z.json`.
+- Final Observer log proves `btbot stopped.` after successful results publication.
+- Manual code review of `internal/btbot/btbot.go` is complete.
+- User approved the final BtBot flow, intent comments, loop state, Timer callback comment, and Stop logging.
+- User prohibited more agents during this review session.
+
+### TODO
+
+- None.
+
+### PENDING USER APPROVAL
+
+- None.
+
+### CONFIRMED DESIGN
+
+
+- Build one typed BotSpec object from exact persisted BotConfig TOML text; BotSpecID selects the exact decoder.
+- `botspec` only decodes, validates, applies explicitly defined defaults, and shapes BotConfig into one clean immutable BotSpec object.
+- Do not use `admission`, `admit`, or `admitted` for this flow; validation returns a BotSpec or an error.
+- BotSpec contains BotSpecID plus Controller, Signaler, Risk, and Executor specifications.
+- Complete Setup contains App Config, Meta, replay inputs, ResultPath, Bot instance identity, and provenance.
+- Controller consumes complete Setup plus BotSpec and owns runtime construction.
+- Controller, BotSpec, and BtBot do not use isolated unit tests; RTest proves their real integrated path.
+
 ## Active Boundary Hardcut
 
 ### DONE
@@ -891,9 +941,11 @@ Implementation boundaries:
 
 ## Next Action
 
-User reviews the completed Sweep template work. Do not resume unrelated implementation, commit, or push.
+Commit and push the completed BtBot manual-review hardcut.
 
-Commit and push require explicit user approval.
+User explicitly authorized committing and pushing the complete current worktree.
+
+After push, begin manual code review of `internal/controller/controller.go`.
 
 Go toolchain:
 

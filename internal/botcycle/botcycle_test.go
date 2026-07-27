@@ -8,9 +8,11 @@ import (
 	"github.com/shopspring/decimal"
 
 	"nuubot/internal/account"
+	appconfig "nuubot/internal/config"
 	"nuubot/internal/executor"
 	"nuubot/internal/market"
 	"nuubot/internal/meta"
+	"nuubot/internal/setup"
 	"nuubot/internal/signaler"
 	"nuubot/internal/toolkit/logging"
 )
@@ -143,9 +145,12 @@ func TestBotCycleIngestsGridBBOWhileStopping(t *testing.T) {
 		logging.Create(&bytes.Buffer{}),
 		1,
 		cycleSignal(t, true),
-		Inputs{LatestBBOs: map[string]market.BBO{
-			"BTC": {TimestampMS: 2_000, Price: 100},
-		}},
+		Inputs{
+			Infrastructure: botCycleInfrastructure(),
+			LatestBBOs: map[string]market.BBO{
+				"BTC": {TimestampMS: 2_000, Price: 100},
+			},
+		},
 		[]executor.Spec{gridSpec()},
 	)
 	if err != nil {
@@ -193,6 +198,21 @@ func cycleSignal(t *testing.T, start bool) signaler.Package {
 	return signal
 }
 
+func botCycleInfrastructure() setup.Infrastructure {
+	return setup.Infrastructure{
+		App: appconfig.App{
+			Hyperliquid: appconfig.Hyperliquid{MinOrderNotionalUSDC: 11},
+		},
+		Meta: meta.Instrument{
+			Network:       "testnet",
+			Kind:          "perp",
+			Symbol:        "BTC",
+			SizeDecimals:  5,
+			PriceDecimals: 1,
+		},
+	}
+}
+
 func gridSpec() executor.Spec {
 	return executor.Spec{
 		ID:   "grid",
@@ -205,20 +225,12 @@ func gridSpec() executor.Spec {
 			PhysicalAccountID: "sim",
 			Symbol:            "BTC",
 		},
-		CapitalUSDC:     decimal.NewFromInt(100),
-		GridLevels:      10,
-		RangePct:        decimal.RequireFromString("0.05"),
-		MinExpectedPnL:  decimal.Zero,
-		FeePct:          decimal.RequireFromString("0.05"),
-		PersistMode:     "none",
-		MinNotionalUSDC: decimal.NewFromInt(11),
-		Meta: meta.Instrument{
-			Network:       "testnet",
-			Kind:          "perp",
-			Symbol:        "BTC",
-			SizeDecimals:  5,
-			PriceDecimals: 1,
-		},
+		CapitalUSDC:    decimal.NewFromInt(100),
+		GridLevels:     10,
+		RangePct:       decimal.RequireFromString("0.05"),
+		MinExpectedPnL: decimal.Zero,
+		FeePct:         decimal.RequireFromString("0.05"),
+		PersistMode:    "none",
 	}
 }
 

@@ -23,7 +23,7 @@ Status: Implemented for standalone historical replay.
 One configured Bot selects one exact compiled BotSpec and stores its exact
 BotConfig TOML in the database.
 
-Start creates one immutable BotGeneration and admitted BotDefinition.
+BtBot transforms one exact stored BotConfig into one immutable typed BotSpec.
 
 ```text
 Runner or BtBot
@@ -57,7 +57,7 @@ Controller alone arbitrates:
 - Risk gates and exits.
 - Whether one BotCycle is active.
 - Account-symbol availability.
-- Capital, Meta, and market-data admission.
+- Capital, Meta, and market-data validation.
 - BotCycle and Controller Stop.
 
 One BotCycle is one exchange-style Bot campaign.
@@ -111,8 +111,12 @@ ReplayReader validates Parquet values before returning BBO values.
 TickClock invokes BtBot's registered Controller callback from replay
 timestamps.
 
-Controller owns Signal, Risk, BotCycle, capital, drawdown, and graceful
-shutdown decisions.
+BtBot transforms exact BotConfig TOML into one typed BotSpec.
+
+Controller receives complete Setup plus BotSpec.
+
+Controller constructs Signaler and Risks, then owns Signal, Risk, BotCycle,
+capital, drawdown, and graceful shutdown decisions.
 
 BotCycle coordinates Executors. Executor implementations own execution policy.
 
@@ -165,28 +169,30 @@ main
   log one result
 
 BtBot init
-  initialize Setup
-  load BotSpec
-  resolve replay end
+  prepare global Setup
+  retain replay and result inputs
+  resolve replay range
+  initialize ReplayReader
+  transform BotConfig into typed BotSpec
+  initialize Controller from Setup and BotSpec
   create and initialize TickClock
   register Controller timer
-  initialize Reader
-  build exact BotSpec
-  create and initialize Controller
-  calculate expected proof
+  initialize replay stats
+  log init completed
 
 BtBot loop
   read one validated BBO
-  qualify and send BBO to Controller
+  send BBO to Controller
+  update replay stats
   advance TickClock
   registered timer callback runs Controller
   stop at Reader exhaustion or Controller request
-  verify exact replay
+  verify replay completion
 ```
 
 Detailed behavior remains in [BtBot](design/packages/btbot.md) and [Replay](design/concepts/replay.md).
 
-## Implemented Sweep Template Admission
+## Implemented Sweep Template Validation
 
 ```text
 Sweep template

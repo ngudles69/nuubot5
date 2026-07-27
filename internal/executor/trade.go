@@ -91,21 +91,19 @@ func (e *tradeExecutor) OnInit(ctx Context) error {
 	// initialize Account
 	var ledgerID = uint64(ctx.CycleNumber)<<32 | uint64(ctx.ExecutorNumber)
 	var err = e.account.Init(ctx.Log, account.Config{
-		LedgerID:        ledgerID,
-		CycleNumber:     ctx.CycleNumber,
-		ExecutorNumber:  ctx.ExecutorNumber,
-		Name:            ctx.Spec.Resource.PhysicalAccountID,
-		Venue:           ctx.Spec.Resource.Venue,
-		Network:         ctx.Spec.Resource.Network,
-		Symbol:          ctx.Spec.Resource.Symbol,
-		Meta:            ctx.Spec.Meta,
-		MinNotionalUSDC: ctx.Spec.MinNotionalUSDC,
-		EquityUSDC:      equity,
-		FeePct:          ctx.Spec.FeePct,
-		SlippagePct:     ctx.Spec.SlippagePct,
-		PersistMode:     ctx.Spec.PersistMode,
-		Recon:           ctx.Spec.Recon,
-		ResultPath:      ctx.Spec.ResultPath,
+		Infrastructure: ctx.Infrastructure,
+		LedgerID:       ledgerID,
+		CycleNumber:    ctx.CycleNumber,
+		ExecutorNumber: ctx.ExecutorNumber,
+		Name:           ctx.Spec.Resource.PhysicalAccountID,
+		Venue:          ctx.Spec.Resource.Venue,
+		Network:        ctx.Spec.Resource.Network,
+		Symbol:         ctx.Spec.Resource.Symbol,
+		EquityUSDC:     equity,
+		FeePct:         ctx.Spec.FeePct,
+		SlippagePct:    ctx.Spec.SlippagePct,
+		PersistMode:    ctx.Spec.PersistMode,
+		Recon:          ctx.Spec.Recon,
 	})
 	if err != nil {
 		e.status = Error

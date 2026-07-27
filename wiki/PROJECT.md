@@ -52,7 +52,7 @@ Do not modify a reference repository without explicit user authority.
 - Shared TickClock and WallClock timer mechanics.
 - TickClock-driven Controller passes.
 - Exact compiled BotSpec selection and stored TOML BotConfig admission.
-- Immutable BotDefinition construction.
+- Immutable typed BotSpec construction from exact BotConfig TOML.
 - Macross and RSI signalers.
 - ObserverExecutor stop-loss behavior.
 - Simulator-backed TradeExecutor.

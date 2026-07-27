@@ -9,6 +9,7 @@ import (
 	"nuubot/internal/account"
 	"nuubot/internal/executor"
 	"nuubot/internal/market"
+	"nuubot/internal/setup"
 	"nuubot/internal/signaler"
 	"nuubot/internal/toolkit/logging"
 )
@@ -18,6 +19,7 @@ var ErrRejected = errors.New("bot cycle rejected")
 
 // Inputs contains approved Executor inputs owned above BotCycle.
 type Inputs struct {
+	Infrastructure setup.Infrastructure
 	LatestBBOs     map[string]market.BBO
 	ResourceEquity map[executor.Resource]decimal.Decimal
 }
@@ -80,6 +82,7 @@ func (c *Control) Init(
 	c.executors = make([]executor.Executor, 0, len(specs))
 	for index, spec := range specs {
 		var created, err = executor.Create(executor.Context{
+			Infrastructure:     inputs.Infrastructure,
 			Log:                log,
 			CycleNumber:        number,
 			ExecutorNumber:     index + 1,

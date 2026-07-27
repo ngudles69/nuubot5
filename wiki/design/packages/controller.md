@@ -2,17 +2,24 @@
 
 Status: Implemented for standalone historical replay.
 Covers: `internal/controller/controller.go`
-Purpose: Run one admitted Bot and own synchronous lifecycle decisions.
+Purpose: Construct and run one configured Bot from complete Setup and typed BotSpec.
 
 ## Ownership
 
-Controller owns one persistent Signaler, configured Risks, and zero or one
-active BotCycle.
+Controller receives complete `setup.Infrastructure` and one immutable
+`botspec.Spec`.
 
-It accepts one immutable `bot.Definition`.
+Complete Setup supplies App Config, Bot identity and provenance, replay inputs,
+Meta, and ResultPath.
 
-It does not import Setup, Datastore, TOML, credentials, files, or Venue
-transports.
+BotSpec supplies typed Controller, Signaler, Risk, and Executor specifications.
+
+Controller constructs and owns one persistent Signaler, configured Risks, and
+zero or one active BotCycle.
+
+BotCycle constructs configured Executors when a cycle starts.
+
+Controller never reparses App Config or loads Setup infrastructure.
 
 ## Control Pass
 
@@ -43,11 +50,16 @@ Every Risk assesses the same immutable RiskInput before Controller acts.
 
 `StopController` dominates `StopCycle`, which dominates start blocking.
 
-`StopCycle` prevents same-pass cycle admission even when no cycle is active.
+`StopCycle` prevents same-pass cycle start even when no cycle is active.
 
 Signaler actions are `NoAction`, `StartCycle`, and `StopCycle`.
 
 Controller never queues a Signal.
+
+Controller has no isolated unit tests.
+
+RTest proves Controller through the real `Setup -> BotSpec -> Controller -> BtBot`
+path using `./stest.sh -bot 9`.
 
 After completion, the current `StartCycle` action may start another cycle on
 the next control event.
@@ -60,7 +72,7 @@ Exactly one BotCycle may be active.
 
 There is no configurable concurrency limit.
 
-`max_cycles` limits total admitted cycles for one Controller generation.
+`max_cycles` limits total configured cycles for one Controller generation.
 
 For example, `max_cycles = 999` permits 999 sequential cycles.
 

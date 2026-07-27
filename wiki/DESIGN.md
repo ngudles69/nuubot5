@@ -99,14 +99,14 @@ Nuubot admits only required, audited code. It does not import or preserve either
 | Package | Status | Purpose |
 |---|---|---|
 | [account](design/packages/account.md) | Implemented | Coordinate venue requests and ledger evidence. |
-| [bot](design/packages/bot.md) | Implemented | Define immutable Bot identity and composition. |
-| [botcycle](design/packages/botcycle.md) | Implemented | Coordinate Executors for one admitted entry Signal. |
-| [botspec](design/packages/botspec.md) | Implemented | Admit exact BotConfig and build BotDefinition. |
+| [bot](design/packages/bot.md) | Implemented | Define immutable Bot identity. |
+| [botcycle](design/packages/botcycle.md) | Implemented | Coordinate Executors for one configured entry Signal. |
+| [botspec](design/packages/botspec.md) | Implemented | Validate and shape exact BotConfig into typed BotSpec. |
 | [btbot](design/packages/btbot.md) | Implemented | Execute one complete historical replay. |
 | [btsweep](design/packages/btsweep.md) | Partial | Validate and expand Sweep templates; persistence and execution remain deferred. |
 | [config](design/packages/config.md) | Implemented | Decode and validate immutable settings. |
 | [controller](design/packages/controller.md) | Implemented | Own signals, risks, cycles, capital, and stop decisions. |
-| [datastore](design/packages/datastore.md) | Implemented | Load one validated BotSpec. |
+| [datastore](design/packages/datastore.md) | Implemented | Load one stored BotConfig and replay input. |
 | [executor](design/packages/executor.md) | Implemented | Own execution policy boundaries. |
 | [fill](design/packages/fill.md) | Implemented | Preserve immutable execution facts. |
 | [hyperliquid](design/packages/hyperliquid.md) | Implemented | Own Hyperliquid protocol transport and translations. |

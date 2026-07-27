@@ -14,8 +14,8 @@ import (
 	"nuubot/internal/toolkit/logging"
 )
 
-// Admission contains trusted external inputs for one Bot build.
-type Admission struct {
+// Infrastructure contains process-wide inputs prepared for one Bot.
+type Infrastructure struct {
 	App        config.App
 	Bot        datastore.Bot
 	Meta       meta.Instrument
@@ -24,20 +24,20 @@ type Admission struct {
 
 // Section 1 - Program Flow
 
-// Setup returns one admitted standalone BtBot input.
+// Setup prepares process-wide infrastructure for one standalone BtBot.
 func Setup(
 	caller context.Context,
 	log *logging.Logger,
 	sweepID,
 	botID uint64,
-) (Admission, error) {
+) (Infrastructure, error) {
 	if caller == nil {
-		return Admission{}, fmt.Errorf("setup requires caller context")
+		return Infrastructure{}, fmt.Errorf("setup requires caller context")
 	}
 	// resolve root
 	var root, err = os.Getwd()
 	if err != nil {
-		return Admission{}, fmt.Errorf("get working directory: %w", err)
+		return Infrastructure{}, fmt.Errorf("get working directory: %w", err)
 	}
 	// load config
 	var cfg config.App
@@ -49,7 +49,7 @@ func Setup(
 	}
 	cfg, err = config.LoadApp(configPath)
 	if err != nil {
-		return Admission{}, fmt.Errorf("load setup AppConfig: %w", err)
+		return Infrastructure{}, fmt.Errorf("load setup AppConfig: %w", err)
 	}
 	// prepare datastore
 	var storedBot datastore.Bot
@@ -59,7 +59,7 @@ func Setup(
 		botID,
 	)
 	if err != nil {
-		return Admission{}, fmt.Errorf("prepare datastore: %w", err)
+		return Infrastructure{}, fmt.Errorf("prepare datastore: %w", err)
 	}
 	// validate ticks path
 	storedBot.Replay.TicksPath, err = config.ResolveDataPath(
@@ -67,15 +67,15 @@ func Setup(
 		storedBot.Replay.TicksPath,
 	)
 	if err != nil {
-		return Admission{}, fmt.Errorf("validate ticks path: %w", err)
+		return Infrastructure{}, fmt.Errorf("validate ticks path: %w", err)
 	}
 
-	// admit mainnet Meta
+	// load mainnet Meta
 	var timeout = time.Duration(cfg.Process.RequestTimeoutSeconds) * time.Second
 	var client *hyperliquid.Client
 	client, err = hyperliquid.New("mainnet", timeout)
 	if err != nil {
-		return Admission{}, fmt.Errorf("admit Meta: %w", err)
+		return Infrastructure{}, fmt.Errorf("load Meta: %w", err)
 	}
 	var requestContext, cancel = context.WithTimeout(caller, timeout)
 	defer cancel()
@@ -88,7 +88,7 @@ func Setup(
 		client,
 	)
 	if err != nil {
-		return Admission{}, fmt.Errorf("admit Meta: %w", err)
+		return Infrastructure{}, fmt.Errorf("load Meta: %w", err)
 	}
 
 	// Shared WebSocket ownership remains TBD. Setup starts no background work.
@@ -99,7 +99,7 @@ func Setup(
 		storedBot.BotSpecID,
 		storedBot.Replay.Symbol,
 	))
-	return Admission{
+	return Infrastructure{
 		App:  cfg,
 		Bot:  storedBot,
 		Meta: instrument,

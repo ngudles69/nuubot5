@@ -1,4 +1,4 @@
-// Package botspec admits exact BotSpec-specific Config and builds Bot definitions.
+// Package botspec validates and shapes exact BotConfig into typed Bot specifications.
 package botspec
 
 import (
@@ -16,13 +16,6 @@ const (
 	MacrossTrade    = "macross_trade_bot"
 	MacrossGrid     = "macross_grid_bot"
 )
-
-type admitted struct {
-	maxCycles uint64
-	signaler  signaler.Config
-	executors []executor.Spec
-	risks     []string
-}
 
 type controllerConfig struct {
 	MaxCycles uint64 `toml:"max_cycles"`
@@ -112,19 +105,19 @@ type gridExecutorConfig struct {
 
 // Section 1 - Program Flow
 
-// Validate admits one exact BotSpec Config.
+// Validate checks one exact BotConfig.
 func Validate(botSpecID, configTOML string) error {
-	var _, err = admit(botSpecID, configTOML)
+	var _, err = Build(botSpecID, configTOML)
 	return err
 }
 
-// ValidateReplaySymbol requires replay input for every admitted Executor symbol.
+// ValidateReplaySymbol requires replay input for every configured Executor symbol.
 func ValidateReplaySymbol(botSpecID, configTOML, replaySymbol string) error {
-	var cfg, err = admit(botSpecID, configTOML)
+	var spec, err = Build(botSpecID, configTOML)
 	if err != nil {
 		return err
 	}
-	for _, current := range cfg.executors {
+	for _, current := range spec.Executors {
 		if current.Resource.Symbol != replaySymbol {
 			return fmt.Errorf(
 				"executor symbol %s lacks replay input %s",
@@ -138,25 +131,25 @@ func ValidateReplaySymbol(botSpecID, configTOML, replaySymbol string) error {
 
 // Section 2 - Domain Helpers
 
-func admit(botSpecID, configTOML string) (admitted, error) {
+func build(botSpecID, configTOML string) (Spec, error) {
 	switch botSpecID {
 	case MacrossTrade:
-		return admitMacrossTrade(configTOML)
+		return buildMacrossTrade(configTOML)
 	case MacrossGrid:
-		return admitMacrossGrid(configTOML)
+		return buildMacrossGrid(configTOML)
 	case MacrossObserver:
-		return admitMacrossObserver(configTOML)
+		return buildMacrossObserver(configTOML)
 	default:
-		return admitted{}, fmt.Errorf("unknown BotSpecID: %s", botSpecID)
+		return Spec{}, fmt.Errorf("unknown BotSpecID: %s", botSpecID)
 	}
 }
 
-func admitMacrossGrid(configTOML string) (admitted, error) {
+func buildMacrossGrid(configTOML string) (Spec, error) {
 	var cfg gridConfig
 	if _, err := toml.Decode(configTOML, &cfg); err != nil {
-		return admitted{}, fmt.Errorf("decode %s Config: %w", MacrossGrid, err)
+		return Spec{}, fmt.Errorf("decode %s Config: %w", MacrossGrid, err)
 	}
-	var result, err = admitMacross(
+	var result, err = buildMacross(
 		MacrossGrid,
 		cfg.BotSpec,
 		cfg.Controller,
@@ -164,26 +157,26 @@ func admitMacrossGrid(configTOML string) (admitted, error) {
 		cfg.Risks,
 	)
 	if err != nil {
-		return admitted{}, err
+		return Spec{}, err
 	}
 	if len(cfg.Executors) != 1 {
-		return admitted{}, fmt.Errorf("%s requires one Grid Executor", MacrossGrid)
+		return Spec{}, fmt.Errorf("%s requires one Grid Executor", MacrossGrid)
 	}
 	var spec executor.Spec
-	spec, err = admitGridExecutor(cfg.Executors[0])
+	spec, err = buildGridExecutor(cfg.Executors[0])
 	if err != nil {
-		return admitted{}, err
+		return Spec{}, err
 	}
-	result.executors = []executor.Spec{spec}
+	result.Executors = []executor.Spec{spec}
 	return result, nil
 }
 
-func admitMacrossTrade(configTOML string) (admitted, error) {
+func buildMacrossTrade(configTOML string) (Spec, error) {
 	var cfg tradeConfig
 	if _, err := toml.Decode(configTOML, &cfg); err != nil {
-		return admitted{}, fmt.Errorf("decode %s Config: %w", MacrossTrade, err)
+		return Spec{}, fmt.Errorf("decode %s Config: %w", MacrossTrade, err)
 	}
-	var result, err = admitMacross(
+	var result, err = buildMacross(
 		MacrossTrade,
 		cfg.BotSpec,
 		cfg.Controller,
@@ -191,36 +184,36 @@ func admitMacrossTrade(configTOML string) (admitted, error) {
 		cfg.Risks,
 	)
 	if err != nil {
-		return admitted{}, err
+		return Spec{}, err
 	}
 	if len(cfg.Executors) == 0 {
-		return admitted{}, fmt.Errorf("%s requires at least one Executor", MacrossTrade)
+		return Spec{}, fmt.Errorf("%s requires at least one Executor", MacrossTrade)
 	}
 	var resources = make(map[executor.Resource]bool, len(cfg.Executors))
 	for _, raw := range cfg.Executors {
 		var spec executor.Spec
-		spec, err = admitTradeExecutor(raw)
+		spec, err = buildTradeExecutor(raw)
 		if err != nil {
-			return admitted{}, err
+			return Spec{}, err
 		}
 		if resources[spec.Resource] {
-			return admitted{}, fmt.Errorf(
+			return Spec{}, fmt.Errorf(
 				"duplicate Executor resource: %s",
 				spec.Resource.Key(),
 			)
 		}
 		resources[spec.Resource] = true
-		result.executors = append(result.executors, spec)
+		result.Executors = append(result.Executors, spec)
 	}
 	return result, nil
 }
 
-func admitMacrossObserver(configTOML string) (admitted, error) {
+func buildMacrossObserver(configTOML string) (Spec, error) {
 	var cfg observerConfig
 	if _, err := toml.Decode(configTOML, &cfg); err != nil {
-		return admitted{}, fmt.Errorf("decode %s Config: %w", MacrossObserver, err)
+		return Spec{}, fmt.Errorf("decode %s Config: %w", MacrossObserver, err)
 	}
-	var result, err = admitMacross(
+	var result, err = buildMacross(
 		MacrossObserver,
 		cfg.BotSpec,
 		cfg.Controller,
@@ -228,10 +221,10 @@ func admitMacrossObserver(configTOML string) (admitted, error) {
 		cfg.Risks,
 	)
 	if err != nil {
-		return admitted{}, err
+		return Spec{}, err
 	}
 	if len(cfg.Executors) != 1 {
-		return admitted{}, fmt.Errorf("%s requires one Observer Executor", MacrossObserver)
+		return Spec{}, fmt.Errorf("%s requires one Observer Executor", MacrossObserver)
 	}
 	var raw = cfg.Executors[0]
 	var stopLoss decimal.Decimal
@@ -241,9 +234,9 @@ func admitMacrossObserver(configTOML string) (admitted, error) {
 		raw.Symbol == "" ||
 		!stopLoss.IsPositive() ||
 		stopLoss.GreaterThanOrEqual(decimal.NewFromInt(1)) {
-		return admitted{}, fmt.Errorf("invalid %s Observer Executor", MacrossObserver)
+		return Spec{}, fmt.Errorf("invalid %s Observer Executor", MacrossObserver)
 	}
-	result.executors = []executor.Spec{{
+	result.Executors = []executor.Spec{{
 		ID:          raw.ID,
 		Kind:        raw.Kind,
 		Side:        raw.Side,
@@ -253,15 +246,15 @@ func admitMacrossObserver(configTOML string) (admitted, error) {
 	return result, nil
 }
 
-func admitMacross(
+func buildMacross(
 	botSpecID string,
 	configBotSpecID string,
 	controller controllerConfig,
 	macross macrossConfig,
 	risks []riskConfig,
-) (admitted, error) {
+) (Spec, error) {
 	if configBotSpecID != botSpecID {
-		return admitted{}, fmt.Errorf(
+		return Spec{}, fmt.Errorf(
 			"Config BotSpecID %q does not match %q",
 			configBotSpecID,
 			botSpecID,
@@ -273,14 +266,14 @@ func admitMacross(
 		macross.FastMA <= 0 ||
 		macross.FastMA >= macross.SlowMA ||
 		macross.RegimeEMA <= 0 {
-		return admitted{}, fmt.Errorf("invalid %s Controller or Signaler Config", botSpecID)
+		return Spec{}, fmt.Errorf("invalid %s Controller or Signaler Config", botSpecID)
 	}
 	if len(risks) == 0 {
-		return admitted{}, fmt.Errorf("%s requires Risk Config", botSpecID)
+		return Spec{}, fmt.Errorf("%s requires Risk Config", botSpecID)
 	}
-	var result = admitted{
-		maxCycles: controller.MaxCycles,
-		signaler: signaler.Config{
+	var result = Spec{
+		Controller: ControllerSpec{MaxCycles: controller.MaxCycles},
+		Signaler: signaler.Config{
 			Kind:            "macross",
 			SignalTimeframe: macross.SignalTimeframe,
 			RegimeTimeframe: macross.RegimeTimeframe,
@@ -291,14 +284,14 @@ func admitMacross(
 	}
 	for _, current := range risks {
 		if current.Kind != "balanced" {
-			return admitted{}, fmt.Errorf("unknown Risk: %s", current.Kind)
+			return Spec{}, fmt.Errorf("unknown Risk: %s", current.Kind)
 		}
-		result.risks = append(result.risks, current.Kind)
+		result.Risks = append(result.Risks, RiskSpec{Kind: current.Kind})
 	}
 	return result, nil
 }
 
-func admitTradeExecutor(raw tradeExecutorConfig) (executor.Spec, error) {
+func buildTradeExecutor(raw tradeExecutorConfig) (executor.Spec, error) {
 	var values = make([]decimal.Decimal, 0, 6)
 	for _, text := range []string{
 		raw.CapitalUSDC,
@@ -356,7 +349,7 @@ func admitTradeExecutor(raw tradeExecutorConfig) (executor.Spec, error) {
 	}, nil
 }
 
-func admitGridExecutor(raw gridExecutorConfig) (executor.Spec, error) {
+func buildGridExecutor(raw gridExecutorConfig) (executor.Spec, error) {
 	var values = make([]decimal.Decimal, 0, 5)
 	for _, text := range []string{
 		raw.CapitalUSDC,

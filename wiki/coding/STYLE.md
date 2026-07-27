@@ -110,19 +110,57 @@ Program Flow MUST reveal:
 - selected paths; and
 - meaningful work order.
 
-Each indented action step in an owning `wiki/design/**` Program Flow MUST
-appear as the exact lower-case source comment above its implementing code block.
+Every multi-step Program Flow function MUST use ordered intent comments.
 
-Action steps and matching source comments MUST start with a verb and then name
-the target: `initialize clock`, never `clock initialize`.
+This includes `Init`, `Start`, `Loop`, `Run`, `Stop`, and any other function with
+multiple ordered actions.
 
-Design steps and source comments MUST use the same order.
+Each function starts at Step 1 and uses contiguous comments in this exact form:
 
-One step comment MUST own one coherent code block.
+```go
+// Step 1: load configuration
+// Step 2: initialize Controller
+// Step 3: log init completed
+```
+
+The text after `Step N:` MUST start with a verb and name the target:
+`initialize clock`, never `clock initialize`.
+
+Each step MUST describe intent. The implementing block MUST match that intent.
+
+A lifecycle completion log MUST use `log <operation> completed`, for example:
+
+```go
+// Step 11: log init completed
+// Step 3: log start completed
+// Step 12: log stop completed
+```
+
+One step comment MUST own one coherent block of related data and work.
+
+Related data and work MUST stay together. Do not return to the same concern
+later without a real dependency.
+
+Dependency order governs step order. A later step may depend on all required
+earlier steps.
+
+Loop steps describe one iteration. Work after the loop continues the same step
+sequence.
+
+Values reused across iterations MUST be declared together immediately before
+the loop. Values used by only one iteration stay inside their owning step.
+
+Single-step functions do not need numbered step comments.
+
+Each indented action in an owning `wiki/design/**` Program Flow MUST match the
+text after its source `Step N:` prefix and use the same order.
 
 Design and source MUST change together when ownership or sequence changes.
 
 A missing, extra, renamed, reordered, or falsely implemented step fails review.
+
+`internal/btbot/btbot.go` is the canonical example for numbered `Init`, `Start`,
+`Loop`, and `Stop` flow.
 
 Use one statement per intent:
 
@@ -317,6 +355,9 @@ Comments MUST explain:
 - why simpler code is wrong.
 
 Comments MUST NOT narrate syntax.
+
+Numbered step comments MUST make a multi-step function understandable without
+reading its implementation details.
 
 Every exported declaration MUST have a Go doc comment.
 

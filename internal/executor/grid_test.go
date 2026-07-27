@@ -8,9 +8,11 @@ import (
 
 	"nuubot/internal/account"
 	"nuubot/internal/cloid"
+	appconfig "nuubot/internal/config"
 	"nuubot/internal/market"
 	"nuubot/internal/meta"
 	"nuubot/internal/order"
+	"nuubot/internal/setup"
 	"nuubot/internal/toolkit/logging"
 )
 
@@ -116,6 +118,7 @@ func TestGridExecutorRunsAllLevelsAndFlattensAtBound(t *testing.T) {
 func TestGridCalculationKeepsInitialEntryInsideCapitalSlice(t *testing.T) {
 	var spec = gridExecutorContext().Spec
 	var levels, err = calculateGridLevels(
+		executorInfrastructure(""),
 		spec,
 		market.BBO{TimestampMS: 3_000, Price: 100},
 		decimal.NewFromInt(100),
@@ -233,6 +236,7 @@ func TestGridCalculationRejectsUnprofitableLevel(t *testing.T) {
 	var spec = gridExecutorContext().Spec
 	spec.MinExpectedPnL = decimal.NewFromInt(1)
 	var _, err = calculateGridLevels(
+		executorInfrastructure(""),
 		spec,
 		market.BBO{TimestampMS: 3_000, Price: 100},
 		spec.CapitalUSDC,
@@ -246,6 +250,7 @@ func TestGridCalculationRejectsUnprofitableLevel(t *testing.T) {
 
 func gridExecutorContext() Context {
 	return Context{
+		Infrastructure:     executorInfrastructure(""),
 		Log:                logging.Create(&bytes.Buffer{}),
 		CycleNumber:        1,
 		ExecutorNumber:     1,
@@ -263,23 +268,31 @@ func gridExecutorContext() Context {
 				PhysicalAccountID: "sim",
 				Symbol:            "BTC",
 			},
-			CapitalUSDC:     decimal.NewFromInt(100),
-			GridLevels:      10,
-			RangePct:        decimal.RequireFromString("0.05"),
-			MinExpectedPnL:  decimal.Zero,
-			FeePct:          decimal.RequireFromString("0.05"),
-			SlippagePct:     decimal.Zero,
-			PersistMode:     "none",
-			MinNotionalUSDC: decimal.NewFromInt(11),
-			Meta: meta.Instrument{
-				Network:       "testnet",
-				Kind:          "perp",
-				Symbol:        "BTC",
-				AssetID:       0,
-				SizeDecimals:  5,
-				PriceDecimals: 1,
-			},
+			CapitalUSDC:    decimal.NewFromInt(100),
+			GridLevels:     10,
+			RangePct:       decimal.RequireFromString("0.05"),
+			MinExpectedPnL: decimal.Zero,
+			FeePct:         decimal.RequireFromString("0.05"),
+			SlippagePct:    decimal.Zero,
+			PersistMode:    "none",
 		},
+	}
+}
+
+func executorInfrastructure(resultPath string) setup.Infrastructure {
+	return setup.Infrastructure{
+		App: appconfig.App{
+			Hyperliquid: appconfig.Hyperliquid{MinOrderNotionalUSDC: 11},
+		},
+		Meta: meta.Instrument{
+			Network:       "testnet",
+			Kind:          "perp",
+			Symbol:        "BTC",
+			AssetID:       0,
+			SizeDecimals:  5,
+			PriceDecimals: 1,
+		},
+		ResultPath: resultPath,
 	}
 }
 

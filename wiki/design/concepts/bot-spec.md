@@ -1,8 +1,8 @@
 # BotSpec
 
-Status: Implemented for the Macross Observer and TradeBot replay slice.
-Covers: `internal/bot`, `internal/botspec`, stored BotConfig admission, and
-BotDefinition.
+Status: Implemented for Macross Observer, TradeBot, and GridBot replay.
+Covers: `internal/bot`, `internal/botspec`, stored BotConfig validation, and
+typed BotSpec construction.
 Purpose: Define one complete configurable Bot architecture without runtime mix-and-match behavior.
 
 ## Meaning
@@ -125,9 +125,9 @@ The database stores the exact submitted TOML text.
 
 Start copies that text and hash into one immutable BotGeneration.
 
-Start strictly decodes the saved TOML through the exact BotSpec.
+BtBot strictly transforms saved TOML through the exact BotSpecID.
 
-Controller receives the resulting typed BotDefinition.
+Controller receives complete Setup plus the resulting typed BotSpec.
 
 Execution code never rereads the original TOML file.
 
@@ -143,49 +143,44 @@ JSON is for HTTP envelopes, status, and Results.
 
 JSON is not a second persisted BotConfig representation.
 
-## BotDefinition
+## Typed BotSpec
 
-BotDefinition is one immutable admitted Controller unit.
+Typed BotSpec is one immutable Bot definition produced from exact BotConfig TOML.
 
 It contains:
 
 - Exact BotSpecID.
-- Exact saved BotConfig TOML and hash.
-- Typed Signaler definition.
-- Typed Risk definition.
-- Typed Executor definitions.
-- Account references.
-- Required market and metadata inputs.
-- Exactly one active BotCycle rule.
-- Configured total sequential cycle limit, such as `max_cycles = 999`.
-- BotCycle coordination rules.
+- Typed Controller specification.
+- Typed Signaler specification.
+- Typed Risk specifications.
+- Typed Executor specifications.
 
-It contains no database handle.
+It contains no App Config, Meta, replay runtime input, ResultPath, Bot instance
+identity, provenance, runtime object, or runtime state.
 
-It contains no TOML parser.
+## Construction
 
-It contains credential references, never secrets.
+BtBot passes BotSpecID and exact BotConfig TOML to `botspec.Build`.
 
-## Admission
+`botspec.Build` decodes, validates, applies explicitly defined defaults, and
+shapes typed specification values.
 
-Admission receives:
+It returns one immutable BotSpec or an error.
 
-- Saved BotGeneration TOML.
-- Exact BotSpecID.
-- ReplayInput or live Runner inputs.
-- Caller context.
-- Operational AppConfig.
-- Required metadata.
+BtBot passes complete Setup plus BotSpec to Controller.
 
-Admission returns one immutable BotDefinition or an error.
+Complete Setup contains App Config, Bot identity and provenance, ReplayInput,
+Meta, and ResultPath.
 
-Simulator admission loads no private credentials.
+Controller constructs Signaler and Risk runtime objects.
 
-Live Account admission resolves only referenced credentials.
+BotCycle constructs Executor runtime objects when a cycle starts.
+
+Simulator Setup loads no private credentials.
 
 Caller context owns cancellation and timeouts.
 
-Setup creates no background context for admitted work.
+Setup creates no background context.
 
 ## Live Start Gates
 
@@ -237,7 +232,7 @@ Fresh Start never adopts existing Orders or positions.
 
 Users clear existing Venue state manually before retrying Start.
 
-No automatic cancel, flatten, transfer, leverage change, or state substitution occurs during admission.
+No automatic cancel, flatten, transfer, leverage change, or state substitution occurs during Start validation.
 
 ## Symbol and Meta Gates
 
@@ -255,15 +250,15 @@ Historical replay requires its pinned Meta snapshot and matching hash.
 
 Current live Meta never substitutes for missing historical Meta.
 
-Data-only symbols require Meta and market-data admission.
+Data-only symbols require Meta and market-data validation.
 
-Traded symbols additionally require Account, clean-slate, and capital admission.
+Traded symbols additionally require Account, clean-slate, and capital validation.
 
 ## Capital and Order Sizing
 
 BotConfig declares capital for each Executor's Account-symbol resource.
 
-Bot capital is the sum of admitted Executor capital in one reporting currency.
+Bot capital is the sum of configured Executor capital in one reporting currency.
 
 Bot equity is:
 
@@ -273,7 +268,7 @@ Bot capital + cumulative net Bot PnL
 
 Net Bot PnL includes realized PnL, unrealized PnL, fees, and funding.
 
-Each Executor controls its Order sizing from its admitted Config.
+Each Executor controls its Order sizing from its validated specification.
 
 Supported sizing may include:
 
@@ -282,17 +277,17 @@ Supported sizing may include:
 - Percentage of assigned capital.
 - Percentage of physical Account.
 
-A physical-Account percentage resolves once during admission from one recorded
-Account snapshot.
+A physical-Account percentage resolves once during Start validation from one
+recorded Account snapshot.
 
 It becomes an immutable amount for that BotGeneration.
 
 It is never recalculated for each Order.
 
-Order plans that exceed assigned Executor capital fail admission.
+Order plans that exceed assigned Executor capital fail validation.
 
-Admission aggregates required capital by physical Account for funds and margin
-checks.
+Start validation aggregates required capital by physical Account for funds and
+margin checks.
 
 Capital is initially a measurement and sizing basis.
 
@@ -319,12 +314,12 @@ template language.
 - BotConfig never stores secrets.
 - Config does not select arbitrary Signaler, Risk, or Executor kinds.
 - Existing BotSpec identities never acquire new Config meaning.
-- Admission failures create no Controller or Venue mutation.
+- Validation failures create no Controller or Venue mutation.
 
 ## Open Decisions
 
 - Live cross-process Account ownership and claims.
 - Standalone Runner datastore writes.
 - Shared versus process-local exchange WebSockets.
-- Complete Venue-specific admission checklist.
+- Complete Venue-specific Start validation checklist.
 - BotConfig database schema and Server route shape.

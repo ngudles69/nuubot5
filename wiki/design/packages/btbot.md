@@ -1,6 +1,6 @@
 # BtBot Package
 
-Status: Implemented with exact BotSpec admission and first-class results.
+Status: Implemented with typed BotSpec construction and first-class results.
 Covers: `internal/btbot/btbot.go`
 Purpose: Run one bounded historical Bot replay and prove exact completion.
 
@@ -8,7 +8,7 @@ Purpose: Run one bounded historical Bot replay and prove exact completion.
 
 BtBot owns:
 
-- Setup admission;
+- complete Setup infrastructure;
 - one ReplayReader;
 - one TickClock;
 - one Controller;
@@ -30,25 +30,50 @@ BtBot receives no profiling configuration and contains no profiling lifecycle.
 ## Initialization
 
 ```text
-Setup loads AppConfig, stored BotConfig, ReplayInput, and Meta
-initialize TickClock and ReplayReader
-build exact compiled BotSpec
-initialize Controller from BotDefinition
-calculate expected replay proof
+prepare complete Setup infrastructure
+retain replay and result inputs
+resolve replay range
+initialize ReplayReader
+transform exact BotConfig TOML into typed BotSpec
+initialize Controller from complete Setup plus BotSpec
+create and initialize TickClock
+register Controller timer
+initialize replay stats
+log init completed
 ```
 
-Caller context reaches Setup and Meta admission.
+Caller context reaches Setup and Meta loading.
 
 Setup creates no background context.
 
 ## Loop
 
-Every admitted BBO receives its replay symbol.
+Every validated BBO receives its replay symbol.
 
 BtBot sends the BBO to Controller, advances TickClock, and runs Controller
 through the registered timer.
 
 Reader exhaustion is normal completion.
+
+## Stop
+
+Stop logs every request before checking stopped state.
+
+The first request marks BtBot stopped, stops owned components, builds results,
+and logs results and stats.
+
+Successful Stop logs final `btbot stopped.` immediately before returning.
+
+A repeated request logs `btbot stopping - ignoring stop request` and returns
+without repeating teardown.
+
+This guard keeps Stop idempotent.
+
+The entry and ignored-request logs expose duplicate, late, rogue, or unexpected
+Stop calls.
+
+They may also reveal lifecycle sequencing or timing defects without claiming
+concurrent execution.
 
 ## Proof
 

@@ -15,6 +15,7 @@ import (
 	"nuubot/internal/executor"
 	"nuubot/internal/ledger"
 	"nuubot/internal/report"
+	"nuubot/internal/setup"
 	"nuubot/internal/telemetry"
 )
 
@@ -101,8 +102,9 @@ func TestPublishPreservesMaximumAccountEvidence(t *testing.T) {
 	var path = filepath.Join(t.TempDir(), "result.db")
 	var accountResult = account.Result{
 		Config: account.Config{
-			Name: "sim", Venue: "simulator", Network: "simnet", Symbol: "BTC",
-			PersistMode: ledger.Max, ResultPath: path,
+			Infrastructure: setup.Infrastructure{ResultPath: path},
+			Name:           "sim", Venue: "simulator", Network: "simnet", Symbol: "BTC",
+			PersistMode: ledger.Max,
 		},
 		Ledger: ledger.Result{Config: ledger.Config{
 			ID: 1, CycleNumber: 1, ExecutorNumber: 1,

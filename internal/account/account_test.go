@@ -10,10 +10,12 @@ import (
 	"github.com/shopspring/decimal"
 	_ "modernc.org/sqlite"
 
+	appconfig "nuubot/internal/config"
 	"nuubot/internal/ledger"
 	"nuubot/internal/market"
 	"nuubot/internal/meta"
 	"nuubot/internal/order"
+	"nuubot/internal/setup"
 	"nuubot/internal/toolkit/logging"
 	"nuubot/internal/trade"
 )
@@ -23,6 +25,14 @@ import (
 func TestAccountRunsOneReconciledBracket(t *testing.T) {
 	var actual Account
 	var err = actual.Init(logging.Create(io.Discard), Config{
+		Infrastructure: accountInfrastructure(meta.Instrument{
+			Network:       "testnet",
+			Kind:          "perp",
+			Symbol:        "BTC",
+			AssetID:       0,
+			SizeDecimals:  5,
+			PriceDecimals: 1,
+		}, ""),
 		LedgerID:       1,
 		CycleNumber:    2,
 		ExecutorNumber: 3,
@@ -30,19 +40,10 @@ func TestAccountRunsOneReconciledBracket(t *testing.T) {
 		Venue:          "simulator",
 		Network:        "simnet",
 		Symbol:         "BTC",
-		Meta: meta.Instrument{
-			Network:       "testnet",
-			Kind:          "perp",
-			Symbol:        "BTC",
-			AssetID:       0,
-			SizeDecimals:  5,
-			PriceDecimals: 1,
-		},
-		MinNotionalUSDC: decimal.NewFromInt(11),
-		EquityUSDC:      decimal.NewFromInt(1000),
-		FeePct:          decimal.RequireFromString("0.035"),
-		SlippagePct:     decimal.Zero,
-		PersistMode:     "none",
+		EquityUSDC:     decimal.NewFromInt(1000),
+		FeePct:         decimal.RequireFromString("0.035"),
+		SlippagePct:    decimal.Zero,
+		PersistMode:    "none",
 	})
 	if err != nil {
 		t.Fatalf("initialize Account: %v", err)
@@ -272,6 +273,14 @@ func TestAccountReconFailurePublishesOnlyTelemetry(t *testing.T) {
 
 func TestAccountMaxPersistenceRecoversDirtyVenueState(t *testing.T) {
 	var cfg = Config{
+		Infrastructure: accountInfrastructure(meta.Instrument{
+			Network:       "testnet",
+			Kind:          "perp",
+			Symbol:        "BTC",
+			AssetID:       0,
+			SizeDecimals:  5,
+			PriceDecimals: 1,
+		}, t.TempDir()+"/result.db"),
 		LedgerID:       7,
 		CycleNumber:    2,
 		ExecutorNumber: 3,
@@ -279,20 +288,10 @@ func TestAccountMaxPersistenceRecoversDirtyVenueState(t *testing.T) {
 		Venue:          "simulator",
 		Network:        "simnet",
 		Symbol:         "BTC",
-		Meta: meta.Instrument{
-			Network:       "testnet",
-			Kind:          "perp",
-			Symbol:        "BTC",
-			AssetID:       0,
-			SizeDecimals:  5,
-			PriceDecimals: 1,
-		},
-		MinNotionalUSDC: decimal.NewFromInt(11),
-		EquityUSDC:      decimal.NewFromInt(1000),
-		FeePct:          decimal.RequireFromString("0.035"),
-		SlippagePct:     decimal.Zero,
-		PersistMode:     "max",
-		ResultPath:      t.TempDir() + "/result.db",
+		EquityUSDC:     decimal.NewFromInt(1000),
+		FeePct:         decimal.RequireFromString("0.035"),
+		SlippagePct:    decimal.Zero,
+		PersistMode:    "max",
 	}
 	var first Account
 	var err = first.Init(logging.Create(io.Discard), cfg)
@@ -963,13 +962,28 @@ func TestAccountKeepsFeeIncompleteClosurePendingAndFinalFinanceStatic(t *testing
 
 func accountTestConfig(ledgerID uint64, recon string) Config {
 	return Config{
+		Infrastructure: accountInfrastructure(meta.Instrument{
+			Network: "testnet", Kind: "perp", Symbol: "BTC",
+			AssetID: 0, SizeDecimals: 5, PriceDecimals: 1,
+		}, ""),
 		LedgerID: ledgerID, CycleNumber: 2, ExecutorNumber: 3, Name: "sim",
 		Venue: "simulator", Network: "simnet", Symbol: "BTC",
-		Meta: meta.Instrument{Network: "testnet", Kind: "perp", Symbol: "BTC",
-			AssetID: 0, SizeDecimals: 5, PriceDecimals: 1},
-		MinNotionalUSDC: decimal.NewFromInt(11), EquityUSDC: decimal.NewFromInt(1000),
-		FeePct: decimal.RequireFromString("0.035"), SlippagePct: decimal.Zero,
+		EquityUSDC: decimal.NewFromInt(1000),
+		FeePct:     decimal.RequireFromString("0.035"), SlippagePct: decimal.Zero,
 		PersistMode: "none", Recon: recon,
+	}
+}
+
+func accountInfrastructure(
+	instrument meta.Instrument,
+	resultPath string,
+) setup.Infrastructure {
+	return setup.Infrastructure{
+		App: appconfig.App{
+			Hyperliquid: appconfig.Hyperliquid{MinOrderNotionalUSDC: 11},
+		},
+		Meta:       instrument,
+		ResultPath: resultPath,
 	}
 }
 
@@ -985,6 +999,14 @@ func assertTradeFinanceEqual(t *testing.T, actual trade.ReconState, expected tra
 
 func simulatorFailureConfig(path string, ledgerID uint64) Config {
 	return Config{
+		Infrastructure: accountInfrastructure(meta.Instrument{
+			Network:       "mainnet",
+			Kind:          "perp",
+			Symbol:        "BTC",
+			AssetID:       0,
+			SizeDecimals:  5,
+			PriceDecimals: 1,
+		}, path),
 		LedgerID:       ledgerID,
 		CycleNumber:    2,
 		ExecutorNumber: 3,
@@ -992,20 +1014,10 @@ func simulatorFailureConfig(path string, ledgerID uint64) Config {
 		Venue:          "simulator",
 		Network:        "simnet",
 		Symbol:         "BTC",
-		Meta: meta.Instrument{
-			Network:       "mainnet",
-			Kind:          "perp",
-			Symbol:        "BTC",
-			AssetID:       0,
-			SizeDecimals:  5,
-			PriceDecimals: 1,
-		},
-		MinNotionalUSDC: decimal.NewFromInt(11),
-		EquityUSDC:      decimal.NewFromInt(1000),
-		FeePct:          decimal.Zero,
-		SlippagePct:     decimal.Zero,
-		PersistMode:     "max",
-		ResultPath:      path,
+		EquityUSDC:     decimal.NewFromInt(1000),
+		FeePct:         decimal.Zero,
+		SlippagePct:    decimal.Zero,
+		PersistMode:    "max",
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 	"nuubot/internal/ledger"
 	"nuubot/internal/market"
 	"nuubot/internal/order"
+	"nuubot/internal/setup"
 	"nuubot/internal/toolkit/logging"
 	"nuubot/internal/trade"
 )
@@ -95,7 +96,12 @@ func (e *gridExecutor) OnInit(ctx Context) error {
 
 	// calculate grid levels
 	var err error
-	e.levels, err = calculateGridLevels(ctx.Spec, ctx.LatestBBO, equity)
+	e.levels, err = calculateGridLevels(
+		ctx.Infrastructure,
+		ctx.Spec,
+		ctx.LatestBBO,
+		equity,
+	)
 	if err != nil {
 		e.status = Error
 		return fmt.Errorf("initialize grid executor: %w", err)
@@ -104,21 +110,19 @@ func (e *gridExecutor) OnInit(ctx Context) error {
 	// initialize Account
 	var ledgerID = uint64(ctx.CycleNumber)<<32 | uint64(ctx.ExecutorNumber)
 	err = e.account.Init(ctx.Log, account.Config{
-		LedgerID:        ledgerID,
-		CycleNumber:     ctx.CycleNumber,
-		ExecutorNumber:  ctx.ExecutorNumber,
-		Name:            ctx.Spec.Resource.PhysicalAccountID,
-		Venue:           ctx.Spec.Resource.Venue,
-		Network:         ctx.Spec.Resource.Network,
-		Symbol:          ctx.Spec.Resource.Symbol,
-		Meta:            ctx.Spec.Meta,
-		MinNotionalUSDC: ctx.Spec.MinNotionalUSDC,
-		EquityUSDC:      equity,
-		FeePct:          ctx.Spec.FeePct,
-		SlippagePct:     ctx.Spec.SlippagePct,
-		PersistMode:     ctx.Spec.PersistMode,
-		Recon:           ctx.Spec.Recon,
-		ResultPath:      ctx.Spec.ResultPath,
+		Infrastructure: ctx.Infrastructure,
+		LedgerID:       ledgerID,
+		CycleNumber:    ctx.CycleNumber,
+		ExecutorNumber: ctx.ExecutorNumber,
+		Name:           ctx.Spec.Resource.PhysicalAccountID,
+		Venue:          ctx.Spec.Resource.Venue,
+		Network:        ctx.Spec.Resource.Network,
+		Symbol:         ctx.Spec.Resource.Symbol,
+		EquityUSDC:     equity,
+		FeePct:         ctx.Spec.FeePct,
+		SlippagePct:    ctx.Spec.SlippagePct,
+		PersistMode:    ctx.Spec.PersistMode,
+		Recon:          ctx.Spec.Recon,
 	})
 	if err != nil {
 		e.status = Error
@@ -612,18 +616,22 @@ func (e *gridExecutor) stopError(err error) error {
 }
 
 func calculateGridLevels(
+	infrastructure setup.Infrastructure,
 	spec Spec,
 	bbo market.BBO,
 	equity decimal.Decimal,
 ) ([]GridLevel, error) {
 	var start = decimal.NewFromFloat(bbo.Price)
 	var one = decimal.NewFromInt(1)
-	var lower = spec.Meta.RoundPrice(start.Mul(one.Sub(spec.RangePct)))
-	var upper = spec.Meta.RoundPrice(start.Mul(one.Add(spec.RangePct)))
+	var minNotionalUSDC = decimal.NewFromInt(
+		int64(infrastructure.App.Hyperliquid.MinOrderNotionalUSDC),
+	)
+	var lower = infrastructure.Meta.RoundPrice(start.Mul(one.Sub(spec.RangePct)))
+	var upper = infrastructure.Meta.RoundPrice(start.Mul(one.Add(spec.RangePct)))
 	var step = upper.Sub(lower).Div(decimal.NewFromInt(int64(spec.GridLevels - 1)))
 	var prices = make([]decimal.Decimal, spec.GridLevels)
 	for index := range prices {
-		prices[index] = spec.Meta.RoundPrice(
+		prices[index] = infrastructure.Meta.RoundPrice(
 			lower.Add(step.Mul(decimal.NewFromInt(int64(index)))),
 		)
 		if index > 0 && !prices[index].GreaterThan(prices[index-1]) {
@@ -661,18 +669,18 @@ func calculateGridLevels(
 		level.IntendedAction = "enter_long"
 		if spec.Side == Long {
 			if start.LessThan(level.InitialEntryPrice) {
-				level.InitialEntryPrice = spec.Meta.RoundPrice(start)
+				level.InitialEntryPrice = infrastructure.Meta.RoundPrice(start)
 			}
 		} else {
 			exitIndex = index - 1
 			level.IntendedAction = "enter_short"
 			if start.GreaterThan(level.InitialEntryPrice) {
-				level.InitialEntryPrice = spec.Meta.RoundPrice(start)
+				level.InitialEntryPrice = infrastructure.Meta.RoundPrice(start)
 			}
 		}
 		level.ExitPrice = levels[exitIndex].GridPrice
 		var sizingPrice = decimal.Max(level.InitialEntryPrice, level.ReentryPrice)
-		level.Quantity = spec.Meta.RoundSize(
+		level.Quantity = infrastructure.Meta.RoundSize(
 			slice.Div(one.Add(feeRate)).Div(sizingPrice),
 		)
 		if !level.Quantity.IsPositive() {
@@ -681,9 +689,9 @@ func calculateGridLevels(
 		level.InitialNotional = level.Quantity.Mul(level.InitialEntryPrice)
 		level.ReentryNotional = level.Quantity.Mul(level.ReentryPrice)
 		var exitNotional = level.Quantity.Mul(level.ExitPrice)
-		if level.InitialNotional.LessThan(spec.MinNotionalUSDC) ||
-			level.ReentryNotional.LessThan(spec.MinNotionalUSDC) ||
-			exitNotional.LessThan(spec.MinNotionalUSDC) {
+		if level.InitialNotional.LessThan(minNotionalUSDC) ||
+			level.ReentryNotional.LessThan(minNotionalUSDC) ||
+			exitNotional.LessThan(minNotionalUSDC) {
 			return nil, fmt.Errorf("Grid level %d is below minimum notional", level.Level)
 		}
 		if level.InitialNotional.Mul(one.Add(feeRate)).GreaterThan(slice) ||

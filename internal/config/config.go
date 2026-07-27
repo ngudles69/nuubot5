@@ -52,7 +52,7 @@ type Paths struct {
 
 // BtBot defines historical Bot execution cadence.
 type BtBot struct {
-	TimerIntervalMS uint64 `toml:"timer_interval_ms"`
+	ControllerTimerIntervalMS uint64 `toml:"controller_timer_interval_ms"`
 }
 
 // Section 1 - Program Flow
@@ -78,8 +78,8 @@ func LoadApp(path string) (App, error) {
 		return cfg, fmt.Errorf("network.default must be mainnet or testnet")
 	}
 	// validate cadence
-	if cfg.BtBot.TimerIntervalMS == 0 {
-		return cfg, fmt.Errorf("btbot.timer_interval_ms must be positive")
+	if cfg.BtBot.ControllerTimerIntervalMS == 0 {
+		return cfg, fmt.Errorf("btbot.controller_timer_interval_ms must be positive")
 	}
 	return cfg, nil
 }

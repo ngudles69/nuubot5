@@ -10,8 +10,6 @@ import (
 
 	"nuubot/internal/account"
 	"nuubot/internal/market"
-	"nuubot/internal/meta"
-
 	"nuubot/internal/toolkit/logging"
 )
 
@@ -175,6 +173,7 @@ func tradeExecutorContext(
 	t.Helper()
 	var initial = market.BBO{TimestampMS: 3_000, Price: price}
 	return Context{
+		Infrastructure:    executorInfrastructure(resultPath),
 		Log:               logging.Create(&bytes.Buffer{}),
 		CycleNumber:       1,
 		ExecutorNumber:    1,
@@ -190,23 +189,13 @@ func tradeExecutorContext(
 				PhysicalAccountID: "sim",
 				Symbol:            "BTC",
 			},
-			CapitalUSDC:     decimal.NewFromInt(1000),
-			OrderSizeUSDC:   decimal.NewFromInt(11),
-			TakeProfitPct:   decimal.RequireFromString("0.10"),
-			StopLossPct:     decimal.RequireFromString("0.10"),
-			FeePct:          decimal.RequireFromString("0.035"),
-			SlippagePct:     decimal.Zero,
-			PersistMode:     persistMode,
-			MinNotionalUSDC: decimal.NewFromInt(11),
-			Meta: meta.Instrument{
-				Network:       "testnet",
-				Kind:          "perp",
-				Symbol:        "BTC",
-				AssetID:       0,
-				SizeDecimals:  5,
-				PriceDecimals: 1,
-			},
-			ResultPath: resultPath,
+			CapitalUSDC:   decimal.NewFromInt(1000),
+			OrderSizeUSDC: decimal.NewFromInt(11),
+			TakeProfitPct: decimal.RequireFromString("0.10"),
+			StopLossPct:   decimal.RequireFromString("0.10"),
+			FeePct:        decimal.RequireFromString("0.035"),
+			SlippagePct:   decimal.Zero,
+			PersistMode:   persistMode,
 		},
 	}
 }

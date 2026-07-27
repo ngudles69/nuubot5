@@ -26,4 +26,4 @@ shared_data = "D:/workspace/data"
 database = "workspace/db/nuubot.db"
 
 [btbot]
-timer_interval_ms = 10000
+controller_timer_interval_ms = 10000

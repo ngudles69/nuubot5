@@ -27,7 +27,7 @@ func Publish(path string, input report.Input, report report.Run) error {
 				continue
 			}
 			var current = *executorResult.Account
-			if current.ResultPath != path {
+			if current.Infrastructure.ResultPath != path {
 				return fmt.Errorf("publish result: Accounts use different result paths")
 			}
 			if current.PersistMode == "max" {

@@ -121,11 +121,26 @@ Empty lifecycle phases MUST be omitted.
 
 Operations outside this lifecycle vocabulary MUST be precise Domain Helpers.
 
-Each indented owning-design action step MUST match one lower-case source
-comment and its code block in exact order.
+Each multi-step Program Flow function MUST use contiguous `// Step N: verb target`
+comments starting at Step 1.
 
-Each action step and source comment MUST start with a verb and then name its
-target.
+This applies to `Init`, `Start`, `Loop`, `Run`, `Stop`, and every other function
+with multiple ordered actions.
+
+Each owning-design action MUST match the text after its source `Step N:` prefix
+and its coherent code block in exact order.
+
+Related data and work MUST stay together unless a real dependency requires
+separation.
+
+Values reused across loop iterations MUST be declared before the loop.
+Iteration-local values MUST remain inside their owning step.
+
+Each action MUST start with a verb and then name its target.
+
+Lifecycle completion logs MUST use `log <operation> completed` intent comments.
+
+`internal/btbot/btbot.go` is the canonical numbered-flow example.
 
 Design and source MUST change together when ownership or sequence changes.
 

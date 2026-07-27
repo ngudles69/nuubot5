@@ -2,31 +2,59 @@
 
 Status: Implemented for Macross Observer, TradeBot, and GridBot.
 Covers: `internal/botspec/**`
-Purpose: Admit exact BotSpec Config and build one BotDefinition.
+Purpose: Validate and shape exact BotConfig TOML into one typed BotSpec.
 
 The explicit catalogue recognizes:
 
 - `macross_observer_bot`;
-- `macross_trade_bot`;
+- `macross_trade_bot`; and
 - `macross_grid_bot`.
 
-Each ID has one typed Config decoder and one static commented TOML template.
+Each BotSpec contains:
 
-Required fields validate.
+- exact BotSpecID;
+- Controller specification;
+- Signaler specification;
+- Risk specifications; and
+- Executor specifications.
 
-Extra fields are stored and ignored.
+`Build` receives BotSpecID and exact BotConfig TOML.
+
+`Build` decodes, validates, applies explicitly defined defaults, and shapes
+typed values.
+
+`Build` returns one immutable BotSpec or an error.
+
+BotSpec never contains:
+
+- App Config;
+- Meta;
+- replay runtime inputs;
+- ResultPath;
+- SweepID or BotID;
+- Config provenance;
+- runtime objects; or
+- runtime state.
+
+BotSpec creates no Signaler, Risk, BotCycle, Executor, Account, or Venue object.
+
+Controller receives complete Setup plus BotSpec and constructs runtime objects.
+
+Extra TOML fields remain stored and ignored.
 
 Duplicate TOML keys, duplicate Executor resources, invalid decimals, invalid
 roles, and unknown IDs fail.
-
-Build constructs Signaler and Risks, attaches admitted Meta and result paths,
-and returns one immutable BotDefinition.
 
 No reflection, plugin, DSL, runtime compilation, fallback, alias, or
 compatibility path exists.
 
 `macross_grid_bot` requires exactly one GridExecutor.
 
-Its Config owns capital, side, 3-to-1,024 Levels, range, minimum expected PnL, fees, slippage, and persistence.
+Its specification owns capital, side, 3-to-1,024 Levels, range, minimum
+expected PnL, fees, slippage, and persistence.
 
-Its compiled calculation is arithmetic spacing with equal capital slices.
+Its compiled calculation uses arithmetic spacing with equal capital slices.
+
+Controller, BotSpec, and BtBot use RTest instead of isolated unit tests.
+
+See `wiki/testing.md`.

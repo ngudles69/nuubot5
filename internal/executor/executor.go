@@ -8,7 +8,7 @@ import (
 
 	"nuubot/internal/account"
 	"nuubot/internal/market"
-	"nuubot/internal/meta"
+	"nuubot/internal/setup"
 	"nuubot/internal/toolkit/logging"
 )
 
@@ -41,25 +41,22 @@ func (r Resource) Key() string {
 
 // Spec contains one immutable Executor definition.
 type Spec struct {
-	ID              string
-	Role            string
-	Kind            string
-	Side            string
-	Resource        Resource
-	CapitalUSDC     decimal.Decimal
-	OrderSizeUSDC   decimal.Decimal
-	GridLevels      int
-	RangePct        decimal.Decimal
-	MinExpectedPnL  decimal.Decimal
-	TakeProfitPct   decimal.Decimal
-	StopLossPct     decimal.Decimal
-	FeePct          decimal.Decimal
-	SlippagePct     decimal.Decimal
-	PersistMode     string
-	Recon           string
-	Meta            meta.Instrument
-	MinNotionalUSDC decimal.Decimal
-	ResultPath      string
+	ID             string
+	Role           string
+	Kind           string
+	Side           string
+	Resource       Resource
+	CapitalUSDC    decimal.Decimal
+	OrderSizeUSDC  decimal.Decimal
+	GridLevels     int
+	RangePct       decimal.Decimal
+	MinExpectedPnL decimal.Decimal
+	TakeProfitPct  decimal.Decimal
+	StopLossPct    decimal.Decimal
+	FeePct         decimal.Decimal
+	SlippagePct    decimal.Decimal
+	PersistMode    string
+	Recon          string
 }
 
 // Result contains one immutable terminal Executor result.
@@ -143,6 +140,7 @@ const (
 
 // Context contains one Executor's initialization inputs.
 type Context struct {
+	Infrastructure     setup.Infrastructure
 	Log                *logging.Logger
 	CycleNumber        int
 	ExecutorNumber     int

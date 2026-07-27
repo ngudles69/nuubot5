@@ -176,10 +176,13 @@ func (a *Account) validateIdentity() error {
 	if cfg.Venue != "simulator" || cfg.Network != "simnet" {
 		return fmt.Errorf("initialize Account: first trading tranche requires simulator simnet")
 	}
-	if cfg.Meta.Symbol != cfg.Symbol || cfg.Meta.IsDelisted || cfg.Meta.Retired {
+	if cfg.Infrastructure.Meta.Symbol != cfg.Symbol ||
+		cfg.Infrastructure.Meta.IsDelisted ||
+		cfg.Infrastructure.Meta.Retired {
 		return fmt.Errorf("initialize Account: symbol Meta is unavailable")
 	}
-	if !cfg.MinNotionalUSDC.IsPositive() || !cfg.EquityUSDC.IsPositive() {
+	if cfg.Infrastructure.App.Hyperliquid.MinOrderNotionalUSDC == 0 ||
+		!cfg.EquityUSDC.IsPositive() {
 		return fmt.Errorf("initialize Account: notional floor and equity must be positive")
 	}
 	return nil
@@ -205,7 +208,7 @@ func (a *Account) initializeLedger() error {
 		Network:        cfg.Network,
 		Symbol:         cfg.Symbol,
 		PersistMode:    cfg.PersistMode,
-		Path:           cfg.ResultPath,
+		Path:           cfg.Infrastructure.ResultPath,
 	})
 	if err != nil {
 		return fmt.Errorf("initialize Account: %w", err)
@@ -218,13 +221,13 @@ func (a *Account) initializeVenue() error {
 	var simulated simulator.Simulator
 	var err = simulated.Init(simulator.Config{
 		Account:     cfg.Name,
-		Asset:       int(cfg.Meta.AssetID),
+		Asset:       int(cfg.Infrastructure.Meta.AssetID),
 		Symbol:      cfg.Symbol,
 		Equity:      cfg.EquityUSDC,
 		FeePct:      cfg.FeePct,
 		SlippagePct: cfg.SlippagePct,
 		PersistMode: cfg.PersistMode,
-		Path:        cfg.ResultPath,
+		Path:        cfg.Infrastructure.ResultPath,
 	})
 	if err != nil {
 		return fmt.Errorf("initialize Account: %w", err)
