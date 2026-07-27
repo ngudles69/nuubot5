@@ -170,7 +170,7 @@ It returns one immutable BotSpec or an error.
 Setup stores BotSpec in one shared Nuubot harness and returns it to BtBot.
 
 Nuubot contains Logger, App Config, Bot identity and provenance, ReplayInput,
-BotSpec, Meta, and ResultPath.
+BotSpec, Clock, MarketData, Meta, and ResultPath.
 
 Controller, BotCycle, Executors, and Accounts receive the same Nuubot pointer.
 

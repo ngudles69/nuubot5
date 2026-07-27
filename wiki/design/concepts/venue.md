@@ -16,7 +16,6 @@ Account owns the smallest interface it consumes:
 type venue interface {
     PlaceOrders(hyperliquid.PlaceOrderAction, uint64) ([]byte, error)
     CancelOrders(hyperliquid.CancelByCLOIDAction, uint64) ([]byte, error)
-    IngestBBO(market.BBO) (bool, error)
     OpenOrders(string) ([]byte, error)
     Fills(string, uint64, uint64) ([]byte, error)
     OrderStatus(string, string) ([]byte, error)
@@ -97,15 +96,16 @@ Each call constructs new JSON from current Venue truth.
 
 Returned bytes never alias Venue memory.
 
-## IngestBBO
+## Market Data
 
-`IngestBBO` is Simulator-only market input.
+Venue exposes no BBO ingestion operation.
 
-It does not pass Account or Ledger state.
+Simulator subscribes directly to shared MarketData and records private execution truth.
 
-Simulator matches eligible private Orders and records private execution truth.
+Account receives only a narrow dirty-state notification and learns Venue details through official responses.
 
-Account learns those changes only through official Venue responses.
+Live Venue implementations require no empty market-data method.
+
 
 ## Invariants
 

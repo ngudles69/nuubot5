@@ -11,7 +11,7 @@ validate_observer() {
     local output="$1"
     local controller_line
     controller_line="$(printf '%s\n' "$output" | grep '] controller stopped ' | tail -n 1)"
-    [[ "$controller_line" =~ ticks_accepted=7948800.*runs=794880.*signal_packages_read=2208.*start_actions_skipped=724.*cycles_started=64.*cycles_rejected=0.*cycles_closed=64.*stop_loss_exits=17.*stop_reason=parent_stop ]]
+    [[ "$controller_line" =~ ticks_accepted=7948800.*runs=794880.*signal_packages_read=2208.*start_actions_skipped=724.*cycles_started=63.*cycles_rejected=0.*cycles_closed=63.*stop_loss_exits=16.*stop_reason=parent_stop ]]
 }
 
 validate_trade() {

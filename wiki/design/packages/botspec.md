@@ -50,6 +50,14 @@ roles, and unknown IDs fail.
 No reflection, plugin, DSL, runtime compilation, fallback, alias, or
 compatibility path exists.
 
+Observer market identity contains Venue, network, and symbol.
+
+When both Venue and network are absent, BotSpec applies the explicit
+`simulator/simnet` default. Supplying only one value is invalid.
+
+Supported Observer market identities are Simulator simnet and Hyperliquid
+testnet or mainnet.
+
 `macross_grid_bot` requires exactly one GridExecutor.
 
 Its specification owns capital, side, 3-to-1,024 Levels, range, minimum

@@ -165,13 +165,11 @@ type ReconTelemetry struct {
 type stats struct {
 	ordersPlaced uint64
 	reconciles   uint64
-	bbosIngested uint64
 }
 
 type venue interface {
 	PlaceOrders(hyperliquid.PlaceOrderAction, uint64) ([]byte, error)
 	CancelOrders(hyperliquid.CancelByCLOIDAction, uint64) ([]byte, error)
-	IngestBBO(market.BBO) (bool, error)
 	OpenOrders(string) ([]byte, error)
 	Fills(string, uint64, uint64) ([]byte, error)
 	OrderStatus(string, string) ([]byte, error)
@@ -185,7 +183,6 @@ type Account struct {
 	config         Config
 	ledger         ledger.Ledger
 	venue          venue
-	lastBBO        market.BBO
 	lastSnapshot   Snapshot
 	reconTelemetry ReconTelemetry
 	reconStats     ReconStats
@@ -193,7 +190,6 @@ type Account struct {
 	generation     uint64
 	failureCount   uint64
 	dirty          bool
-	hasBBO         bool
 	started        bool
 	stopped        bool
 }
@@ -494,35 +490,6 @@ func (a *Account) CancelOrders(cloids []string, timestampMS uint64) error {
 	return nil
 }
 
-// IngestBBO advances Simulator truth before normal Executor BBO handling.
-func (a *Account) IngestBBO(bbo market.BBO) error {
-	if !a.started || a.stopped {
-		return fmt.Errorf("ingest Account BBO: invalid lifecycle state")
-	}
-	if bbo.Symbol != "" && bbo.Symbol != a.config.Symbol {
-		return fmt.Errorf(
-			"ingest Account BBO: symbol %s does not match %s",
-			bbo.Symbol,
-			a.config.Symbol,
-		)
-	}
-
-	// Step 1: ingest Venue BBO
-	var changed, err = a.venue.IngestBBO(bbo)
-	if err != nil {
-		return fmt.Errorf("ingest Account BBO: %w", err)
-	}
-	a.lastBBO = bbo
-	a.hasBBO = true
-	a.stats.bbosIngested++
-
-	// Step 2: mark Account dirty when Venue or open-position marks change
-	if changed || !a.lastSnapshot.PositionQuantity.IsZero() {
-		a.dirty = true
-	}
-	return nil
-}
-
 // Result returns one immutable terminal Account result.
 func (a *Account) Result() (Result, error) {
 	// Step 1: get immutable Ledger result
@@ -576,7 +543,7 @@ func (a *Account) Stop() error {
 	a.started = false
 	a.stopped = true
 	a.log.Info(fmt.Sprintf(
-		"account stopped cycle=%d executor=%d account=%s orders=%d reconciles=%d recon_calls=%d recon_skipped_clean=%d recon_executed=%d recon_succeeded=%d recon_failed=%d ingested_bbos=%d",
+		"account stopped cycle=%d executor=%d account=%s orders=%d reconciles=%d recon_calls=%d recon_skipped_clean=%d recon_executed=%d recon_succeeded=%d recon_failed=%d",
 		a.config.CycleNumber,
 		a.config.ExecutorNumber,
 		a.config.Name,
@@ -587,7 +554,6 @@ func (a *Account) Stop() error {
 		a.reconStats.Executed,
 		a.reconStats.Succeeded,
 		a.reconStats.Failed,
-		a.stats.bbosIngested,
 	))
 	return errors.Join(venueErr, ledgerErr)
 }
@@ -750,10 +716,15 @@ func (a *Account) createCLOID(
 }
 
 func (a *Account) markPrice() *decimal.Decimal {
-	if !a.hasBBO {
+	var bbo, found = a.config.Nuubot.MarketData.LatestBBO(market.Key{
+		Venue:   a.config.Venue,
+		Network: a.config.Network,
+		Symbol:  a.config.Symbol,
+	})
+	if !found {
 		return nil
 	}
-	var price = decimal.NewFromFloat(a.lastBBO.Price)
+	var price = decimal.NewFromFloat(bbo.Price)
 	return &price
 }
 

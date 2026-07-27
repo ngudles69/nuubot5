@@ -13,6 +13,7 @@ Nuubot5 source proves implementation. Reservation files prove names only.
 - [`design/runner.md`](design/runner.md) owns the standalone live Runner design.
 - [`design/server.md`](design/server.md) owns the Server, unified binary, and child-process design.
 - [`design/startup.md`](design/startup.md) owns Runner startup and crash recovery across all live networks.
+- [`design/marketdata.md`](design/marketdata.md) owns permanent BBO ingestion, buffering, and subscription decisions.
 - [`design/entities.md`](design/entities.md) shows backtest and live runtime ownership cardinality.
 - [`design/hyperliquid`](design/hyperliquid/) contains the internal Hyperliquid boundary details.
 - `internal/toolkit` groups reusable packages. It is not a Go package.
@@ -177,7 +178,7 @@ hardcut is implemented and proven.
 | [Filesystem](design/concepts/filesystem.md) | Mutable workspace layout and deployment mount. |
 | [Hyperliquid](design/hyperliquid.md) | Internal Hyperliquid protocol boundary. |
 | [Hyperliquid parity probe](design/hyperliquid/parity.md) | Permanent testnet and Simulator API-drift harness. |
-| [IngestBBO](design/concepts/ingestbbo.md) | Simulator-only BBO matching input. |
+| [MarketData](design/marketdata.md) | Shared BBO ingestion, latest buffers, and optional subscriptions. |
 | [Live events](design/concepts/live-events.md) | Live event routing. |
 | [Macross signaler](design/concepts/macross-signaler.md) | EMA crossover implementation. |
 | [nuubot-bt-bot](design/concepts/nuubot-bt-bot.md) | Standalone historical replay command. |

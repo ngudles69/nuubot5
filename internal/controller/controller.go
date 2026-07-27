@@ -87,7 +87,6 @@ type cycleControl interface {
 	OnRecon() error
 	Run(signaler.Package) (bool, error)
 	Stop(string) (string, error)
-	IngestBBO(market.BBO) error
 	OnBBO(market.BBO)
 	Result() botcycle.Result
 	Telemetry() botcycle.Telemetry
@@ -101,7 +100,7 @@ type Controller struct {
 	risks           []risk.Risk
 	cycle           cycleControl
 	results         []botcycle.Result
-	latestBBOs      map[string]market.BBO
+	subscriptions   []*market.Subscription
 	signalLog       []SignalDecision
 	riskLog         []RiskDecision
 	lastRisk        []risk.Decision
@@ -171,11 +170,29 @@ func (c *Controller) Init(nuubot *setup.Nuubot) error {
 	c.risks = risks
 
 	// Step 6: initialize Controller state
-	c.latestBBOs = make(map[string]market.BBO)
 	c.resourceEquity = make(map[botspec.Resource]decimal.Decimal)
 	c.lastRisk = make([]risk.Decision, len(spec.Risks))
 
-	// Step 7: initialize resource capital
+	// Step 7: subscribe to MarketData timing
+	for _, key := range marketKeys(spec.Executors) {
+		var current = key
+		var subscription *market.Subscription
+		subscription, err = nuubot.MarketData.SubscribeBBO(current, func() error {
+			c.onBBO(current)
+			return nil
+		})
+		if err != nil {
+			c.stopSubscriptions()
+			for index := len(c.risks) - 1; index >= 0; index-- {
+				c.risks[index].Stop()
+			}
+			c.signaler.Stop()
+			return fmt.Errorf("initialize Controller MarketData: %w", err)
+		}
+		c.subscriptions = append(c.subscriptions, subscription)
+	}
+
+	// Step 8: initialize resource capital
 	for _, executorSpec := range spec.Executors {
 		if !executorSpec.CapitalUSDC.IsPositive() {
 			continue
@@ -195,7 +212,7 @@ func (c *Controller) Init(nuubot *setup.Nuubot) error {
 	}
 	c.peakEquity = c.botCapital
 
-	// Step 8: log init completed
+	// Step 9: log init completed
 	c.log.Info(fmt.Sprintf(
 		"controller init completed bot_spec=%s spec_hash=%s",
 		botInput.BotSpecID,
@@ -410,21 +427,27 @@ func (c *Controller) Stop(reason string) error {
 	c.requestStop(reason)
 	c.started = false
 
-	// Step 4: close active BotCycle
-	var firstErr = c.closeCycle(c.stopReason)
+	// Step 4: stop MarketData subscriptions
+	var firstErr = c.stopSubscriptions()
 
-	// Step 5: stop Risks
+	// Step 5: close active BotCycle
+	var cycleErr = c.closeCycle(c.stopReason)
+	if firstErr == nil {
+		firstErr = cycleErr
+	}
+
+	// Step 6: stop Risks
 	for index := len(c.risks) - 1; index >= 0; index-- {
 		c.risks[index].Stop()
 	}
 
-	// Step 6: stop Signaler
+	// Step 7: stop Signaler
 	c.signaler.Stop()
 
-	// Step 7: mark Controller stopped
+	// Step 8: mark Controller stopped
 	c.stopped = true
 
-	// Step 8: log stopped results and stats
+	// Step 9: log stopped results and stats
 	c.log.Info(fmt.Sprintf(
 		"controller stopped ticks_accepted=%d runs=%d signal_packages_read=%d "+
 			"start_actions_skipped=%d cycles_started=%d cycles_rejected=%d "+
@@ -443,31 +466,11 @@ func (c *Controller) Stop(reason string) error {
 		c.stopReason,
 	))
 
-	// Step 9: return stop error
+	// Step 10: return stop error
 	return firstErr
 }
 
 // Section 2 - Domain Helpers
-
-// IngestBBO accepts one validated symbol-qualified BBO.
-func (c *Controller) IngestBBO(bbo market.BBO) error {
-	if !c.started || c.stopped || c.stopReason != "" {
-		return fmt.Errorf("controller cannot ingest BBO from current state")
-	}
-	if bbo.Symbol == "" {
-		return fmt.Errorf("controller requires symbol-qualified BBO")
-	}
-	c.recordBBOGap(bbo.TimestampMS)
-	c.latestBBOs[bbo.Symbol] = bbo
-	if c.cycle != nil {
-		if err := c.cycle.IngestBBO(bbo); err != nil {
-			return fmt.Errorf("ingest BotCycle BBO: %w", err)
-		}
-		c.cycle.OnBBO(bbo)
-	}
-	c.stats.ticks++
-	return nil
-}
 
 // Result returns one independently owned terminal Controller result.
 func (c *Controller) Result() Result {
@@ -563,6 +566,24 @@ func (c *Controller) Telemetry() Telemetry {
 	}
 }
 
+func (c *Controller) onBBO(key market.Key) {
+	// Step 1: read latest BBO
+	var bbo, found = c.nuubot.MarketData.LatestBBO(key)
+	if !found || !c.started || c.stopped || c.stopReason != "" {
+		return
+	}
+
+	// Step 2: record Controller market time
+	c.recordBBOGap(bbo.TimestampMS)
+	// Step 3: record active BotCycle market time
+	if c.cycle != nil {
+		c.cycle.OnBBO(bbo)
+	}
+
+	// Step 4: record accepted tick
+	c.stats.ticks++
+}
+
 func (c *Controller) recordBBOGap(nowMS uint64) {
 	if c.firstMS == 0 {
 		c.firstMS = nowMS
@@ -576,6 +597,36 @@ func (c *Controller) recordBBOGap(nowMS uint64) {
 		c.timeInCyclesMS += bboGapMS
 	}
 	c.lastMS = nowMS
+}
+
+func (c *Controller) stopSubscriptions() error {
+	var firstErr error
+	for index := len(c.subscriptions) - 1; index >= 0; index-- {
+		var err = c.subscriptions[index].Stop()
+		if err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	c.subscriptions = nil
+	return firstErr
+}
+
+func marketKeys(specs []botspec.ExecutorSpec) []market.Key {
+	var seen = make(map[market.Key]struct{})
+	var keys = make([]market.Key, 0, len(specs))
+	for _, spec := range specs {
+		var key = market.Key{
+			Venue:   spec.Resource.Venue,
+			Network: spec.Resource.Network,
+			Symbol:  spec.Resource.Symbol,
+		}
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		keys = append(keys, key)
+	}
+	return keys
 }
 
 func addReconStats(total *account.ReconStats, current account.ReconStats) {
@@ -593,7 +644,6 @@ func (c *Controller) openCycle(signal signaler.Package) error {
 		int(c.stats.cyclesStarted+c.stats.cyclesRejected+1),
 		signal,
 		botcycle.Inputs{
-			LatestBBOs:     c.latestBBOs,
 			ResourceEquity: c.resourceEquity,
 		},
 	)

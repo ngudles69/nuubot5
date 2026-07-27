@@ -20,7 +20,6 @@ var ErrRejected = errors.New("bot cycle rejected")
 
 // Inputs contains approved Executor inputs owned above BotCycle.
 type Inputs struct {
-	LatestBBOs     map[string]market.BBO
 	ResourceEquity map[botspec.Resource]decimal.Decimal
 }
 
@@ -89,7 +88,6 @@ func (c *BotCycle) Init(
 			ExecutorNumber:     index + 1,
 			Signal:             signal,
 			Spec:               spec,
-			LatestBBO:          inputs.LatestBBOs[spec.Resource.Symbol],
 			StartingEquityUSDC: inputs.ResourceEquity[spec.Resource],
 			Status:             executor.Status(nuubot.Bot.Status),
 		})
@@ -362,45 +360,13 @@ func (c *BotCycle) Telemetry() Telemetry {
 
 // Section 2.3 - Market Data
 
-// IngestBBO routes one BBO through supported Simulator handlers.
-func (c *BotCycle) IngestBBO(bbo market.BBO) error {
-	// ingest BBO through supported Executors
-	for index, activeExecutor := range c.executors {
-		var status = activeExecutor.Status()
-		if status != executor.Running && status != executor.Stopping {
-			continue
-		}
-		var handler, supported = activeExecutor.(executor.BBOIngestHandler)
-		if !supported {
-			continue
-		}
-		var err = handler.IngestBBO(bbo)
-		if err != nil {
-			return fmt.Errorf("ingest executor %d bbo: %w", index+1, err)
-		}
-	}
-	return nil
-}
-
-// OnBBO distributes one BBO through supported normal handlers.
+// OnBBO records BotCycle market time.
 func (c *BotCycle) OnBBO(bbo market.BBO) {
-	// Step 1: record BotCycle time
 	if c.startMS == 0 {
 		c.startMS = bbo.TimestampMS
 	}
 	c.endMS = bbo.TimestampMS
 	c.ticks++
-
-	// Step 2: deliver BBO to running Executors
-	for _, activeExecutor := range c.executors {
-		if activeExecutor.Status() != executor.Running {
-			continue
-		}
-		var handler, supported = activeExecutor.(executor.BBOHandler)
-		if supported {
-			handler.OnBBO(bbo)
-		}
-	}
 }
 
 // Section 2.4 - Lifecycle Helpers

@@ -5,24 +5,25 @@ import (
 
 	"nuubot/internal/botspec"
 	"nuubot/internal/market"
+	"nuubot/internal/setup"
 	"nuubot/internal/toolkit/logging"
 )
 
 type observerStats struct {
-	ingestBBOCount uint64
-	onBBOCount     uint64
-	startMS        uint64
-	endMS          uint64
-	startPrice     float64
-	stopLossPrice  float64
-	exitPrice      float64
-	lastMS         uint64
-	lastPrice      float64
-	reason         string
+	onBBOCount    uint64
+	startMS       uint64
+	endMS         uint64
+	startPrice    float64
+	stopLossPrice float64
+	exitPrice     float64
+	lastMS        uint64
+	lastPrice     float64
+	reason        string
 }
 
 type observer struct {
 	log            *logging.Logger
+	nuubot         *setup.Nuubot
 	spec           botspec.ExecutorSpec
 	cycleNumber    int
 	executorNumber int
@@ -30,23 +31,37 @@ type observer struct {
 	signalPrice    float64
 	side           string
 	stopLossPct    float64
+	subscription   *market.Subscription
 	stats          observerStats
 	status         Status
 }
 
 var _ Executor = (*observer)(nil)
-var _ BBOHandler = (*observer)(nil)
-var _ BBOIngestHandler = (*observer)(nil)
+var _ StartHandler = (*observer)(nil)
 
 // Section 1 - Program Flow
 
 // OnInit initializes ObserverExecutor.
 func (e *observer) OnInit(ctx BotCycleContext) error {
+	// Step 1: bind ObserverExecutor base inputs and log init
 	e.log = ctx.Nuubot.Log
+	e.nuubot = ctx.Nuubot
 	e.spec = ctx.Spec
+	e.log.Info(fmt.Sprintf(
+		"executor init cycle=%d executor=%d id=%s kind=%s side=%s",
+		ctx.CycleNumber,
+		ctx.ExecutorNumber,
+		ctx.Spec.ID,
+		ctx.Spec.Kind,
+		ctx.Spec.Side,
+	))
+
+	// Step 2: validate ObserverExecutor state
 	if e.status != Configured {
 		return fmt.Errorf("observer executor cannot initialize from current state")
 	}
+
+	// Step 3: bind ObserverExecutor inputs and mark starting
 	e.cycleNumber = ctx.CycleNumber
 	e.executorNumber = ctx.ExecutorNumber
 	e.signalMS = ctx.Signal.TimestampMS()
@@ -54,7 +69,7 @@ func (e *observer) OnInit(ctx BotCycleContext) error {
 	e.stopLossPct, _ = ctx.Spec.StopLossPct.Float64()
 	e.status = Starting
 
-	// validate config
+	// Step 4: validate ObserverExecutor config
 	if e.stopLossPct <= 0 || e.stopLossPct >= 1 {
 		e.status = Error
 		return fmt.Errorf("observer stop_loss_pct must be between 0 and 1")
@@ -64,13 +79,13 @@ func (e *observer) OnInit(ctx BotCycleContext) error {
 		return fmt.Errorf("%w: observer requires one configured side", ErrRejected)
 	}
 
-	// initialize observer
-	e.status = Running
+	// Step 5: log init completed
 	e.log.Info(fmt.Sprintf(
-		"executor initialized cycle=%d executor=%d kind=observer side=%s "+
+		"executor init completed cycle=%d executor=%d id=%s kind=observer side=%s "+
 			"signal_ts_ms=%d stop_loss_pct=%f",
 		e.cycleNumber,
 		e.executorNumber,
+		e.spec.ID,
 		e.side,
 		e.signalMS,
 		e.stopLossPct,
@@ -78,19 +93,83 @@ func (e *observer) OnInit(ctx BotCycleContext) error {
 	return nil
 }
 
+// OnStart starts ObserverExecutor after every sibling initializes.
+func (e *observer) OnStart() error {
+	// Step 1: log start
+	e.log.Info(fmt.Sprintf(
+		"executor start cycle=%d executor=%d id=%s kind=observer side=%s",
+		e.cycleNumber,
+		e.executorNumber,
+		e.spec.ID,
+		e.side,
+	))
+
+	// Step 2: validate ObserverExecutor state
+	if e.status != Starting {
+		return fmt.Errorf("observer executor cannot start from current state")
+	}
+
+	// Step 3: read latest BBO
+	var key = e.marketKey()
+	var bbo, found = e.nuubot.MarketData.LatestBBO(key)
+	if !found {
+		return fmt.Errorf("%w: observer executor requires current BBO", ErrRejected)
+	}
+	e.recordBBO(bbo)
+
+	// Step 4: subscribe to MarketData
+	var err error
+	e.subscription, err = e.nuubot.MarketData.SubscribeBBO(key, e.onBBO)
+	if err != nil {
+		return fmt.Errorf("start observer executor: %w", err)
+	}
+
+	// Step 5: mark ObserverExecutor running
+	e.status = Running
+
+	// Step 6: log start completed
+	e.log.Info(fmt.Sprintf(
+		"executor started cycle=%d executor=%d id=%s kind=observer side=%s",
+		e.cycleNumber,
+		e.executorNumber,
+		e.spec.ID,
+		e.side,
+	))
+	return nil
+}
+
 // OnStop stops ObserverExecutor and reports final statistics.
 func (e *observer) OnStop(reason string) error {
+	// Step 1: log stop
+	e.log.Info(fmt.Sprintf(
+		"executor stop cycle=%d executor=%d id=%s kind=observer side=%s reason=%s",
+		e.cycleNumber,
+		e.executorNumber,
+		e.spec.ID,
+		e.side,
+		reason,
+	))
+
+	// Step 2: stop MarketData subscription
+	if err := e.subscription.Stop(); err != nil {
+		return fmt.Errorf("stop observer executor: %w", err)
+	}
+	e.subscription = nil
+
+	// Step 3: ignore terminal stop request
 	if e.status == Stopped || e.status == Error {
 		return nil
 	}
+
+	// Step 4: mark ObserverExecutor stopping
 	e.status = Stopping
 
-	// preserve stop reason
+	// Step 5: preserve stop reason
 	if e.stats.reason == "" {
 		e.stats.reason = reason
 	}
 
-	// preserve end time
+	// Step 6: preserve end time
 	if e.stats.endMS == 0 {
 		e.stats.endMS = e.stats.lastMS
 		if e.stats.endMS == 0 {
@@ -98,22 +177,23 @@ func (e *observer) OnStop(reason string) error {
 		}
 	}
 
-	// stop observer
+	// Step 7: mark ObserverExecutor stopped
 	e.status = Stopped
 
-	// calculate duration
+	// Step 8: calculate duration
 	var durationMS uint64
 	if e.stats.endMS >= e.stats.startMS {
 		durationMS = e.stats.endMS - e.stats.startMS
 	}
-	// report proof
+	// Step 9: log stop completed
 	e.log.Info(fmt.Sprintf(
-		"executor stopped cycle=%d executor=%d side=%s signal_ts_ms=%d "+
+		"executor stopped cycle=%d executor=%d id=%s kind=observer side=%s signal_ts_ms=%d "+
 			"signal_price=%f stop_loss_pct=%f start_ts_ms=%d end_ts_ms=%d "+
 			"duration_ms=%d start_price=%f stop_loss_price=%f exit_price=%f "+
-			"final_price=%f ingest_bbo_count=%d on_bbo_count=%d stop_reason=%s",
+			"final_price=%f on_bbo_count=%d stop_reason=%s",
 		e.cycleNumber,
 		e.executorNumber,
+		e.spec.ID,
 		e.side,
 		e.signalMS,
 		e.signalPrice,
@@ -125,7 +205,6 @@ func (e *observer) OnStop(reason string) error {
 		e.stats.stopLossPrice,
 		e.stats.exitPrice,
 		e.stats.lastPrice,
-		e.stats.ingestBBOCount,
 		e.stats.onBBOCount,
 		e.stats.reason,
 	))
@@ -134,44 +213,22 @@ func (e *observer) OnStop(reason string) error {
 
 // Section 2 - Domain Helpers
 
-// IngestBBO records one Simulator-only BBO delivery.
-func (e *observer) IngestBBO(bbo market.BBO) error {
-	if bbo.Symbol != "" && bbo.Symbol != e.spec.Resource.Symbol {
-		return nil
+func (e *observer) onBBO() error {
+	// Step 1: read latest BBO
+	var bbo, found = e.nuubot.MarketData.LatestBBO(e.marketKey())
+	if !found {
+		return fmt.Errorf("observe BBO: latest BBO is unavailable")
 	}
-	// count ingested bbo
-	e.stats.ingestBBOCount++
-	return nil
-}
-
-// OnBBO observes one normal Executor BBO event.
-func (e *observer) OnBBO(bbo market.BBO) {
-	if bbo.Symbol != "" && bbo.Symbol != e.spec.Resource.Symbol {
-		return
-	}
-	// count received bbo
+	// Step 2: record received BBO
 	e.stats.onBBOCount++
 	if e.status != Running {
-		return
+		return nil
 	}
 
-	// record last bbo
-	e.stats.lastMS = bbo.TimestampMS
-	e.stats.lastPrice = bbo.Price
+	// Step 3: record current BBO
+	e.recordBBO(bbo)
 
-	// record entry
-	if e.stats.startMS == 0 {
-		e.stats.startMS = bbo.TimestampMS
-		e.stats.startPrice = bbo.Price
-		e.signalPrice = bbo.Price
-		if e.side == Long {
-			e.stats.stopLossPrice = bbo.Price * (1 - e.stopLossPct)
-		} else {
-			e.stats.stopLossPrice = bbo.Price * (1 + e.stopLossPct)
-		}
-	}
-
-	// assess stop loss
+	// Step 4: assess stop loss
 	var triggered = e.side == Long && bbo.Price <= e.stats.stopLossPrice ||
 		e.side == Short && bbo.Price >= e.stats.stopLossPrice
 	if triggered {
@@ -179,6 +236,34 @@ func (e *observer) OnBBO(bbo market.BBO) {
 		e.stats.exitPrice = bbo.Price
 		e.stats.reason = "stop_loss"
 		e.status = Stopping
+	}
+	return nil
+}
+
+func (e *observer) recordBBO(bbo market.BBO) {
+	// Step 1: record latest BBO
+	e.stats.lastMS = bbo.TimestampMS
+	e.stats.lastPrice = bbo.Price
+	if e.stats.startMS != 0 {
+		return
+	}
+
+	// Step 2: establish ObserverExecutor entry
+	e.stats.startMS = bbo.TimestampMS
+	e.stats.startPrice = bbo.Price
+	e.signalPrice = bbo.Price
+	if e.side == Long {
+		e.stats.stopLossPrice = bbo.Price * (1 - e.stopLossPct)
+	} else {
+		e.stats.stopLossPrice = bbo.Price * (1 + e.stopLossPct)
+	}
+}
+
+func (e *observer) marketKey() market.Key {
+	return market.Key{
+		Venue:   e.spec.Resource.Venue,
+		Network: e.spec.Resource.Network,
+		Symbol:  e.spec.Resource.Symbol,
 	}
 }
 

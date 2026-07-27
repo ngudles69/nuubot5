@@ -17,6 +17,7 @@ Simulator owns:
 - active Order indexes;
 - position and finance state;
 - matching policy;
+- one MarketData subscription;
 - transient BBO state; and
 - schema version 3 persistence.
 
@@ -24,7 +25,7 @@ Simulator owns no Ledger, Trade, domain Order, domain Fill, role, or purpose.
 
 ## Inputs
 
-`Config` contains only simulated Venue identity and policy:
+`Config` contains simulated Venue identity, policy, one exact MarketData key, and one narrow Account change callback:
 
 ```text
 account
@@ -41,7 +42,7 @@ Place receives `hyperliquid.PlaceOrderAction`.
 
 Cancel receives `hyperliquid.CancelByCLOIDAction`.
 
-BBO ingestion receives only market data.
+Simulator subscribes directly to MarketData during Init and reads the latest buffered BBO inside its callback.
 
 CLOID is mandatory, shape-validated, stored unchanged, and never domain-decoded.
 
@@ -83,6 +84,8 @@ Init
   initialize Simulator state
   restore durable Simulator state when configured
   mark Simulator started
+  subscribe to MarketData
+  read latest BBO
 
 PlaceOrders
   validate official Order action
@@ -97,8 +100,8 @@ CancelOrders
   persist and publish cancel mutation
   return official cancel response
 
-IngestBBO
-  validate and normalize BBO
+onBBO
+  normalize BBO
   warm initial BBO state
   stage BBO matching
   persist changed Venue truth
@@ -106,6 +109,7 @@ IngestBBO
 
 Stop
   ignore repeated stop
+  stop MarketData subscription
   persist Simulator state
   close Simulator store
   mark Simulator stopped

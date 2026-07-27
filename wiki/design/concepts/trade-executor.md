@@ -23,18 +23,25 @@ Signal contains no direction.
 
 ```text
 OnInit
-  bind TradeExecutor inputs
-  validate TradeExecutor state
+  bind TradeExecutor inputs and log init
+  reject terminal TradeExecutor state
   validate TradeExecutor config
-  validate fixed side
-  retain current BBO and identity
+  retain TradeExecutor identity
   initialize Account
-  mark TradeExecutor running
   log init completed
 
+OnStart
+  log start
+  reject terminal TradeExecutor state
+  read latest BBO
+  continue loaded TradeExecutor state
+  log start completed
+
 OnStop
+  log stop
   validate stop state
   mark TradeExecutor stopping
+  read current time and latest BBO
   reconcile current Account truth
   cancel active Orders
   close open exposure
@@ -49,12 +56,18 @@ OnRecon
   check owned Trade completion
 ```
 
+Every lifecycle entry and completion log identifies cycle, Executor number, Executor ID, kind, and side.
+
 `OnInit` performs no Order mutation.
 
 The first accepted `OnRecon` submits one entry, take-profit, and stop-loss
 bracket.
 
-Subsequent BBO and reconciliation passes update Venue and Ledger truth.
+Simulator receives BBO through its MarketData subscription.
+
+TradeExecutor reads the latest BBO only during Start, first bracket policy, and Stop.
+
+Reconciliation updates Venue and Ledger truth.
 
 Bracket completion makes the Executor terminal.
 

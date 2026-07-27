@@ -9,7 +9,6 @@ import (
 	"github.com/shopspring/decimal"
 
 	"nuubot/internal/hyperliquid"
-	"nuubot/internal/market"
 	"nuubot/internal/order"
 )
 
@@ -106,10 +105,6 @@ func (v *venueRecorder) CancelOrders(
 	v.cancelled = action
 	v.cancelledAt = timestampMS
 	return []byte(`{"status":"ok","response":{"type":"cancel","data":{"statuses":["success"]}}}`), nil
-}
-
-func (v *venueRecorder) IngestBBO(market.BBO) (bool, error) {
-	return false, nil
 }
 
 func (v *venueRecorder) OpenOrders(string) ([]byte, error) {

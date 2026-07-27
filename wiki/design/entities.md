@@ -51,7 +51,9 @@ Live
   shared Info supplies requested public REST data
 ```
 
-Runner owns shared Clock, Info, and WebSocket lifecycle.
+BtBot owns ReplayReader, TickClock, and MarketData lifecycle.
+
+Runner owns WallClock, MarketData, Info, and WebSocket lifecycle.
 
 Meta refresh uses a separate mainnet Info object.
 

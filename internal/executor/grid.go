@@ -28,7 +28,8 @@ type gridExecutor struct {
 	executorNumber int
 	signalMS       uint64
 	side           string
-	lastBBO        market.BBO
+	subscription   *market.Subscription
+	equity         decimal.Decimal
 	levels         []GridLevel
 	accountResult  account.Result
 	cancellations  uint64
@@ -42,8 +43,6 @@ type gridExecutor struct {
 
 var _ Executor = (*gridExecutor)(nil)
 var _ StartHandler = (*gridExecutor)(nil)
-var _ BBOHandler = (*gridExecutor)(nil)
-var _ BBOIngestHandler = (*gridExecutor)(nil)
 var _ AccountReconciler = (*gridExecutor)(nil)
 var _ ReconHandler = (*gridExecutor)(nil)
 
@@ -51,10 +50,18 @@ var _ ReconHandler = (*gridExecutor)(nil)
 
 // OnInit initializes GridExecutor and logs its validated levels without submitting Orders.
 func (e *gridExecutor) OnInit(ctx BotCycleContext) error {
-	// Step 1: bind GridExecutor inputs
+	// Step 1: bind GridExecutor inputs and log init
 	e.log = ctx.Nuubot.Log
 	e.nuubot = ctx.Nuubot
 	e.spec = ctx.Spec
+	e.log.Info(fmt.Sprintf(
+		"executor init cycle=%d executor=%d id=%s kind=%s side=%s",
+		ctx.CycleNumber,
+		ctx.ExecutorNumber,
+		ctx.Spec.ID,
+		ctx.Spec.Kind,
+		ctx.Spec.Side,
+	))
 
 	// Step 2: validate GridExecutor state
 	if e.status != Configured {
@@ -90,32 +97,15 @@ func (e *gridExecutor) OnInit(ctx BotCycleContext) error {
 		return fmt.Errorf("%w: grid executor requires one configured side", ErrRejected)
 	}
 
-	// Step 5: retain current BBO and identity
-	if ctx.LatestBBO.TimestampMS == 0 || ctx.LatestBBO.Price <= 0 {
-		e.status = Error
-		return fmt.Errorf("%w: grid executor requires current BBO", ErrRejected)
-	}
-	e.lastBBO = ctx.LatestBBO
+	// Step 5: retain GridExecutor identity and equity
 	e.cycleNumber = ctx.CycleNumber
 	e.executorNumber = ctx.ExecutorNumber
 	e.signalMS = ctx.Signal.TimestampMS()
+	e.equity = equity
 
-	// Step 6: calculate Grid levels
-	var err error
-	e.levels, err = calculateGridLevels(
-		ctx.Nuubot,
-		ctx.Spec,
-		ctx.LatestBBO,
-		equity,
-	)
-	if err != nil {
-		e.status = Error
-		return fmt.Errorf("initialize grid executor: %w", err)
-	}
-
-	// Step 7: initialize Account
+	// Step 6: initialize Account
 	var ledgerID = uint64(ctx.CycleNumber)<<32 | uint64(ctx.ExecutorNumber)
-	err = e.account.Init(account.Config{
+	var err = e.account.Init(account.Config{
 		Nuubot:         ctx.Nuubot,
 		LedgerID:       ledgerID,
 		CycleNumber:    ctx.CycleNumber,
@@ -134,12 +124,6 @@ func (e *gridExecutor) OnInit(ctx BotCycleContext) error {
 		e.status = Error
 		return fmt.Errorf("initialize grid executor: %w", err)
 	}
-	err = e.account.IngestBBO(ctx.LatestBBO)
-	if err != nil {
-		e.account.Stop()
-		e.status = Error
-		return fmt.Errorf("initialize grid executor: %w", err)
-	}
 	var existing account.Result
 	existing, err = e.account.Result()
 	if err != nil {
@@ -151,45 +135,89 @@ func (e *gridExecutor) OnInit(ctx BotCycleContext) error {
 		))
 	}
 
-	// Step 8: log validated Grid table
-	e.logGridTable()
-
+	// Step 7: log init completed
+	e.log.Info(fmt.Sprintf(
+		"executor init completed cycle=%d executor=%d id=%s kind=grid side=%s signal_ts_ms=%d",
+		e.cycleNumber,
+		e.executorNumber,
+		e.spec.ID,
+		e.side,
+		e.signalMS,
+	))
 	return nil
 }
 
 // OnStart submits the initial Grid after every sibling Executor initializes.
 func (e *gridExecutor) OnStart() error {
-	// Step 1: validate start state
+	// Step 1: log start
+	e.log.Info(fmt.Sprintf(
+		"executor start cycle=%d executor=%d id=%s kind=grid side=%s",
+		e.cycleNumber,
+		e.executorNumber,
+		e.spec.ID,
+		e.side,
+	))
+
+	// Step 2: validate start state
 	if e.status != Starting {
 		return fmt.Errorf("grid executor cannot start from current state")
 	}
 
-	// Step 2: submit initial Grid at cycle-start BBO
+	// Step 3: read latest BBO
+	var bbo, err = e.latestBBO()
+	if err != nil {
+		return err
+	}
+
+	// Step 4: calculate Grid levels
+	e.levels, err = calculateGridLevels(e.nuubot, e.spec, bbo, e.equity)
+	if err != nil {
+		return fmt.Errorf("start grid executor: %w", err)
+	}
+	e.logGridTable()
+
+	// Step 5: subscribe to MarketData
+	e.subscription, err = e.nuubot.MarketData.SubscribeBBO(e.marketKey(), e.onBBO)
+	if err != nil {
+		return fmt.Errorf("start grid executor: %w", err)
+	}
+
+	// Step 6: submit initial Grid at cycle-start BBO
+	var nowMS = e.nuubot.Clock.NowMS()
 	for _, index := range e.activeLevelIndexes() {
-		var err = e.submitLevel(index, true, e.lastBBO.TimestampMS)
+		err = e.submitLevel(index, true, nowMS)
 		if err != nil {
 			return e.failSubmission(err)
 		}
 	}
-	// Step 3: mark GridExecutor running
+
+	// Step 7: mark GridExecutor running
 	e.status = Running
 
-	// Step 4: log start completed
+	// Step 8: log start completed
 	e.log.Info(fmt.Sprintf(
-		"executor initialized cycle=%d executor=%d kind=grid side=%s signal_ts_ms=%d levels=%d active_levels=%d",
+		"executor started cycle=%d executor=%d id=%s kind=grid side=%s",
 		e.cycleNumber,
 		e.executorNumber,
+		e.spec.ID,
 		e.side,
-		e.signalMS,
-		len(e.levels),
-		len(e.levels)-2,
 	))
 	return nil
 }
 
 // OnStop cancels Grid Orders, closes every open Trade, and stops GridExecutor.
 func (e *gridExecutor) OnStop(reason string) error {
-	// Step 1: validate stop state
+	// Step 1: log stop
+	e.log.Info(fmt.Sprintf(
+		"executor stop cycle=%d executor=%d id=%s kind=grid side=%s reason=%s",
+		e.cycleNumber,
+		e.executorNumber,
+		e.spec.ID,
+		e.side,
+		reason,
+	))
+
+	// Step 2: validate stop state
 	if e.status == Stopped || (e.status == Error && e.hasResult) {
 		return nil
 	}
@@ -197,37 +225,51 @@ func (e *gridExecutor) OnStop(reason string) error {
 		return fmt.Errorf("stop grid executor: executor is in error state")
 	}
 
-	// Step 2: mark GridExecutor stopping
+	// Step 3: mark GridExecutor stopping
 	e.status = Stopping
 	if e.exitReason == "" {
 		e.exitReason = reason
 	}
 
-	// Step 3: reconcile current Account truth
-	var snapshot, _, _, err = e.account.Reconcile(e.lastBBO.TimestampMS, true)
+	// Step 4: stop MarketData subscription
+	if err := e.subscription.Stop(); err != nil {
+		return e.stopError(fmt.Errorf("stop grid executor: %w", err))
+	}
+	e.subscription = nil
+
+	// Step 5: read current time and latest BBO
+	var nowMS = e.nuubot.Clock.NowMS()
+	var bbo, err = e.latestBBO()
+	if err != nil {
+		return e.stopError(err)
+	}
+
+	// Step 6: reconcile current Account truth
+	var snapshot account.Snapshot
+	snapshot, _, _, err = e.account.Reconcile(nowMS, true)
 	if err != nil {
 		return e.stopError(fmt.Errorf("stop grid executor: %w", err))
 	}
 
-	// Step 4: cancel active Orders
+	// Step 7: cancel active Orders
 	var active = orderedCancellations(e.account.ActiveOrders())
 	if len(active) > 0 {
 		var cloids = make([]string, len(active))
 		for index, current := range active {
 			cloids[index] = current.CLOID
 		}
-		err = e.account.CancelOrders(cloids, e.lastBBO.TimestampMS)
+		err = e.account.CancelOrders(cloids, nowMS)
 		if err != nil {
 			return e.stopError(fmt.Errorf("stop grid executor: %w", err))
 		}
 		e.cancellations += uint64(len(cloids))
-		snapshot, _, _, err = e.account.Reconcile(e.lastBBO.TimestampMS, true)
+		snapshot, _, _, err = e.account.Reconcile(nowMS, true)
 		if err != nil {
 			return e.stopError(fmt.Errorf("stop grid executor: %w", err))
 		}
 	}
 
-	// Step 5: close open Trades
+	// Step 8: close open Trades
 	for _, owned := range e.account.OpenTrades() {
 		if owned.OpenQuantity.IsZero() {
 			continue
@@ -243,7 +285,7 @@ func (e *gridExecutor) OnStop(reason string) error {
 		if owned.Side == trade.Short {
 			closeSide = order.Buy
 		}
-		var price = decimal.NewFromFloat(e.lastBBO.Price)
+		var price = decimal.NewFromFloat(bbo.Price)
 		err = e.placeExistingWithRetries(account.OrderSpec{
 			TradeID:     owned.TradeID,
 			OrderLevel:  level,
@@ -254,7 +296,7 @@ func (e *gridExecutor) OnStop(reason string) error {
 			Quantity:    owned.OpenQuantity,
 			Price:       &price,
 			ReduceOnly:  true,
-			TimestampMS: e.lastBBO.TimestampMS,
+			TimestampMS: nowMS,
 		})
 		if err != nil {
 			return e.stopError(fmt.Errorf("stop grid executor: %w", err))
@@ -262,8 +304,8 @@ func (e *gridExecutor) OnStop(reason string) error {
 		e.closureOrders++
 	}
 
-	// Step 6: reconcile final Venue truth
-	snapshot, _, _, err = e.account.Reconcile(e.lastBBO.TimestampMS, true)
+	// Step 9: reconcile final Venue truth
+	snapshot, _, _, err = e.account.Reconcile(nowMS, true)
 	if err != nil {
 		return e.stopError(fmt.Errorf("stop grid executor: %w", err))
 	}
@@ -275,12 +317,12 @@ func (e *gridExecutor) OnStop(reason string) error {
 			len(activeOrders),
 		))
 	}
-	err = e.refreshLevelStates(e.lastBBO.TimestampMS)
+	err = e.refreshLevelStates(nowMS)
 	if err != nil {
 		return e.stopError(fmt.Errorf("stop grid executor: %w", err))
 	}
 
-	// Step 7: capture terminal Account result
+	// Step 10: capture terminal Account result
 	var result account.Result
 	result, err = e.account.Result()
 	if err != nil {
@@ -288,23 +330,25 @@ func (e *gridExecutor) OnStop(reason string) error {
 	}
 	e.roundTrips = e.account.CountOrders(order.TakeProfit, order.Filled)
 
-	// Step 8: stop Account
+	// Step 11: stop Account
 	err = e.account.Stop()
 	if err != nil {
 		e.status = Error
 		return fmt.Errorf("stop grid executor: %w", err)
 	}
 
-	// Step 9: cache terminal Account result
+	// Step 12: cache terminal Account result
 	e.accountResult = result.Clone()
 	e.hasResult = true
 	e.status = Stopped
 
-	// Step 10: log stop completed
+	// Step 13: log stop completed
 	e.log.Info(fmt.Sprintf(
-		"executor stopped cycle=%d executor=%d kind=grid trades=%d orders=%d fills=%d cancellations=%d closure_orders=%d retries=%d round_trips=%d stop_reason=%s",
+		"executor stopped cycle=%d executor=%d id=%s kind=grid side=%s trades=%d orders=%d fills=%d cancellations=%d closure_orders=%d retries=%d round_trips=%d stop_reason=%s",
 		e.cycleNumber,
 		e.executorNumber,
+		e.spec.ID,
+		e.side,
 		result.Ledger.Trades,
 		result.Ledger.Orders,
 		result.Ledger.Fills,
@@ -321,24 +365,17 @@ func (e *gridExecutor) OnStop(reason string) error {
 
 // Section 2.1 - Market Data
 
-// IngestBBO advances the owned Simulator before Grid policy handling.
-func (e *gridExecutor) IngestBBO(bbo market.BBO) error {
-	if bbo.Symbol != "" && bbo.Symbol != e.spec.Resource.Symbol {
+func (e *gridExecutor) onBBO() error {
+	// Step 1: read latest BBO
+	var bbo, err = e.latestBBO()
+	if err != nil {
+		return err
+	}
+	if e.status != Running || len(e.levels) < 3 {
 		return nil
 	}
-	e.lastBBO = bbo
-	return e.account.IngestBBO(bbo)
-}
 
-// OnBBO records the latest Grid BBO and requests boundary exit.
-func (e *gridExecutor) OnBBO(bbo market.BBO) {
-	if bbo.Symbol != "" && bbo.Symbol != e.spec.Resource.Symbol {
-		return
-	}
-	e.lastBBO = bbo
-	if e.status != Running || len(e.levels) < 3 {
-		return
-	}
+	// Step 2: assess Grid boundaries
 	var price = decimal.NewFromFloat(bbo.Price)
 	var lower = e.levels[0].GridPrice
 	var upper = e.levels[len(e.levels)-1].GridPrice
@@ -357,6 +394,23 @@ func (e *gridExecutor) OnBBO(bbo market.BBO) {
 		} else {
 			e.exitReason = "stop_loss"
 		}
+	}
+	return nil
+}
+
+func (e *gridExecutor) latestBBO() (market.BBO, error) {
+	var bbo, found = e.nuubot.MarketData.LatestBBO(e.marketKey())
+	if !found {
+		return market.BBO{}, fmt.Errorf("%w: grid executor requires current BBO", ErrRejected)
+	}
+	return bbo, nil
+}
+
+func (e *gridExecutor) marketKey() market.Key {
+	return market.Key{
+		Venue:   e.spec.Resource.Venue,
+		Network: e.spec.Resource.Network,
+		Symbol:  e.spec.Resource.Symbol,
 	}
 }
 

@@ -46,7 +46,7 @@ Account publishes neither child after partial initialization failure.
 
 | Input | Purpose |
 |---|---|
-| Nuubot | Supply Logger, App Config, Meta, ResultPath, and RuntimePath |
+| Nuubot | Supply Logger, App Config, MarketData, Meta, ResultPath, and RuntimePath |
 | Cycle and Executor numbers | Create stable result identity |
 | Account config | Select network, name, capital, fees, and persistence |
 | Selected credentials | Initialize a future live or testnet Venue |
@@ -84,9 +84,7 @@ CancelOrders
   validate cancel response
   mark Account dirty
 
-IngestBBO
-  ingest Venue BBO
-  mark Account dirty when Venue or open-position marks change
+
 
 Reconcile
   record reconciliation call
@@ -228,6 +226,10 @@ No cleanup default or escalation threshold is approved.
 Account solely owns its reconciliation-dirty flag.
 
 Initialization, user events, submissions, changed Simulator truth, and open-position marks make Account dirty.
+
+Simulator invokes one narrow Account-owned change callback after matching or marked-position changes.
+
+Account reads current mark price from Nuubot MarketData. It owns no BBO ingestion method or latest-BBO copy.
 
 Normal recon skips a clean Account.
 

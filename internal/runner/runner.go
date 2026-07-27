@@ -11,6 +11,7 @@ import (
 	"nuubot/internal/controller"
 	"nuubot/internal/datastore"
 	"nuubot/internal/hyperliquid"
+	"nuubot/internal/market"
 	"nuubot/internal/setup"
 	"nuubot/internal/toolkit/clock"
 	"nuubot/internal/toolkit/logging"
@@ -21,6 +22,7 @@ type Runner struct {
 	caller        context.Context
 	log           *logging.Logger
 	clock         clock.Clock
+	marketData    *market.MarketData
 	info          *hyperliquid.Info
 	webSocket     *hyperliquid.WebSocket
 	controller    controller.Controller
@@ -78,27 +80,31 @@ func (r *Runner) Init(
 	// Step 6: attach clock to Nuubot
 	nuubot.Clock = r.clock
 
-	// Step 7: initialize Info endpoint
+	// Step 7: create and attach MarketData to Nuubot
+	r.marketData = market.CreateMarketData()
+	nuubot.MarketData = r.marketData
+
+	// Step 8: initialize Info endpoint
 	r.info, err = hyperliquid.NewInfo(nuubot.App.Network.Default, timeout)
 	if err != nil {
 		return fmt.Errorf("initialize Info endpoint: %w", err)
 	}
 	nuubot.Info = r.info
 
-	// Step 8: initialize WebSocket endpoint
+	// Step 9: initialize WebSocket endpoint
 	r.webSocket, err = hyperliquid.NewWebSocket(nuubot.App.Network.Default, timeout)
 	if err != nil {
 		return fmt.Errorf("initialize WebSocket endpoint: %w", err)
 	}
 	nuubot.WebSocket = r.webSocket
 
-	// Step 9: initialize Controller
+	// Step 10: initialize Controller
 	err = r.controller.Init(nuubot)
 	if err != nil {
 		return fmt.Errorf("initialize Controller: %w", err)
 	}
 
-	// Step 10: register Controller timer
+	// Step 11: register Controller timer
 	err = r.clock.RegisterTimer(clock.Timer{
 		Name:       "controller",
 		IntervalMS: uint64(r.pollInterval.Milliseconds()),
@@ -107,7 +113,7 @@ func (r *Runner) Init(
 		return fmt.Errorf("register Controller timer: %w", err)
 	}
 
-	// Step 11: log init completed
+	// Step 12: log init completed
 	log.Info(fmt.Sprintf(
 		"runner initialized bot_spec=%s symbol=%s",
 		nuubot.Bot.BotSpecID,
@@ -216,22 +222,31 @@ func (r *Runner) Stop() error {
 		controllerErr = fmt.Errorf("stop Controller: %w", controllerErr)
 	}
 
-	// Step 8: log stop results and stats
+	// Step 8: stop MarketData
+	var marketDataErr = r.marketData.Stop()
+	if marketDataErr != nil {
+		marketDataErr = fmt.Errorf("stop MarketData: %w", marketDataErr)
+	}
+
+	// Step 9: log stop results and stats
 	var result = "complete"
-	if webSocketErr != nil || controllerErr != nil {
+	if webSocketErr != nil || controllerErr != nil || marketDataErr != nil {
 		result = "failed"
 	}
 	r.log.Info(fmt.Sprintf("runner stopped result=%s", result))
 
-	// Step 9: return stop errors
+	// Step 10: return stop errors
 	if controllerErr != nil {
 		return controllerErr
 	}
 	if webSocketErr != nil {
 		return webSocketErr
 	}
+	if marketDataErr != nil {
+		return marketDataErr
+	}
 
-	// Step 10: log stop completed
+	// Step 11: log stop completed
 	r.log.Info("runner stopped.")
 	return nil
 }

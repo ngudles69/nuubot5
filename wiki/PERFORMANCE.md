@@ -72,7 +72,7 @@ Run expensive stability levels only after lower levels pass.
 
 ```text
 Level  BtBot ms  Replay ms  Expected outcome
-1      5,604        2,152      7,948,800 ticks; 794,880 runs; 64 cycles; report complete
+1      5,604        2,152      7,948,800 ticks; 794,880 runs; 63 cycles; report complete
 2      7,111        2,190      Level 1 plus six readable performance artifacts
 3      14,250       7,972      193 cycles; 193 Trades; 626 Orders; 386 Fills
 4      50,906       46,733     50 cycles; 1,982 Trades; 4,697 Orders; 2,636 Fills

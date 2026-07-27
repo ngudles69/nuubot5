@@ -34,13 +34,24 @@ type Executor interface {
 }
 ```
 
-Optional narrow capabilities handle complete Signal packages, BBO,
-reconciliation, and Account snapshots.
+Optional narrow capabilities handle complete Signal packages, startup, reconciliation, and Account snapshots.
 
 `SignalHandler.OnSignal` receives the unchanged `signaler.Package`. Each
 Executor reads only the fields required by its BotSpec.
 
-BotCycle owns capability dispatch.
+BotCycle owns Signal and reconciliation capability dispatch.
+
+Executor Init receives no BBO.
+
+Executor Start reads the latest exact-key BBO through `nuubot.MarketData`.
+
+Observer and Grid subscribe for required tick policy. Trade reads latest state only when needed.
+
+Observer, Trade, and Grid log Init, Start, and Stop entry and completion.
+
+Each lifecycle log identifies cycle, Executor number, Executor ID, kind, and side.
+
+High-frequency execution methods do not log lifecycle entry or completion.
 
 ## Program Flow
 

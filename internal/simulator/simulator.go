@@ -25,6 +25,9 @@ const (
 
 // Config contains one Simulator's official identity and policy.
 type Config struct {
+	MarketData  *market.MarketData
+	MarketKey   market.Key
+	OnChange    func()
 	Account     string
 	Asset       int
 	Symbol      string
@@ -99,6 +102,7 @@ type Simulator struct {
 	fills            []simFill
 	currentPosition  position
 	store            *simulatorStore
+	subscription     *market.Subscription
 	lastPrice        decimal.Decimal
 	lastPriceKey     comparisonKey
 	lastTimestampMS  uint64
@@ -246,7 +250,9 @@ func (s *Simulator) Init(cfg Config) error {
 	if s.started || s.stopped {
 		return fmt.Errorf("initialize simulator: invalid lifecycle state")
 	}
-	if cfg.Account == "" || cfg.Asset < 0 || cfg.Symbol == "" {
+	if cfg.MarketData == nil || cfg.OnChange == nil ||
+		cfg.MarketKey != (market.Key{Venue: "simulator", Network: "simnet", Symbol: cfg.Symbol}) ||
+		cfg.Account == "" || cfg.Asset < 0 || cfg.Symbol == "" {
 		return fmt.Errorf("initialize simulator: complete official identity is required")
 	}
 	if !cfg.Equity.IsPositive() || cfg.FeePct.IsNegative() || cfg.SlippagePct.IsNegative() {
@@ -294,6 +300,32 @@ func (s *Simulator) Init(cfg Config) error {
 
 	// Step 4: mark Simulator started
 	s.started = true
+
+	// Step 5: subscribe to MarketData
+	var err error
+	s.subscription, err = cfg.MarketData.SubscribeBBO(cfg.MarketKey, s.onBBO)
+	if err != nil {
+		s.started = false
+		if s.store != nil {
+			s.store.close()
+			s.store = nil
+		}
+		return fmt.Errorf("initialize simulator: %w", err)
+	}
+
+	// Step 6: read latest BBO
+	if _, found := cfg.MarketData.LatestBBO(cfg.MarketKey); found {
+		if err = s.onBBO(); err != nil {
+			s.subscription.Stop()
+			s.subscription = nil
+			s.started = false
+			if s.store != nil {
+				s.store.close()
+				s.store = nil
+			}
+			return fmt.Errorf("initialize simulator: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -448,17 +480,56 @@ func (s *Simulator) CancelOrders(
 	})
 }
 
-// IngestBBO advances simulated exchange matching from one BBO.
-func (s *Simulator) IngestBBO(bbo market.BBO) (bool, error) {
+// Stop stops Simulator admission.
+func (s *Simulator) Stop() error {
+	// Step 1: ignore repeated stop
+	if s.stopped {
+		return nil
+	}
+
+	// Step 2: stop MarketData subscription
+	if err := s.subscription.Stop(); err != nil {
+		return err
+	}
+	s.subscription = nil
+
+	// Step 3: persist Simulator state
+	if err := s.persist(); err != nil {
+		return err
+	}
+
+	// Step 4: close Simulator store
+	if s.store != nil {
+		if err := s.store.close(); err != nil {
+			return err
+		}
+		s.store = nil
+	}
+
+	// Step 5: mark Simulator stopped
+	s.started = false
+	s.stopped = true
+	return nil
+}
+
+// Section 2 - Domain Helpers
+
+// Section 2.1 - Market Data
+
+func (s *Simulator) onBBO() error {
+	var bbo, found = s.config.MarketData.LatestBBO(s.config.MarketKey)
+	if !found {
+		return fmt.Errorf("ingest simulator BBO: latest BBO is unavailable")
+	}
 	if !s.started || s.stopped {
-		return false, fmt.Errorf("ingest simulator BBO: invalid lifecycle state")
+		return fmt.Errorf("ingest simulator BBO: invalid lifecycle state")
 	}
 	if bbo.TimestampMS == 0 || bbo.Price <= 0 ||
 		(s.hasBBO && bbo.TimestampMS < s.lastTimestampMS) {
-		return false, fmt.Errorf("ingest simulator BBO: invalid timestamp or price")
+		return fmt.Errorf("ingest simulator BBO: invalid timestamp or price")
 	}
 
-	// Step 1: validate and normalize BBO
+	// Step 1: normalize BBO
 	var price = decimal.NewFromFloat(bbo.Price)
 	var priceKey = newComparisonKey(price)
 
@@ -469,7 +540,7 @@ func (s *Simulator) IngestBBO(bbo market.BBO) (bool, error) {
 		s.lastTimestampMS = bbo.TimestampMS
 		s.observedMS = max(s.observedMS, bbo.TimestampMS)
 		s.hasBBO = true
-		return false, nil
+		return nil
 	}
 
 	// Step 3: stage BBO matching
@@ -483,44 +554,19 @@ func (s *Simulator) IngestBBO(bbo market.BBO) (bool, error) {
 	// Step 4: persist changed Venue truth
 	if changed {
 		if err := staged.persist(); err != nil {
-			return false, err
+			return err
 		}
 	}
 
 	// Step 5: publish BBO outcome
 	s.commit(staged)
-	return changed, nil
-}
-
-// Stop stops Simulator admission.
-func (s *Simulator) Stop() error {
-	// Step 1: ignore repeated stop
-	if s.stopped {
-		return nil
+	if changed || !s.currentPosition.size.IsZero() {
+		s.config.OnChange()
 	}
-
-	// Step 2: persist Simulator state
-	if err := s.persist(); err != nil {
-		return err
-	}
-
-	// Step 3: close Simulator store
-	if s.store != nil {
-		if err := s.store.close(); err != nil {
-			return err
-		}
-		s.store = nil
-	}
-
-	// Step 4: mark Simulator stopped
-	s.started = false
-	s.stopped = true
 	return nil
 }
 
-// Section 2 - Domain Helpers
-
-// Section 2.1 - Official Queries
+// Section 2.2 - Official Queries
 
 // OpenOrders returns fresh detached official Hyperliquid JSON.
 func (s *Simulator) OpenOrders(account string) ([]byte, error) {
@@ -675,7 +721,7 @@ func (s *Simulator) SetFillFeeAvailableForTest(venueTID uint64, available bool) 
 	return fmt.Errorf("set simulator Fill fee availability: unknown Venue TID %d", venueTID)
 }
 
-// Section 2.2 - Validation and Construction
+// Section 2.3 - Validation and Construction
 
 func (s *Simulator) validateAccount(account string) error {
 	if !s.started || s.stopped {
@@ -765,7 +811,7 @@ func (s *Simulator) newOrder(
 	return row, nil
 }
 
-// Section 2.3 - Matching and Position
+// Section 2.4 - Matching and Position
 
 func (s *Simulator) match(price comparisonKey, timestampMS uint64) bool {
 	var changed = false
@@ -981,7 +1027,7 @@ func (s *Simulator) position() (position, error) {
 	return result, nil
 }
 
-// Section 2.4 - Persistence State
+// Section 2.5 - Persistence State
 
 func (s *Simulator) persist() error {
 	if s.config.PersistMode == "none" {

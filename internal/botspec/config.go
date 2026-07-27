@@ -73,6 +73,8 @@ type observerExecutorConfig struct {
 	ID          string `toml:"id"`
 	Kind        string `toml:"kind"`
 	Side        string `toml:"side"`
+	Venue       string `toml:"venue"`
+	Network     string `toml:"network"`
 	Symbol      string `toml:"symbol"`
 	StopLossPct string `toml:"stop_loss_pct"`
 }
@@ -228,20 +230,29 @@ func buildMacrossObserver(configTOML string) (Spec, error) {
 		return Spec{}, fmt.Errorf("%s requires one Observer Executor", MacrossObserver)
 	}
 	var raw = cfg.Executors[0]
+	if raw.Venue == "" && raw.Network == "" {
+		raw.Venue = "simulator"
+		raw.Network = "simnet"
+	}
 	var stopLoss decimal.Decimal
 	stopLoss, err = decimal.NewFromString(raw.StopLossPct)
 	if err != nil || raw.ID == "" || raw.Kind != "observer" ||
 		(raw.Side != long && raw.Side != short) ||
+		!validMarket(raw.Venue, raw.Network) ||
 		raw.Symbol == "" ||
 		!stopLoss.IsPositive() ||
 		stopLoss.GreaterThanOrEqual(decimal.NewFromInt(1)) {
 		return Spec{}, fmt.Errorf("invalid %s Observer Executor", MacrossObserver)
 	}
 	result.Executors = []ExecutorSpec{{
-		ID:          raw.ID,
-		Kind:        raw.Kind,
-		Side:        raw.Side,
-		Resource:    Resource{Symbol: raw.Symbol},
+		ID:   raw.ID,
+		Kind: raw.Kind,
+		Side: raw.Side,
+		Resource: Resource{
+			Venue:   raw.Venue,
+			Network: raw.Network,
+			Symbol:  raw.Symbol,
+		},
 		StopLossPct: stopLoss,
 	}}
 	return result, nil
@@ -403,6 +414,11 @@ func buildGridExecutor(raw gridExecutorConfig) (ExecutorSpec, error) {
 		PersistMode:    raw.PersistMode,
 		Recon:          raw.Recon,
 	}, nil
+}
+
+func validMarket(venue, network string) bool {
+	return venue == "simulator" && network == "simnet" ||
+		venue == "hyperliquid" && (network == "testnet" || network == "mainnet")
 }
 
 // Section 3 - Generic Helpers

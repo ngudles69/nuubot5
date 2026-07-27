@@ -6,9 +6,9 @@ Purpose: Own one standalone live Bot runtime lifecycle.
 
 ## Ownership
 
-Runner owns one WallClock, one shared Info endpoint, one shared WebSocket endpoint, one Controller, and runtime supervision.
+Runner owns one WallClock, one MarketData service, one shared Info endpoint, one shared WebSocket endpoint, one Controller, and runtime supervision.
 
-Runner attaches Clock, Info, and WebSocket to the shared Nuubot harness before Controller initialization.
+Runner attaches Clock, MarketData, Info, and WebSocket to the shared Nuubot harness before Controller initialization.
 
 Account will own the future credentialed Exchange endpoint.
 
@@ -22,6 +22,7 @@ Init
   create clock
   initialize clock
   attach clock to Nuubot
+  create and attach MarketData to Nuubot
   initialize Info endpoint
   initialize WebSocket endpoint
   initialize Controller
@@ -47,6 +48,7 @@ Stop
   stop WebSocket endpoint
   stop Info endpoint
   stop Controller
+  stop MarketData
   log stop results and stats
   return stop errors
   log stop completed
@@ -65,6 +67,6 @@ Failed evidence remains intact unless explicit backend repair is authorized.
 - `setup.Setup` remains replay-oriented.
 - Controller Signaler construction remains replay-oriented.
 - WebSocket Start returns the explicit unimplemented error.
-- Live subscriptions, callbacks, initial bars, and trading transport remain unavailable.
+- WebSocket-to-MarketData publication, initial bars, and trading transport remain unavailable.
 
 See [Runner](../runner.md) for the process-level design.

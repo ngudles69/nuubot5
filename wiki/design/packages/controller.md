@@ -9,7 +9,7 @@ Purpose: Construct and run one configured Bot from one shared Nuubot harness.
 Controller receives one shared `*setup.Nuubot` and retains it as `c.nuubot`.
 
 Nuubot supplies Logger, App Config, Bot identity and provenance, replay input,
-typed BotSpec, Meta, and ResultPath.
+typed BotSpec, Clock, MarketData, Meta, and ResultPath.
 
 Controller retains `nuubot.Log` as `c.log` for convenient logging.
 
@@ -32,6 +32,7 @@ Controller Init
   create Risks
   retain Controller components
   initialize Controller state
+  subscribe to MarketData timing
   initialize resource capital
   log init completed
 
@@ -57,12 +58,23 @@ Controller Stop
   log stop
   ignore repeated stop request
   request Controller stop
+  stop MarketData subscriptions
   close active BotCycle
   stop Risks
   stop Signaler
   mark Controller stopped
   log stopped results and stats
   return stop error
+```
+
+## MarketData Callback
+
+```text
+onBBO
+  read latest BBO
+  record Controller market time
+  record active BotCycle market time
+  record accepted tick
 ```
 
 ## Control Pass
@@ -96,6 +108,10 @@ Controller reads the complete current package, passes it unchanged into active
 `BotCycle.Run(signal)`, then applies its standard lifecycle Action.
 
 Controller passes no timestamp into `AcctRecon`, `OnRecon`, or `BotCycle.Run`.
+
+Controller subscribes to MarketData only to record accepted ticks, BBO gaps, and active BotCycle market time.
+
+Controller owns no latest-BBO map and performs no Executor or Simulator BBO forwarding.
 
 Controller has no isolated unit tests.
 
@@ -153,7 +169,7 @@ It performs no mutation, reconciliation, trading decision, logging, or persisten
 
 ## Shutdown
 
-Controller stops the active BotCycle first.
+Controller stops its MarketData timing subscriptions, then stops the active BotCycle.
 
 BotCycle stops and flattens every Executor Account.
 

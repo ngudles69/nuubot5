@@ -11,6 +11,7 @@ BtBot owns:
 - one shared Nuubot harness;
 - one ReplayReader;
 - one TickClock;
+- one MarketData service;
 - one Controller;
 - exact replay proof; and
 - ordered telemetry samples;
@@ -39,6 +40,7 @@ initialize ReplayReader
 create TickClock
 initialize TickClock
 attach TickClock to Nuubot
+create and attach MarketData to Nuubot
 initialize Controller from Nuubot
 register Controller timer
 initialize replay stats
@@ -53,8 +55,9 @@ Setup creates no background context.
 
 Every validated BBO receives its replay symbol.
 
-BtBot sends the BBO to Controller, advances TickClock, and runs Controller
-through the registered timer.
+BtBot publishes the BBO to every configured exact MarketData key, advances TickClock, and runs Controller through the registered timer.
+
+MarketData completes synchronous Simulator and strategy callbacks before BtBot advances to the next replay tick.
 
 Reader exhaustion is normal completion.
 
@@ -62,8 +65,7 @@ Reader exhaustion is normal completion.
 
 Stop logs every request before checking stopped state.
 
-The first request marks BtBot stopped, stops owned components, builds results,
-and logs results and stats.
+The first request marks BtBot stopped, stops Reader, Controller, and MarketData, builds results, and logs results and stats.
 
 Successful Stop logs final `btbot stopped.` immediately before returning.
 

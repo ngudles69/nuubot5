@@ -87,7 +87,7 @@ Current Grid Trades have no individual SL.
 
 The adverse Grid boundary owns coordinated stop-loss behavior.
 
-Simulator matches crossed Orders during later BBO ingestion.
+Simulator matches crossed Orders through its direct MarketData subscription.
 
 Live matching and Fill timing remain exchange-owned.
 
@@ -103,24 +103,30 @@ Failure is fatal before BotCycle admission completes.
 
 ```text
 OnInit
-  bind GridExecutor inputs
+  bind GridExecutor inputs and log init
   validate GridExecutor state
   validate GridExecutor config
   validate fixed side
-  retain current BBO and identity
-  calculate Grid levels
+  retain GridExecutor identity and equity
   initialize Account
-  log validated Grid table
+  log init completed
 
 OnStart
+  log start
   validate start state
+  read latest BBO
+  calculate Grid levels
+  subscribe to MarketData
   submit initial Grid at cycle-start BBO
   mark GridExecutor running
   log start completed
 
 OnStop
+  log stop
   validate stop state
   mark GridExecutor stopping
+  stop MarketData subscription
+  read current time and latest BBO
   reconcile current Account truth
   cancel active Orders
   close open Trades
@@ -129,6 +135,10 @@ OnStop
   stop Account
   cache terminal Account result
   log stop completed
+
+onBBO
+  read latest BBO
+  assess Grid boundaries
 
 OnRecon
   read current Nuubot time
@@ -175,7 +185,9 @@ Persisted Grid Trades fail loudly because Runner recovery is not implemented.
 
 ## Logging and Results
 
-Every start logs one table header and one record per Level.
+Every Start logs one table header and one record per validated Level.
+
+Every lifecycle entry and completion log identifies cycle, Executor number, Executor ID, kind, and side.
 
 Each record includes Grid, entry, exit, side, size, notional, and intended action.
 

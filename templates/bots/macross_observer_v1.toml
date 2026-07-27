@@ -16,6 +16,8 @@ regime_ema = 200
 id = "observer"
 kind = "observer"
 side = "long"
+venue = "simulator"
+network = "simnet"
 symbol = "BTC"
 stop_loss_pct = "0.01"
 

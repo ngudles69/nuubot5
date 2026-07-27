@@ -23,12 +23,15 @@ The command owns Runner.
 Runner owns:
 
 - one WallClock;
+- one shared MarketData object;
 - one shared public Hyperliquid Info endpoint;
 - one shared Hyperliquid WebSocket endpoint;
 - one Controller; and
 - runtime supervision.
 
-Runner creates and attaches Clock, Info, and WebSocket to the shared `setup.Nuubot` harness before Controller initialization.
+Runner creates and attaches Clock, MarketData, Info, and WebSocket to the shared `setup.Nuubot` harness before Controller initialization.
+
+See [MarketData](marketdata.md) for permanent BBO ingestion, buffering, and subscription ownership.
 
 The future credentialed Exchange endpoint belongs to Account, not Runner.
 
@@ -54,6 +57,7 @@ Init
   create clock
   initialize clock
   attach clock to Nuubot
+  create and attach MarketData to Nuubot
   initialize Info endpoint
   initialize WebSocket endpoint
   initialize Controller
@@ -79,6 +83,7 @@ Stop
   stop WebSocket endpoint
   stop Info endpoint
   stop Controller
+  stop MarketData
   log stop results and stats
   return stop errors
   log stop completed
@@ -126,7 +131,7 @@ Preserved data supports reference, review, troubleshooting, strategy analysis, a
 ## Invariants
 
 - One Runner owns one Controller.
-- Runner owns shared Clock, Info, and WebSocket lifecycle.
+- Runner owns shared Clock, MarketData, Info, and WebSocket lifecycle.
 - Constructors perform no network work.
 - Future endpoint Start performs reachability checks before Controller and Clock run.
 - Stop remains idempotent after successful Start.

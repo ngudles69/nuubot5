@@ -110,7 +110,7 @@ passes.
 Each accepted run reports 2,207 Signal packages and 724 skipped StartCycle
 actions.
 
-Observer produces 64 sequential cycles and 17 stop-loss exits.
+Observer produces 63 sequential cycles and 16 stop-loss exits after Start establishes entry from the latest buffered BBO.
 
 Sweep 9 Bot 13 runs the same three-month input through Macross, TradeExecutor,
 Account, Ledger, and Simulator.

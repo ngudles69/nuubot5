@@ -49,7 +49,7 @@ func TestAccountRunsOneReconciledBracket(t *testing.T) {
 		t.Fatalf("initialize Account: %v", err)
 	}
 	var first, _ = market.CreateBBO(1000, 100)
-	err = actual.IngestBBO(first)
+	err = ingestAccountBBO(&actual, first)
 	if err != nil {
 		t.Fatalf("ingest first BBO: %v", err)
 	}
@@ -131,7 +131,7 @@ func TestAccountRunsOneReconciledBracket(t *testing.T) {
 	}
 	var entryValue = snapshot.AccountValue
 	var mark, _ = market.CreateBBO(1500, 105)
-	if err = actual.IngestBBO(mark); err != nil {
+	if err = ingestAccountBBO(&actual, mark); err != nil {
 		t.Fatalf("ingest mark BBO: %v", err)
 	}
 	snapshot, refreshed, _, err = actual.Reconcile(1500, false)
@@ -147,7 +147,7 @@ func TestAccountRunsOneReconciledBracket(t *testing.T) {
 		)
 	}
 	var second, _ = market.CreateBBO(2000, 111)
-	err = actual.IngestBBO(second)
+	err = ingestAccountBBO(&actual, second)
 	if err != nil {
 		t.Fatalf("ingest take-profit BBO: %v", err)
 	}
@@ -183,7 +183,7 @@ func TestAccountReconFailurePublishesOnlyTelemetry(t *testing.T) {
 		t.Fatalf("initialize Account: %v", err)
 	}
 	var warm, _ = market.CreateBBO(1000, 100)
-	if err = actual.IngestBBO(warm); err != nil {
+	if err = ingestAccountBBO(&actual, warm); err != nil {
 		t.Fatalf("warm Account: %v", err)
 	}
 	var price = decimal.NewFromInt(99)
@@ -299,7 +299,7 @@ func TestAccountMaxPersistenceRecoversDirtyVenueState(t *testing.T) {
 		t.Fatalf("initialize first Account: %v", err)
 	}
 	var warm, _ = market.CreateBBO(1000, 100)
-	if err = first.IngestBBO(warm); err != nil {
+	if err = ingestAccountBBO(&first, warm); err != nil {
 		t.Fatalf("ingest first BBO: %v", err)
 	}
 	var quantity = decimal.RequireFromString("0.11")
@@ -351,7 +351,7 @@ func TestAccountMaxPersistenceRecoversDirtyVenueState(t *testing.T) {
 		t.Fatalf("initialize restored Account: %v", err)
 	}
 	var restoredWarm, _ = market.CreateBBO(1100, 100)
-	if err = restored.IngestBBO(restoredWarm); err != nil {
+	if err = ingestAccountBBO(&restored, restoredWarm); err != nil {
 		t.Fatalf("warm restored Account: %v", err)
 	}
 	var snapshot Snapshot
@@ -367,7 +367,7 @@ func TestAccountMaxPersistenceRecoversDirtyVenueState(t *testing.T) {
 		)
 	}
 	var exitBBO, _ = market.CreateBBO(2000, 111)
-	if err = restored.IngestBBO(exitBBO); err != nil {
+	if err = ingestAccountBBO(&restored, exitBBO); err != nil {
 		t.Fatalf("ingest restored take-profit BBO: %v", err)
 	}
 	snapshot, _, _, err = restored.Reconcile(2000, false)
@@ -402,7 +402,7 @@ func TestAccountMaxPersistenceRecoversSimulatorSubmitFailure(t *testing.T) {
 		t.Fatalf("initialize first Account: %v", err)
 	}
 	var warm, _ = market.CreateBBO(1000, 100)
-	if err = first.IngestBBO(warm); err != nil {
+	if err = ingestAccountBBO(&first, warm); err != nil {
 		t.Fatalf("warm first Account: %v", err)
 	}
 	var db *sql.DB
@@ -454,7 +454,7 @@ func TestAccountMaxPersistenceRecoversSimulatorSubmitFailure(t *testing.T) {
 		t.Fatalf("initialize restored Account: %v", err)
 	}
 	var restoredWarm, _ = market.CreateBBO(1100, 100)
-	if err = restored.IngestBBO(restoredWarm); err != nil {
+	if err = ingestAccountBBO(&restored, restoredWarm); err != nil {
 		t.Fatalf("warm restored Account: %v", err)
 	}
 	var snapshot Snapshot
@@ -480,7 +480,7 @@ func TestAccountDoesNotMarkAcceptedSimulatorOrderRetriable(t *testing.T) {
 		t.Fatalf("initialize Account: %v", err)
 	}
 	var warm, _ = market.CreateBBO(1000, 100)
-	if err = actual.IngestBBO(warm); err != nil {
+	if err = ingestAccountBBO(&actual, warm); err != nil {
 		t.Fatalf("warm Account: %v", err)
 	}
 	var db *sql.DB
@@ -541,7 +541,7 @@ func TestAccountReconRetainsImmediateFillAfterSubmitPersistenceFailure(t *testin
 		t.Fatalf("initialize Account: %v", err)
 	}
 	var warm, _ = market.CreateBBO(1000, 100)
-	if err = actual.IngestBBO(warm); err != nil {
+	if err = ingestAccountBBO(&actual, warm); err != nil {
 		t.Fatalf("warm Account: %v", err)
 	}
 	var db *sql.DB
@@ -727,7 +727,7 @@ func TestAccountMaxPersistenceRepairsMissingSubmittingOrder(t *testing.T) {
 		t.Fatalf("initialize first Account: %v", err)
 	}
 	var warm, _ = market.CreateBBO(1000, 100)
-	if err = first.IngestBBO(warm); err != nil {
+	if err = ingestAccountBBO(&first, warm); err != nil {
 		t.Fatalf("warm first Account: %v", err)
 	}
 	var db *sql.DB
@@ -797,7 +797,7 @@ func TestAccountMaxPersistenceRepairsMissingSubmittingOrder(t *testing.T) {
 		t.Fatalf("initialize restored Account: %v", err)
 	}
 	var restoredWarm, _ = market.CreateBBO(1100, 100)
-	if err = restored.IngestBBO(restoredWarm); err != nil {
+	if err = ingestAccountBBO(&restored, restoredWarm); err != nil {
 		t.Fatalf("warm restored Account: %v", err)
 	}
 	var snapshot Snapshot
@@ -834,7 +834,7 @@ func TestAccountRepairsCursorAdvancedMissingFee(t *testing.T) {
 		t.Fatalf("initialize Account: %v", err)
 	}
 	var warm, _ = market.CreateBBO(1000, 100)
-	if err = actual.IngestBBO(warm); err != nil {
+	if err = ingestAccountBBO(&actual, warm); err != nil {
 		t.Fatalf("warm Account: %v", err)
 	}
 	var price = decimal.NewFromInt(100)
@@ -855,7 +855,7 @@ func TestAccountRepairsCursorAdvancedMissingFee(t *testing.T) {
 		t.Fatalf("unexpected initial pending state: %+v", snapshot)
 	}
 	var later, _ = market.CreateBBO(3000, 101)
-	if err = actual.IngestBBO(later); err != nil {
+	if err = ingestAccountBBO(&actual, later); err != nil {
 		t.Fatalf("advance mark: %v", err)
 	}
 	if _, _, _, err = actual.Reconcile(3000, false); err != nil {
@@ -893,7 +893,7 @@ func TestAccountKeepsFeeIncompleteClosurePendingAndFinalFinanceStatic(t *testing
 		t.Fatalf("initialize Account: %v", err)
 	}
 	var warm, _ = market.CreateBBO(1000, 100)
-	if err = actual.IngestBBO(warm); err != nil {
+	if err = ingestAccountBBO(&actual, warm); err != nil {
 		t.Fatalf("warm Account: %v", err)
 	}
 	var quantity = decimal.RequireFromString("0.11")
@@ -912,7 +912,7 @@ func TestAccountKeepsFeeIncompleteClosurePendingAndFinalFinanceStatic(t *testing
 		t.Fatalf("reconcile entry: %v", err)
 	}
 	var closeBBO, _ = market.CreateBBO(2000, 111)
-	if err = actual.IngestBBO(closeBBO); err != nil {
+	if err = ingestAccountBBO(&actual, closeBBO); err != nil {
 		t.Fatalf("fill exit: %v", err)
 	}
 	setFillFeeAvailableForTest(t, &actual, 2, false)
@@ -941,7 +941,7 @@ func TestAccountKeepsFeeIncompleteClosurePendingAndFinalFinanceStatic(t *testing
 		t.Fatalf("unexpected closed finance snapshot=%+v Trade=%+v", closed, closedTrade)
 	}
 	var changedMark, _ = market.CreateBBO(4000, 150)
-	if err = actual.IngestBBO(changedMark); err != nil {
+	if err = ingestAccountBBO(&actual, changedMark); err != nil {
 		t.Fatalf("change closed mark: %v", err)
 	}
 	if _, _, _, err = actual.Reconcile(4000, true); err != nil {
@@ -983,10 +983,19 @@ func accountNuubot(
 		App: appconfig.App{
 			Hyperliquid: appconfig.Hyperliquid{MinOrderNotionalUSDC: 11},
 		},
+		MarketData:  market.CreateMarketData(),
 		Meta:        instrument,
 		ResultPath:  resultPath,
 		RuntimePath: resultPath,
 	}
+}
+
+func ingestAccountBBO(actual *Account, bbo market.BBO) error {
+	return actual.config.Nuubot.MarketData.IngestBBO(market.Key{
+		Venue:   actual.config.Venue,
+		Network: actual.config.Network,
+		Symbol:  actual.config.Symbol,
+	}, bbo)
 }
 
 func assertTradeFinanceEqual(t *testing.T, actual trade.ReconState, expected trade.ReconState) {

@@ -89,6 +89,7 @@ command
 `-- BtBot
     |-- ReplayReader
     |-- TickClock
+    |-- MarketData
     `-- Controller
         |-- Signaler
         |   `-- Macross or RSI
@@ -177,6 +178,7 @@ BtBot init
   initialize ReplayReader
   create and initialize TickClock
   attach TickClock to Nuubot
+  create and attach MarketData to Nuubot
   initialize Controller from Nuubot
   register Controller timer
   initialize replay stats
@@ -184,7 +186,7 @@ BtBot init
 
 BtBot loop
   read one validated BBO
-  send BBO to Controller
+  publish BBO to MarketData
   update replay stats
   advance TickClock
   registered timer callback runs Controller

@@ -2,7 +2,7 @@
 
 Status: Implemented for one symbol-qualified historical stream.
 Covers: `internal/btbot`, `internal/replay`, `internal/controller`
-Purpose: Drive one exact historical market sequence through Controller.
+Purpose: Drive one exact historical market sequence through shared MarketData and TickClock.
 
 ## Flow
 
@@ -10,7 +10,8 @@ Purpose: Drive one exact historical market sequence through Controller.
 read validated one-second row
 create BBO
 attach ReplayInput symbol
-Controller.IngestBBO
+MarketData.IngestBBO
+complete matching subscriber callbacks
 TickClock.Advance
 registered Controller timer runs
 ```
@@ -38,5 +39,5 @@ deferred.
 - 7,948,800 one-second BBO values.
 - 794,880 Controller passes.
 - 2,207 Macross packages.
-- Sweep 6 Bot 9: 64 cycles and 17 stop-loss exits.
+- Sweep 6 Bot 9: 63 cycles and 16 stop-loss exits after Start-time latest-BBO entry.
 - Sweep 9 Bot 13: full TradeBot Account, Ledger, Simulator, and Result proof.

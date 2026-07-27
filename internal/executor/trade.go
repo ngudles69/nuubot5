@@ -25,7 +25,6 @@ type tradeExecutor struct {
 	executorNumber int
 	signalMS       uint64
 	side           string
-	lastBBO        market.BBO
 	notional       decimal.Decimal
 	takeProfitPct  decimal.Decimal
 	stopLossPct    decimal.Decimal
@@ -37,8 +36,7 @@ type tradeExecutor struct {
 }
 
 var _ Executor = (*tradeExecutor)(nil)
-var _ BBOHandler = (*tradeExecutor)(nil)
-var _ BBOIngestHandler = (*tradeExecutor)(nil)
+var _ StartHandler = (*tradeExecutor)(nil)
 var _ AccountReconciler = (*tradeExecutor)(nil)
 var _ ReconHandler = (*tradeExecutor)(nil)
 
@@ -46,18 +44,27 @@ var _ ReconHandler = (*tradeExecutor)(nil)
 
 // OnInit initializes TradeExecutor without submitting Orders.
 func (e *tradeExecutor) OnInit(ctx BotCycleContext) error {
-	// Step 1: bind TradeExecutor inputs
+	// Step 1: bind TradeExecutor inputs and log init
 	e.log = ctx.Nuubot.Log
 	e.nuubot = ctx.Nuubot
 	e.spec = ctx.Spec
+	e.log.Info(fmt.Sprintf(
+		"executor init cycle=%d executor=%d id=%s kind=%s side=%s",
+		ctx.CycleNumber,
+		ctx.ExecutorNumber,
+		ctx.Spec.ID,
+		ctx.Spec.Kind,
+		ctx.Spec.Side,
+	))
 
-	// Step 2: validate TradeExecutor state
-	if e.status != Configured {
-		return fmt.Errorf("trade executor cannot initialize from current state")
+	// Step 2: reject terminal TradeExecutor state
+	if e.status == Error || e.status == Stopped {
+		return fmt.Errorf("trade executor cannot initialize from terminal status %s", e.status)
 	}
-	e.status = Starting
 
 	// Step 3: validate TradeExecutor config
+
+	// Step 3.1: retain financial inputs
 	e.notional = ctx.Spec.OrderSizeUSDC
 	e.takeProfitPct = ctx.Spec.TakeProfitPct
 	e.stopLossPct = ctx.Spec.StopLossPct
@@ -65,37 +72,80 @@ func (e *tradeExecutor) OnInit(ctx BotCycleContext) error {
 	if !equity.IsPositive() {
 		equity = ctx.Spec.CapitalUSDC
 	}
-	if !e.notional.IsPositive() || !equity.IsPositive() ||
-		!e.takeProfitPct.IsPositive() || e.takeProfitPct.GreaterThanOrEqual(decimal.NewFromInt(1)) ||
-		!e.stopLossPct.IsPositive() || e.stopLossPct.GreaterThanOrEqual(decimal.NewFromInt(1)) ||
-		ctx.Spec.FeePct.IsNegative() || ctx.Spec.SlippagePct.IsNegative() ||
-		ctx.Spec.Resource.Venue != "simulator" ||
-		ctx.Spec.Resource.Network != "simnet" ||
-		ctx.Spec.Resource.PhysicalAccountID == "" ||
-		ctx.Spec.Resource.Symbol == "" ||
-		(ctx.Spec.PersistMode != ledger.None && ctx.Spec.PersistMode != ledger.Max) {
+
+	// Step 3.2: validate Executor ID
+	if ctx.Spec.ID == "" {
 		e.status = Error
 		return fmt.Errorf("trade executor config is invalid")
 	}
 
-	// Step 4: validate fixed side
+	// Step 3.3: validate capital and order size
+	if !equity.IsPositive() || !e.notional.IsPositive() {
+		e.status = Error
+		return fmt.Errorf("trade executor config is invalid")
+	}
+
+	// Step 3.4: validate take-profit percentage
+	if !e.takeProfitPct.IsPositive() || e.takeProfitPct.GreaterThanOrEqual(decimal.NewFromInt(1)) {
+		e.status = Error
+		return fmt.Errorf("trade executor config is invalid")
+	}
+
+	// Step 3.5: validate stop-loss percentage
+	if !e.stopLossPct.IsPositive() || e.stopLossPct.GreaterThanOrEqual(decimal.NewFromInt(1)) {
+		e.status = Error
+		return fmt.Errorf("trade executor config is invalid")
+	}
+
+	// Step 3.6: validate fees and slippage
+	if ctx.Spec.FeePct.IsNegative() || ctx.Spec.SlippagePct.IsNegative() {
+		e.status = Error
+		return fmt.Errorf("trade executor config is invalid")
+	}
+
+	// Step 3.7: validate Venue
+	if ctx.Spec.Resource.Venue != "simulator" {
+		e.status = Error
+		return fmt.Errorf("trade executor config is invalid")
+	}
+
+	// Step 3.8: validate network
+	if ctx.Spec.Resource.Network != "simnet" {
+		e.status = Error
+		return fmt.Errorf("trade executor config is invalid")
+	}
+
+	// Step 3.9: validate physical Account ID
+	if ctx.Spec.Resource.PhysicalAccountID == "" {
+		e.status = Error
+		return fmt.Errorf("trade executor config is invalid")
+	}
+
+	// Step 3.10: validate symbol
+	if ctx.Spec.Resource.Symbol == "" {
+		e.status = Error
+		return fmt.Errorf("trade executor config is invalid")
+	}
+
+	// Step 3.11: validate persistence mode
+	if ctx.Spec.PersistMode != ledger.None && ctx.Spec.PersistMode != ledger.Max {
+		e.status = Error
+		return fmt.Errorf("trade executor config is invalid")
+	}
+
+	// Step 3.12: validate fixed side
 	e.side = ctx.Spec.Side
 	if e.side != Long && e.side != Short {
 		e.status = Error
 		return fmt.Errorf("%w: trade executor requires one configured side", ErrRejected)
 	}
 
-	// Step 5: retain current BBO and identity
-	if ctx.LatestBBO.TimestampMS == 0 || ctx.LatestBBO.Price <= 0 {
-		e.status = Error
-		return fmt.Errorf("%w: trade executor requires current BBO", ErrRejected)
-	}
-	e.lastBBO = ctx.LatestBBO
+	// Step 4: retain TradeExecutor identity
 	e.cycleNumber = ctx.CycleNumber
 	e.executorNumber = ctx.ExecutorNumber
 	e.signalMS = ctx.Signal.TimestampMS()
 
-	// Step 6: initialize Account
+	// Step 5: initialize Account
 	var ledgerID = uint64(ctx.CycleNumber)<<32 | uint64(ctx.ExecutorNumber)
 	var err = e.account.Init(account.Config{
 		Nuubot:         ctx.Nuubot,
@@ -116,12 +166,6 @@ func (e *tradeExecutor) OnInit(ctx BotCycleContext) error {
 		e.status = Error
 		return fmt.Errorf("initialize trade executor: %w", err)
 	}
-	err = e.account.IngestBBO(ctx.LatestBBO)
-	if err != nil {
-		e.account.Stop()
-		e.status = Error
-		return fmt.Errorf("initialize trade executor: %w", err)
-	}
 	var existing account.Result
 	existing, err = e.account.Result()
 	if err != nil {
@@ -133,23 +177,68 @@ func (e *tradeExecutor) OnInit(ctx BotCycleContext) error {
 		))
 	}
 
-	// Step 7: mark TradeExecutor running
-	e.status = Running
-
-	// Step 8: log init completed
+	// Step 6: log init completed
 	e.log.Info(fmt.Sprintf(
-		"executor initialized cycle=%d executor=%d kind=trade side=%s signal_ts_ms=%d",
+		"executor init completed cycle=%d executor=%d id=%s kind=trade side=%s signal_ts_ms=%d",
 		e.cycleNumber,
 		e.executorNumber,
+		e.spec.ID,
 		e.side,
 		e.signalMS,
 	))
 	return nil
 }
 
+// OnStart starts TradeExecutor after every sibling initializes.
+func (e *tradeExecutor) OnStart() error {
+	// Step 1: log start
+	e.log.Info(fmt.Sprintf(
+		"executor start cycle=%d executor=%d id=%s kind=trade side=%s",
+		e.cycleNumber,
+		e.executorNumber,
+		e.spec.ID,
+		e.side,
+	))
+
+	// Step 2: reject terminal TradeExecutor state
+	if e.status == Error || e.status == Stopped {
+		return fmt.Errorf("trade executor cannot start from terminal status %s", e.status)
+	}
+
+	// Step 3: read latest BBO
+	if _, err := e.latestBBO(); err != nil {
+		return err
+	}
+
+	// Step 4: continue loaded TradeExecutor state
+	if e.status == Configured || e.status == Starting {
+		e.status = Running
+	}
+
+	// Step 5: log start completed
+	e.log.Info(fmt.Sprintf(
+		"executor started cycle=%d executor=%d id=%s kind=trade side=%s",
+		e.cycleNumber,
+		e.executorNumber,
+		e.spec.ID,
+		e.side,
+	))
+	return nil
+}
+
 // OnStop closes exposure and stops TradeExecutor.
 func (e *tradeExecutor) OnStop(reason string) error {
-	// Step 1: validate stop state
+	// Step 1: log stop
+	e.log.Info(fmt.Sprintf(
+		"executor stop cycle=%d executor=%d id=%s kind=trade side=%s reason=%s",
+		e.cycleNumber,
+		e.executorNumber,
+		e.spec.ID,
+		e.side,
+		reason,
+	))
+
+	// Step 2: validate stop state
 	if e.status == Stopped {
 		return nil
 	}
@@ -157,42 +246,50 @@ func (e *tradeExecutor) OnStop(reason string) error {
 		return fmt.Errorf("stop trade executor: executor is in error state")
 	}
 
-	// Step 2: mark TradeExecutor stopping
+	// Step 3: mark TradeExecutor stopping
 	e.status = Stopping
 	if e.exitReason == "" {
 		e.exitReason = reason
 	}
 
-	// Step 3: reconcile current Account truth
-	var snapshot, _, _, err = e.account.Reconcile(e.lastBBO.TimestampMS, true)
+	// Step 4: read current time and latest BBO
+	var nowMS = e.nuubot.Clock.NowMS()
+	var bbo, err = e.latestBBO()
+	if err != nil {
+		return e.stopError(err)
+	}
+
+	// Step 5: reconcile current Account truth
+	var snapshot account.Snapshot
+	snapshot, _, _, err = e.account.Reconcile(nowMS, true)
 	if err != nil {
 		return e.stopError(fmt.Errorf("stop trade executor: %w", err))
 	}
 
-	// Step 4: cancel active Orders
+	// Step 6: cancel active Orders
 	var active = e.account.ActiveOrders()
 	if len(active) > 0 {
 		var cloids = make([]string, len(active))
 		for index, current := range active {
 			cloids[index] = current.CLOID
 		}
-		err = e.account.CancelOrders(cloids, e.lastBBO.TimestampMS)
+		err = e.account.CancelOrders(cloids, nowMS)
 		if err != nil {
 			return e.stopError(fmt.Errorf("stop trade executor: %w", err))
 		}
-		snapshot, _, _, err = e.account.Reconcile(e.lastBBO.TimestampMS, true)
+		snapshot, _, _, err = e.account.Reconcile(nowMS, true)
 		if err != nil {
 			return e.stopError(fmt.Errorf("stop trade executor: %w", err))
 		}
 	}
 
-	// Step 5: close open exposure
+	// Step 7: close open exposure
 	if !snapshot.PositionQuantity.IsZero() {
 		var side = order.Sell
 		if snapshot.PositionQuantity.IsNegative() {
 			side = order.Buy
 		}
-		var price = decimal.NewFromFloat(e.lastBBO.Price)
+		var price = decimal.NewFromFloat(bbo.Price)
 		_, err = e.account.PlaceOrders([]account.OrderSpec{{
 			TradeID:     e.tradeID,
 			Role:        order.Stop,
@@ -202,15 +299,15 @@ func (e *tradeExecutor) OnStop(reason string) error {
 			Quantity:    snapshot.PositionQuantity.Abs(),
 			Price:       &price,
 			ReduceOnly:  true,
-			TimestampMS: e.lastBBO.TimestampMS,
+			TimestampMS: nowMS,
 		}})
 		if err != nil {
 			return e.stopError(fmt.Errorf("stop trade executor: %w", err))
 		}
 	}
 
-	// Step 6: reconcile final Venue truth
-	snapshot, _, _, err = e.account.Reconcile(e.lastBBO.TimestampMS, true)
+	// Step 8: reconcile final Venue truth
+	snapshot, _, _, err = e.account.Reconcile(nowMS, true)
 	if err != nil {
 		return e.stopError(fmt.Errorf("stop trade executor: %w", err))
 	}
@@ -223,30 +320,32 @@ func (e *tradeExecutor) OnStop(reason string) error {
 		))
 	}
 
-	// Step 7: capture terminal Account result
+	// Step 9: capture terminal Account result
 	var result account.Result
 	result, err = e.account.Result()
 	if err != nil {
 		return e.stopError(fmt.Errorf("stop trade executor: %w", err))
 	}
 
-	// Step 8: stop Account
+	// Step 10: stop Account
 	err = e.account.Stop()
 	if err != nil {
 		e.status = Error
 		return fmt.Errorf("stop trade executor: %w", err)
 	}
 
-	// Step 9: cache terminal Account result
+	// Step 11: cache terminal Account result
 	e.accountResult = result.Clone()
 	e.hasResult = true
 	e.status = Stopped
 
-	// Step 10: log stop completed
+	// Step 12: log stop completed
 	e.log.Info(fmt.Sprintf(
-		"executor stopped cycle=%d executor=%d kind=trade trades=%d fills=%d stop_reason=%s",
+		"executor stopped cycle=%d executor=%d id=%s kind=trade side=%s trades=%d fills=%d stop_reason=%s",
 		e.cycleNumber,
 		e.executorNumber,
+		e.spec.ID,
+		e.side,
 		result.Ledger.Trades,
 		result.Ledger.Fills,
 		e.exitReason,
@@ -258,20 +357,16 @@ func (e *tradeExecutor) OnStop(reason string) error {
 
 // Section 2.1 - Market Data
 
-// IngestBBO advances the owned Simulator before policy handling.
-func (e *tradeExecutor) IngestBBO(bbo market.BBO) error {
-	if bbo.Symbol != "" && bbo.Symbol != e.spec.Resource.Symbol {
-		return nil
+func (e *tradeExecutor) latestBBO() (market.BBO, error) {
+	var bbo, found = e.nuubot.MarketData.LatestBBO(market.Key{
+		Venue:   e.spec.Resource.Venue,
+		Network: e.spec.Resource.Network,
+		Symbol:  e.spec.Resource.Symbol,
+	})
+	if !found {
+		return market.BBO{}, fmt.Errorf("%w: trade executor requires current BBO", ErrRejected)
 	}
-	return e.account.IngestBBO(bbo)
-}
-
-// OnBBO records the latest normal Executor BBO.
-func (e *tradeExecutor) OnBBO(bbo market.BBO) {
-	if bbo.Symbol != "" && bbo.Symbol != e.spec.Resource.Symbol {
-		return
-	}
-	e.lastBBO = bbo
+	return bbo, nil
 }
 
 // Section 2.2 - Reconciliation and Policy
@@ -292,7 +387,12 @@ func (e *tradeExecutor) OnRecon() error {
 
 	// Step 1: submit bracket when no Trade exists
 	if e.tradeID == 0 {
-		var entry = decimal.NewFromFloat(e.lastBBO.Price)
+		var bbo, err = e.latestBBO()
+		if err != nil {
+			return err
+		}
+		var nowMS = e.nuubot.Clock.NowMS()
+		var entry = decimal.NewFromFloat(bbo.Price)
 		var quantity = e.notional.Div(entry)
 		var takeProfit = entry.Mul(decimal.NewFromInt(1).Add(e.takeProfitPct))
 		var stopLoss = entry.Mul(decimal.NewFromInt(1).Sub(e.stopLossPct))
@@ -304,7 +404,8 @@ func (e *tradeExecutor) OnRecon() error {
 			takeProfit = entry.Mul(decimal.NewFromInt(1).Sub(e.takeProfitPct))
 			stopLoss = entry.Mul(decimal.NewFromInt(1).Add(e.stopLossPct))
 		}
-		var placed, err = e.account.PlaceOrders([]account.OrderSpec{
+		var placed account.PlaceResult
+		placed, err = e.account.PlaceOrders([]account.OrderSpec{
 			{
 				Role:        order.Entry,
 				Side:        entrySide,
@@ -312,7 +413,7 @@ func (e *tradeExecutor) OnRecon() error {
 				TimeInForce: order.IOC,
 				Quantity:    quantity,
 				Price:       &entry,
-				TimestampMS: e.lastBBO.TimestampMS,
+				TimestampMS: nowMS,
 			},
 			{
 				Role:         order.TakeProfit,
@@ -323,7 +424,7 @@ func (e *tradeExecutor) OnRecon() error {
 				Price:        &takeProfit,
 				TriggerPrice: &takeProfit,
 				ReduceOnly:   true,
-				TimestampMS:  e.lastBBO.TimestampMS,
+				TimestampMS:  nowMS,
 			},
 			{
 				Role:         order.StopLoss,
@@ -334,7 +435,7 @@ func (e *tradeExecutor) OnRecon() error {
 				Price:        &stopLoss,
 				TriggerPrice: &stopLoss,
 				ReduceOnly:   true,
-				TimestampMS:  e.lastBBO.TimestampMS,
+				TimestampMS:  nowMS,
 			},
 		})
 		if err != nil {

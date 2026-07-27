@@ -8,7 +8,6 @@ import (
 
 	"nuubot/internal/account"
 	"nuubot/internal/botspec"
-	"nuubot/internal/market"
 	"nuubot/internal/setup"
 	"nuubot/internal/signaler"
 )
@@ -107,7 +106,6 @@ type BotCycleContext struct {
 	ExecutorNumber     int
 	Signal             signaler.Package
 	Spec               botspec.ExecutorSpec
-	LatestBBO          market.BBO
 	StartingEquityUSDC decimal.Decimal
 	Status             Status
 }
@@ -125,16 +123,6 @@ type Executor interface {
 // StartHandler starts after every sibling Executor initializes.
 type StartHandler interface {
 	OnStart() error
-}
-
-// BBOHandler consumes normal Executor BBO events.
-type BBOHandler interface {
-	OnBBO(market.BBO)
-}
-
-// BBOIngestHandler consumes Simulator-only BBO ingestion.
-type BBOIngestHandler interface {
-	IngestBBO(market.BBO) error
 }
 
 // AccountReconciler refreshes one Executor's Account truth.

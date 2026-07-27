@@ -57,7 +57,6 @@ BotCycle AcctRecon
 
 BotCycle OnBBO
   record BotCycle time
-  deliver BBO to running Executors
 ```
 
 ## Coordination
@@ -101,15 +100,13 @@ required. `Run` and `OnRecon` receive no timestamp argument.
 
 ## Market Data
 
-BotCycle distributes symbol-qualified BBO values.
+BotCycle receives BBO timing evidence only from Controller's MarketData subscription.
 
-Executors ignore values for other symbols.
+BotCycle does not forward BBO values to Executors, Accounts, or Simulator.
 
-Current BtBot admits one replay symbol.
+Executors and Simulator subscribe directly to exact MarketData keys when required.
 
-Multi-source deterministic replay remains deferred.
-
-Stopping Executors continue Venue BBO ingestion until coordinated cleanup begins.
+Current BtBot admits one replay symbol. Multi-source deterministic replay remains deferred.
 
 ## Completion
 

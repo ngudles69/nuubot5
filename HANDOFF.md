@@ -126,10 +126,52 @@ Account-Venue-Simulator boundary hardcut. Recon2 is retired.
 - Documented current `nuubot-*` development commands and the target single `nuubot` binary.
 - Documented one Server process containing WebServer, API, BotManager, and SweepManager.
 - Documented isolated Runner and BtBot child processes launched from the same target binary.
+- Reorganized `internal/executor/observer.go` with exact numbered intent comments and no executable behavior changes.
+- Aligned ObserverExecutor Program Flow documentation.
+- Focused Executor tests, BotCycle compilation, formatting, and diff checks pass after Observer reorganization.
+- Observer, Trade, and Grid now log Executor Init, Start, and Stop entry and completion.
+- Every Executor lifecycle log includes cycle, Executor number, Executor ID, kind, and side.
+- Observer and Trade now implement `StartHandler`; Init ends `Starting` and BotCycle Start marks them `Running`.
+- High-frequency Run, reconciliation, Signal, and BBO paths gained no lifecycle logs.
+- Observer Bot 9, Trade Bot 13, and Grid Bot 15 each passed 1 of 1 after lifecycle logging.
+- Observer suite total was 8,687 ms; Trade was 23,017 ms; Grid was 74,122 ms.
+- Lifecycle logs prove all six boundaries for cycle 1 Executor 1 in every Executor kind.
+- Observer result log is `workspace/logs/nuubot5-stest-s6-b9-1-20260727T165359Z.log`.
+- Trade result log is `workspace/logs/nuubot5-stest-s9-b13-1-20260727T165359Z.log`.
+- Grid result log is `workspace/logs/nuubot5-stest-s11-b15-1-20260727T165400Z.log`.
+- Approved one root-owned MarketData object carried through Nuubot.
+- MarketData owns BBO ingestion, latest buffers, subscriptions, and notifications.
+- BtBot publishes Parquet BBO through MarketData; Runner WebSocket publication remains the next live implementation.
+- Simulator subscribes directly and reads the latest buffer inside its callback.
+- Executors pull latest BBO during Start and subscribe only for current strategy requirements.
+- BBO leaves BotCycleContext and the Controller-BotCycle-Executor-Account-Venue forwarding chain is retired by the target design.
+- Added permanent `wiki/design/marketdata.md` with reasoning, ownership, lifecycle, timing, recovery, prohibited regressions, cutover, and proof.
+- Implemented shared exact-key MarketData buffering, subscriptions, and idempotent subscription shutdown.
+- BtBot and Runner now create and attach one owned MarketData object using matching flow.
+- Executor Start reads latest BBO; Observer and Grid subscribe only for required tick policy.
+- Simulator now subscribes directly; the old Controller-to-Venue BBO forwarding chain is removed.
+- Focused MarketData, Simulator, Account, Executor, BotCycle, Controller, BtBot, and Runner tests pass.
+- Observer BotSpec now shapes complete Venue, network, and symbol market identity.
+- Existing Observer configs receive the explicit `simulator/simnet` default when both fields are absent.
+- Observer Bot 9 passed 1 of 1 with 63 cycles and 16 stop-loss exits after Start-time latest-BBO entry.
+- Observer suite was 5,986 ms; BtBot was 5,660 ms; replay was 2,891 ms.
+- Observer result log is `workspace/logs/nuubot5-stest-s6-b9-1-20260727T175352Z.log`.
+- Trade Bot 13 passed 1 of 1 with unchanged 193 Trades, 626 Orders, and 386 Fills.
+- Trade suite was 20,586 ms; BtBot was 16,589 ms; replay was 12,887 ms.
+- Trade result log is `workspace/logs/nuubot5-stest-s9-b13-1-20260727T175406Z.log`.
+- Grid Bot 15 passed 1 of 1 with unchanged 1,982 Trades, 4,697 Orders, 2,636 Fills, and 585 round trips.
+- Grid suite was 73,723 ms; BtBot was 68,877 ms; replay was 64,938 ms.
+- Grid result log is `workspace/logs/nuubot5-stest-s11-b15-1-20260727T175406Z.log`.
+- MarketData implementation and BtBot integration are complete; Runner WebSocket publication remains Runner work.
+- Final full Go tests and full vet pass with canonical `-tags noasm`.
+- Project diagnostics report no errors or warnings.
 
 ### TODO
 
-- None.
+- Add Observer stop parameters for stop-loss, tick count, bar count, and elapsed-time limits.
+- Use bounded Observer runs such as 200 ticks for fast smoke tests and small logs.
+- Complete Runner and test it first with bounded Observer before Trade or Grid.
+- Use the Runner Observer smoke test to expose lifecycle and integration defects before trading execution.
 
 ### PENDING USER APPROVAL
 

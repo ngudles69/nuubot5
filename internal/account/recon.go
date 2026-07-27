@@ -9,6 +9,7 @@ import (
 
 	"nuubot/internal/hyperliquid"
 	"nuubot/internal/ledger"
+	"nuubot/internal/market"
 	"nuubot/internal/order"
 	"nuubot/internal/simulator"
 )
@@ -175,8 +176,8 @@ func (a *Account) bindInputs(cfg Config) {
 
 func (a *Account) validateIdentity() error {
 	var cfg = a.config
-	if a.log == nil || cfg.LedgerID == 0 || cfg.CycleNumber <= 0 ||
-		cfg.ExecutorNumber <= 0 || cfg.Name == "" || cfg.Symbol == "" {
+	if a.log == nil || cfg.Nuubot.MarketData == nil || cfg.LedgerID == 0 ||
+		cfg.CycleNumber <= 0 || cfg.ExecutorNumber <= 0 || cfg.Name == "" || cfg.Symbol == "" {
 		return fmt.Errorf("initialize Account: complete identity is required")
 	}
 	if cfg.Venue != "simulator" || cfg.Network != "simnet" {
@@ -226,6 +227,15 @@ func (a *Account) initializeVenue() error {
 	var cfg = a.config
 	var simulated simulator.Simulator
 	var err = simulated.Init(simulator.Config{
+		MarketData: cfg.Nuubot.MarketData,
+		MarketKey: market.Key{
+			Venue:   cfg.Venue,
+			Network: cfg.Network,
+			Symbol:  cfg.Symbol,
+		},
+		OnChange: func() {
+			a.dirty = true
+		},
 		Account:     cfg.Name,
 		Asset:       int(cfg.Nuubot.Meta.AssetID),
 		Symbol:      cfg.Symbol,

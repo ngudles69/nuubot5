@@ -58,6 +58,8 @@ type BtBot struct {
 	log           *logging.Logger
 	reader        replay.Reader
 	clock         clock.Clock
+	marketData    *market.MarketData
+	marketKeys    []market.Key
 	controller    controller.Controller
 	symbol        string
 	resultPath    string
@@ -141,13 +143,18 @@ func (r *BtBot) Init(
 	// Step 9: attach clock to Nuubot
 	nuubot.Clock = r.clock
 
-	// Step 10: initialize Controller
+	// Step 10: create and attach MarketData to Nuubot
+	r.marketData = market.CreateMarketData()
+	r.marketKeys = marketKeys(nuubot)
+	nuubot.MarketData = r.marketData
+
+	// Step 11: initialize Controller
 	err = r.controller.Init(nuubot)
 	if err != nil {
 		return fmt.Errorf("initialize Controller: %w", err)
 	}
 
-	// Step 11: register Controller timer
+	// Step 12: register Controller timer
 	err = r.clock.RegisterTimer(clock.Timer{
 		Name:       "controller",
 		IntervalMS: nuubot.App.BtBot.ControllerTimerIntervalMS,
@@ -156,7 +163,7 @@ func (r *BtBot) Init(
 		return fmt.Errorf("register Controller timer: %w", err)
 	}
 
-	// Step 12: initialize replay stats
+	// Step 13: initialize replay stats
 	r.stats = stats{
 		ticksExpected: durationMS / 1000,
 		runsExpected: (durationMS + nuubot.App.BtBot.ControllerTimerIntervalMS - 1) /
@@ -165,7 +172,7 @@ func (r *BtBot) Init(
 		expectedLastMS:  endMS,
 	}
 
-	// Step 13: log init completed
+	// Step 14: log init completed
 	log.Info(fmt.Sprintf(
 		"btbot initialized bot_spec=%s symbol=%s",
 		nuubot.Bot.BotSpecID,
@@ -223,11 +230,13 @@ func (r *BtBot) Loop() error {
 			break
 		}
 
-		// Step 2: send BBO to Controller
+		// Step 2: publish BBO to MarketData
 		bbo.Symbol = r.symbol
-		err = r.controller.IngestBBO(bbo)
-		if err != nil {
-			return fmt.Errorf("ingest Controller BBO: %w", err)
+		for _, key := range r.marketKeys {
+			err = r.marketData.IngestBBO(key, bbo)
+			if err != nil {
+				return fmt.Errorf("ingest MarketData BBO: %w", err)
+			}
 		}
 
 		// Step 3: update replay stats
@@ -287,9 +296,16 @@ func (r *BtBot) Stop() error {
 		controllerErr = fmt.Errorf("stop Controller: %w", controllerErr)
 	}
 
-	// Step 7: prepare completed result
+	// Step 7: stop MarketData
+	var marketDataErr = r.marketData.Stop()
+	if marketDataErr != nil {
+		marketDataErr = fmt.Errorf("stop MarketData: %w", marketDataErr)
+	}
+
+	// Step 8: prepare completed result
 	var publishErr error
-	if readerErr == nil && controllerErr == nil && r.stats.replayCompleted {
+	if readerErr == nil && controllerErr == nil && marketDataErr == nil &&
+		r.stats.replayCompleted {
 		r.collectTelemetry(r.stats.lastMS, true)
 		var memory stdruntime.MemStats
 		stdruntime.ReadMemStats(&memory)
@@ -315,10 +331,10 @@ func (r *BtBot) Stop() error {
 			},
 		}
 
-		// Step 8: build terminal report
+		// Step 9: build terminal report
 		r.report, publishErr = report.Build(input)
 
-		// Step 9: publish completed result
+		// Step 10: publish completed result
 		if publishErr == nil {
 			publishErr = resultpublisher.Publish(r.resultPath, input, r.report)
 		}
@@ -329,10 +345,10 @@ func (r *BtBot) Stop() error {
 		}
 	}
 
-	// Step 10: log stop results and stats
+	// Step 11: log stop results and stats
 	var result = "failed"
-	if readerErr == nil && controllerErr == nil && publishErr == nil &&
-		r.stats.replayCompleted {
+	if readerErr == nil && controllerErr == nil && marketDataErr == nil &&
+		publishErr == nil && r.stats.replayCompleted {
 		result = "complete"
 	}
 	r.log.Info(fmt.Sprintf(
@@ -357,12 +373,15 @@ func (r *BtBot) Stop() error {
 		result,
 	))
 
-	// Step 11: return stop errors
+	// Step 12: return stop errors
 	if controllerErr != nil {
 		return controllerErr
 	}
 	if readerErr != nil {
 		return readerErr
+	}
+	if marketDataErr != nil {
+		return marketDataErr
 	}
 	if publishErr != nil {
 		return publishErr
@@ -371,12 +390,30 @@ func (r *BtBot) Stop() error {
 		return fmt.Errorf("btbot replay did not complete")
 	}
 
-	// Step 12: log stop completed
+	// Step 13: log stop completed
 	r.log.Info("btbot stopped.")
 	return nil
 }
 
 // Section 2 - Domain Helpers
+
+func marketKeys(nuubot *setup.Nuubot) []market.Key {
+	var seen = make(map[market.Key]struct{})
+	var keys = make([]market.Key, 0, len(nuubot.BotSpec.Executors))
+	for _, spec := range nuubot.BotSpec.Executors {
+		var key = market.Key{
+			Venue:   spec.Resource.Venue,
+			Network: spec.Resource.Network,
+			Symbol:  spec.Resource.Symbol,
+		}
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		keys = append(keys, key)
+	}
+	return keys
+}
 
 func clearData(path string) error {
 	for _, current := range []string{path, path + "-wal", path + "-shm"} {

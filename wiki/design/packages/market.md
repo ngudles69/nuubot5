@@ -1,84 +1,92 @@
 # Market Package
 
 Status: Implemented.
-Covers: `internal/market/market.go`
-Purpose: Carry one admitted symbol-qualified best-price market event across the
-replay and Controller boundary.
-
-## Canonical Sources
-
-- Nuubot4: `D:/rust/nuubot4/src/market.rs`
+Covers: `internal/market/market.go`, `internal/market/marketdata.go`
+Purpose: Validate BBO values and own shared latest-value buffers and exact-key subscriptions.
 
 ## Scope
 
-Current BBO contains one normalized timestamp and one price.
+MarketData identifies one stream by:
+
+```text
+Venue + Network + Symbol
+```
+
+Physical Account is not market identity.
 
 ## Owner and Children
 
-Replay Reader creates BBO values.
+BtBot or Runner owns one MarketData object.
 
-BtBot, Controller, BotCycle, and Executors consume copies.
+Nuubot carries its shared reference.
 
-BBO owns no child.
+MarketData owns latest BBO values and subscription registrations.
 
 ## Responsibilities
 
-- Preserve one positive millisecond timestamp.
-- Preserve one finite positive price.
-- Establish trusted market input after boundary validation.
+- Validate finite positive BBO timestamp and price.
+- Reject mismatched symbols and backward timestamps.
+- Publish the latest detached BBO before callbacks run.
+- Notify matching subscribers synchronously in registration order.
+- Return callback failures to the producer.
+- Remove subscriptions idempotently.
 
 ## Does Not
 
-- Track market history.
+- Own transport, replay, strategy, matching, Account state, or persistence.
 - Represent separate bid and ask values.
-- Calculate midpoint or spread.
-- Trigger policy by itself.
-- Own lifecycle.
+- Coalesce or silently lose subscribed updates.
 
 ## Lifecycle
 
-Admit once, pass by value, then discard.
+```text
+CreateMarketData
+IngestBBO
+LatestBBO or SubscribeBBO
+Subscription.Stop
+MarketData.Stop
+```
 
-## Inputs and Outputs
+BtBot publishes Parquet BBO values.
 
-Inputs are normalized timestamp and decoded close price.
-
-Output is one trusted `market.BBO`.
-
-## State and Invariants
-
-Timestamp MUST be positive.
-
-Price MUST be finite and positive.
-
-Replay Reader separately enforces exact one-second sequence.
+Runner will publish WebSocket BBO values when live transport is implemented.
 
 ## Concurrency
 
-BBO is an immutable value after creation.
+MarketData protects buffers and registrations with a mutex.
+
+Callbacks run without the MarketData lock, allowing them to read LatestBBO.
 
 ## Persistence
 
 None.
 
+BtBot rebuilds current state from replay.
+
+Runner rebuilds current state from new live WebSocket truth.
+
 ## Errors
 
-Invalid timestamp or price fails admission.
+Invalid identity or BBO values mutate nothing and invoke no callback.
+
+All callback errors are returned to the producer.
 
 ## Program Flow
 
 ```text
-CreateBBO
-  validate bbo
-  create bbo
+IngestBBO
+  validate market update
+  publish latest BBO and copy subscribers
+  notify matching subscribers
 ```
 
 ## Required Proof
 
-- Zero timestamps fail.
-- Non-positive, NaN, and infinite prices fail.
-- Valid values retain exact timestamp and price.
+- Exact-key latest reads.
+- Buffer-before-callback ordering.
+- Invalid-update atomicity.
+- No-subscriber buffering.
+- Idempotent subscription shutdown.
+- Complete callback error propagation.
 
-## Open Decisions
-
-Live BBO may require separate bid and ask fields. That contract is not approved.
+See [MarketData](../marketdata.md) for permanent cross-package ownership.

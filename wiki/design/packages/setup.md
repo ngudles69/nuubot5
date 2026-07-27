@@ -36,6 +36,7 @@ Setup starts no goroutine or WebSocket.
 - ReplayInput;
 - typed BotSpec;
 - the initialized TickClock or WallClock attached by the program owner;
+- the shared MarketData object attached by BtBot or Runner;
 - the Runner-owned shared Info endpoint when live;
 - the Runner-owned shared WebSocket endpoint when live;
 - global Meta reference data;
@@ -55,6 +56,8 @@ A component may retain `nuubot.Log` as its local logger reference.
 BtBot or Runner creates and initializes its selected Clock, then attaches that
 Clock to Nuubot before Controller initialization. Runtime code reads current
 time through `nuubot.Clock.NowMS()`.
+
+BtBot and Runner create shared MarketData and attach it before Controller initialization.
 
 Runner also creates shared Info and WebSocket objects and attaches them before Controller initialization.
 

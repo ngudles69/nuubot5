@@ -34,6 +34,10 @@ No separate terminal flag exists.
 
 ## Admission
 
+Observer requires one exact market identity: Venue, network, and symbol.
+
+Legacy exact Observer Config without Venue and network receives the defined `simulator/simnet` default.
+
 Observer requires exactly one standard entry trigger.
 
 Missing or conflicting triggers reject BotCycle admission.
@@ -42,41 +46,51 @@ Valid long or short entry starts Observer immediately.
 
 ## Capabilities
 
-Observer implements:
+Observer implements `StartHandler` and owns one MarketData subscription while running.
 
-- `BBOHandler.OnBBO`.
-- `BBOIngestHandler.IngestBBO`.
-
-It implements no unused event method.
+It implements no BBO ingestion or unused event method.
 
 ## Program Flow
 
 ```text
 OnInit
-  validate config
-  admit signal
-  initialize observer
+  bind ObserverExecutor base inputs and log init
+  validate ObserverExecutor state
+  bind ObserverExecutor inputs and mark starting
+  validate ObserverExecutor config
+  log init completed
 
-IngestBBO
-  count ingested bbo
-
-OnBBO
-  count received bbo
-  record last bbo
-  record entry
-  assess stop loss
+OnStart
+  log start
+  validate ObserverExecutor state
+  read latest BBO
+  subscribe to MarketData
+  mark ObserverExecutor running
+  log start completed
 
 OnStop
+  log stop
+  stop MarketData subscription
+  ignore terminal stop request
+  mark ObserverExecutor stopping
   preserve stop reason
   preserve end time
-  stop observer
+  mark ObserverExecutor stopped
   calculate duration
-  report proof
+  log stop completed
+
+onBBO
+  read latest BBO
+  record received BBO
+  record current BBO
+  assess stop loss
 ```
 
 ## Stop Loss
 
-The first delivered `OnBBO` price becomes the observed entry.
+The latest BBO read during Start becomes the observed entry.
+
+Later subscribed BBO values assess stop loss.
 
 Long stops at or below entry multiplied by one minus stop percentage.
 
@@ -90,13 +104,14 @@ Controller closes the owning BotCycle during its next timed pass.
 
 Observer never logs each BBO.
 
+Every lifecycle entry and completion log identifies cycle, Executor number, Executor ID, kind, and side.
+
 Its final summary reports:
 
 - Triggering Signal facts.
 - Entry and final prices.
 - Stop-loss price.
 - Duration and reason.
-- `ingest_bbo_count`.
 - `on_bbo_count`.
 
 ## Does Not

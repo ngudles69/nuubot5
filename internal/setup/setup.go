@@ -11,6 +11,7 @@ import (
 	"nuubot/internal/config"
 	"nuubot/internal/datastore"
 	"nuubot/internal/hyperliquid"
+	"nuubot/internal/market"
 	"nuubot/internal/meta"
 	"nuubot/internal/toolkit/clock"
 	"nuubot/internal/toolkit/logging"
@@ -23,6 +24,7 @@ type Nuubot struct {
 	Bot         datastore.Bot
 	BotSpec     botspec.Spec
 	Clock       clock.Clock
+	MarketData  *market.MarketData
 	Info        *hyperliquid.Info
 	WebSocket   *hyperliquid.WebSocket
 	Meta        meta.Instrument

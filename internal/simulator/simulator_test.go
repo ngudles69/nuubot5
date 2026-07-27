@@ -13,7 +13,7 @@ import (
 func TestSimulatorOwnsCanonicalOrdersAndDetachedOfficialJSON(t *testing.T) {
 	var actual = newSimulator(t, "none", "")
 	var warm, _ = market.CreateBBO(1000, 100)
-	if changed, err := actual.IngestBBO(warm); err != nil || changed {
+	if changed, err := ingestSimulatorBBO(actual, warm); err != nil || changed {
 		t.Fatalf("warm simulator changed=%t error=%v", changed, err)
 	}
 
@@ -67,7 +67,7 @@ func TestSimulatorOwnsCanonicalOrdersAndDetachedOfficialJSON(t *testing.T) {
 	}
 
 	var takeProfit, _ = market.CreateBBO(2000, 111)
-	if changed, matchErr := actual.IngestBBO(takeProfit); matchErr != nil || !changed {
+	if changed, matchErr := ingestSimulatorBBO(actual, takeProfit); matchErr != nil || !changed {
 		t.Fatalf("match take profit changed=%t error=%v", changed, matchErr)
 	}
 	if len(actual.orders) != 3 || len(actual.activeOrders) != 0 || len(actual.fills) != 2 {
@@ -100,7 +100,7 @@ func TestSimulatorOwnsCanonicalOrdersAndDetachedOfficialJSON(t *testing.T) {
 	}
 
 	var later, _ = market.CreateBBO(3000, 89)
-	if changed, matchErr := actual.IngestBBO(later); matchErr != nil || changed {
+	if changed, matchErr := ingestSimulatorBBO(actual, later); matchErr != nil || changed {
 		t.Fatalf("terminal Order rematched changed=%t error=%v", changed, matchErr)
 	}
 	if len(actual.fills) != 2 {
@@ -112,7 +112,7 @@ func TestSimulatorPersistsEachCanonicalRecordOnce(t *testing.T) {
 	var path = filepath.Join(t.TempDir(), "result.db")
 	var actual = newSimulator(t, "max", path)
 	var warm, _ = market.CreateBBO(1000, 100)
-	if _, err := actual.IngestBBO(warm); err != nil {
+	if _, err := ingestSimulatorBBO(actual, warm); err != nil {
 		t.Fatalf("warm simulator: %v", err)
 	}
 	if _, err := actual.PlaceOrders(bracketAction(), 1000); err != nil {
@@ -157,7 +157,7 @@ func TestSimulatorPersistsEachCanonicalRecordOnce(t *testing.T) {
 func TestSimulatorTreatsOfficialCLOIDAsOpaque(t *testing.T) {
 	var actual = newSimulator(t, "none", "")
 	var warm, _ = market.CreateBBO(1000, 100)
-	if _, err := actual.IngestBBO(warm); err != nil {
+	if _, err := ingestSimulatorBBO(actual, warm); err != nil {
 		t.Fatalf("warm simulator: %v", err)
 	}
 	var action = hyperliquid.PlaceOrderAction{
@@ -195,7 +195,7 @@ func TestSimulatorTreatsOfficialCLOIDAsOpaque(t *testing.T) {
 func TestSimulatorPersistenceFailureDoesNotAdmitMutation(t *testing.T) {
 	var actual = newSimulator(t, "max", filepath.Join(t.TempDir(), "result.db"))
 	var warm, _ = market.CreateBBO(1000, 100)
-	if _, err := actual.IngestBBO(warm); err != nil {
+	if _, err := ingestSimulatorBBO(actual, warm); err != nil {
 		t.Fatalf("warm simulator: %v", err)
 	}
 	if err := actual.store.db.Close(); err != nil {
@@ -219,7 +219,12 @@ func TestSimulatorPersistenceFailureDoesNotAdmitMutation(t *testing.T) {
 func newSimulator(t *testing.T, persistMode string, path string) *Simulator {
 	t.Helper()
 	var actual Simulator
+	var marketData = market.CreateMarketData()
+	var key = market.Key{Venue: "simulator", Network: "simnet", Symbol: "BTC"}
 	var err = actual.Init(Config{
+		MarketData:  marketData,
+		MarketKey:   key,
+		OnChange:    func() {},
 		Account:     "sim",
 		Asset:       0,
 		Symbol:      "BTC",
@@ -233,6 +238,19 @@ func newSimulator(t *testing.T, persistMode string, path string) *Simulator {
 		t.Fatalf("initialize Simulator: %v", err)
 	}
 	return &actual
+}
+
+func ingestSimulatorBBO(actual *Simulator, bbo market.BBO) (bool, error) {
+	var fills = len(actual.fills)
+	var active = len(actual.activeOrders)
+	var position = actual.currentPosition
+	var err = actual.config.MarketData.IngestBBO(actual.config.MarketKey, bbo)
+	var changed = fills != len(actual.fills) || active != len(actual.activeOrders) ||
+		!position.size.Equal(actual.currentPosition.size) ||
+		!position.entryPrice.Equal(actual.currentPosition.entryPrice) ||
+		!position.realized.Equal(actual.currentPosition.realized) ||
+		!position.fees.Equal(actual.currentPosition.fees)
+	return changed, err
 }
 
 func bracketAction() hyperliquid.PlaceOrderAction {
