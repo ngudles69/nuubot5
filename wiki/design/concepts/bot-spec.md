@@ -322,6 +322,5 @@ template language.
 
 - Live cross-process Account ownership and claims.
 - Standalone Runner datastore writes.
-- Shared versus process-local exchange WebSockets.
 - Complete Venue-specific Start validation checklist.
 - BotConfig database schema and Server route shape.

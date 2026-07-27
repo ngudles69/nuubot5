@@ -1,6 +1,6 @@
 # Setup Package
 
-Status: Implemented for standalone BtBot.
+Status: Implemented for standalone BtBot; live Setup remains replay-oriented.
 Covers: `internal/setup/setup.go`
 Purpose: Prepare one shared Nuubot application harness for one Bot.
 
@@ -36,6 +36,8 @@ Setup starts no goroutine or WebSocket.
 - ReplayInput;
 - typed BotSpec;
 - the initialized TickClock or WallClock attached by the program owner;
+- the Runner-owned shared Info endpoint when live;
+- the Runner-owned shared WebSocket endpoint when live;
 - global Meta reference data; and
 - the per-Bot result path.
 
@@ -52,6 +54,12 @@ A component may retain `nuubot.Log` as its local logger reference.
 BtBot or Runner creates and initializes its selected Clock, then attaches that
 Clock to Nuubot before Controller initialization. Runtime code reads current
 time through `nuubot.Clock.NowMS()`.
+
+Runner also creates shared Info and WebSocket objects and attaches them before Controller initialization.
+
+Setup still resolves replay paths, validates replay symbols, and loads Meta through the replay symbol.
+
+Therefore current Setup does not yet provide complete live admission.
 
 ## Failure
 

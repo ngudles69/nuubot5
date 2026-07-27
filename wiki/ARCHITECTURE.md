@@ -248,12 +248,12 @@ BtBot owns one child Bot replay.
 
 Server failure does not automatically stop healthy standalone execution.
 
-Shared exchange WebSockets, monitoring, safety switches, process reconnection,
-and live Account claims remain TBD.
+Runner owns one process-local shared WebSocket for its Bot. Monitoring, safety
+switches, process reconnection, and live Account claims remain TBD.
 
 ## Target Live Flow
 
-Status: Transport ownership remains TBD.
+Status: Runner transport ownership approved; transport implementation remains pending.
 
 ```text
 validated Venue event
@@ -265,8 +265,11 @@ validated Venue event
 
 Runner must obtain required live inputs without requiring Server.
 
-A future Server-owned shared feed may serve supervised Runners only if direct
-Runner execution remains complete.
+Runner owns its shared Info and WebSocket endpoints.
+
+Any component may request supported data through those shared Nuubot objects.
+
+A future Server optimization cannot make standalone Runner depend on Server.
 
 ```text
 reconciliation cadence

@@ -12,7 +12,7 @@ Command packages remain thin wrappers. Internal packages own application behavio
 Executable          Scope       Internal owner      Status
 nuubot-bt-sweep     Backtest    internal/btsweep    Command placeholder; template admission implemented
 nuubot-bt-bot       Backtest    internal/btbot      Implemented
-nuubot-runner       Live        internal/runner     Placeholder
+nuubot-runner       Live        internal/runner     Non-runnable scaffold
 ```
 
 ### `nuubot-bt-sweep`
@@ -59,7 +59,11 @@ Performance profiling is enabled only through the explicit `-pp <prefix>` comman
 
 Runs one standalone live, testnet, paper, or Simulator Bot.
 
-The current command prints `Under Construction.`. `internal/runner` is not implemented.
+The command and `internal/runner` lifecycle scaffold are implemented.
+
+The scaffold is not a working live runtime. WebSocket transport, live Setup, and live Signaler input remain unimplemented.
+
+Do not execute the command until those boundaries are implemented and proven.
 
 Future live admission reads the immutable Bot network. An operator network argument may confirm that value but never override it.
 
@@ -73,7 +77,7 @@ nuubot-report       Render and aggregate backtest reports         Implemented
 parity-probe        Compare selected Venue responses              Implemented
 ```
 
-The approved placeholder commands print `Under Construction.` until their implementation is authorized.
+The approved Server and CLI placeholder commands print `Under Construction.` until their implementation is authorized.
 
 The only documented future Sweep import command is:
 

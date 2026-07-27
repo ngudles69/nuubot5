@@ -19,8 +19,8 @@ const (
 	maxResponseSize = 4 << 20
 )
 
-// Client sends bounded Hyperliquid REST requests.
-type Client struct {
+// Info sends bounded public Hyperliquid Info requests.
+type Info struct {
 	baseURL string
 	http    *http.Client
 }
@@ -33,8 +33,8 @@ type Response struct {
 
 // Section 1 - Program Flow
 
-// New constructs one Hyperliquid REST Client.
-func New(network string, timeout time.Duration) (*Client, error) {
+// NewInfo constructs one Hyperliquid Info endpoint.
+func NewInfo(network string, timeout time.Duration) (*Info, error) {
 	// validate network
 	var baseURL string
 	switch network {
@@ -43,21 +43,21 @@ func New(network string, timeout time.Duration) (*Client, error) {
 	case "testnet":
 		baseURL = testnetURL
 	default:
-		return nil, fmt.Errorf("create Hyperliquid client: unknown network %q", network)
+		return nil, fmt.Errorf("create Hyperliquid Info: unknown network %q", network)
 	}
 	if timeout <= 0 {
-		return nil, fmt.Errorf("create Hyperliquid client: timeout must be positive")
+		return nil, fmt.Errorf("create Hyperliquid Info: timeout must be positive")
 	}
 
 	// configure HTTP client
-	return &Client{
+	return &Info{
 		baseURL: baseURL,
 		http:    &http.Client{Timeout: timeout},
 	}, nil
 }
 
 // ClearinghouseState reads one user's default perpetual clearinghouse state.
-func (c *Client) ClearinghouseState(ctx context.Context, address string) (AccountState, error) {
+func (c *Info) ClearinghouseState(ctx context.Context, address string) (AccountState, error) {
 	// request clearinghouse payload
 	var response, err = c.ClearinghouseStatePayload(ctx, address)
 	if err != nil {
@@ -74,7 +74,7 @@ func (c *Client) ClearinghouseState(ctx context.Context, address string) (Accoun
 }
 
 // ClearinghouseStatePayload reads one raw perpetual clearinghouse payload.
-func (c *Client) ClearinghouseStatePayload(
+func (c *Info) ClearinghouseStatePayload(
 	ctx context.Context,
 	address string,
 ) (Response, error) {
@@ -108,7 +108,7 @@ func (c *Client) ClearinghouseStatePayload(
 }
 
 // Post sends one JSON payload to a Hyperliquid endpoint.
-func (c *Client) Post(
+func (c *Info) Post(
 	ctx context.Context,
 	endpoint string,
 	payload []byte,
@@ -158,6 +158,12 @@ func (c *Client) Post(
 		)
 	}
 	return result, nil
+}
+
+// Stop releases idle Hyperliquid Info connections.
+func (c *Info) Stop() {
+	// stop Info endpoint
+	c.http.CloseIdleConnections()
 }
 
 // Section 2 - Domain Helpers

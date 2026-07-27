@@ -10,6 +10,8 @@ Nuubot5 source proves implementation. Reservation files prove names only.
 
 - [`design/packages`](design/packages/) contains exactly one page per Go package.
 - [`design/concepts`](design/concepts/) contains flows, programs, venues, types, and cross-package rules.
+- [`design/runner.md`](design/runner.md) owns the standalone live Runner design.
+- [`design/entities.md`](design/entities.md) shows backtest and live runtime ownership cardinality.
 - [`design/hyperliquid`](design/hyperliquid/) contains the internal Hyperliquid boundary details.
 - `internal/toolkit` groups reusable packages. It is not a Go package.
 
@@ -43,7 +45,7 @@ The user owns these checklist states: `DONE`, `PARTIAL`, `NOT REVIEWED`, and
 | Component | State | Last reviewed | Note |
 |---|---|---|---|
 | WallClock | DONE | 2026-07-24 17:42:58 +08:00 | Implemented and proven. |
-| Runner | TO CODE | — | |
+| Runner | TO CODE | — | Command and lifecycle scaffold exist; live runtime remains unavailable. |
 | Select the SDK | DONE | 2026-07-24 17:42:58 +08:00 | Rewrite the required official API inside Nuubot. |
 | Simulator parity | PARTIAL | — | Internal behavior implemented; external parity pending. |
 | Account | NOT REVIEWED | — | Implemented for Simulator. |
@@ -74,7 +76,7 @@ status.
 | How | Rewrite from the official API. Consult audited reference code only when useful. |
 | In | Transport, signing, protocol types, validation, and Venue mapping. |
 | Out | Trading policy, domain ownership, Meta persistence, Simulator, and reconciliation decisions. |
-| Status | Clearinghouse-state and parity probe implemented. Exchange, signing, and WebSocket remain pending. |
+| Status | Public Info and parity probe implemented. Exchange, signing, and WebSocket transport remain pending. |
 
 Nuubot independently rewrites its Hyperliquid boundary from the
 [official Hyperliquid API documentation](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api).
@@ -120,6 +122,7 @@ Nuubot admits only required, audited code. It does not import or preserve either
 | [replay](design/packages/replay.md) | Implemented | Stream validated historical market data. |
 | [resultpublisher](design/packages/resultpublisher.md) | Implemented | Publish terminal per-Bot SQLite evidence. |
 | [risk](design/packages/risk.md) | Implemented | Assess configured risk policy. |
+| [runner](design/packages/runner.md) | Scaffold | Own one standalone live Bot lifecycle. |
 | [setup](design/packages/setup.md) | Implemented | Prepare one validated BtBot context. |
 | [signaler](design/packages/signaler.md) | Implemented | Calculate and serve ordered Signal packages. |
 | [simulator](design/packages/simulator.md) | Implemented | Provide venue-shaped simulated execution. |
@@ -146,7 +149,7 @@ deferred.
 | AppConfig, BotConfig, ReplayInput, and Credentials split | [Config](design/packages/config.md) |
 | Typed saved-Config and fail-closed Meta admission | [Setup](design/packages/setup.md) |
 | Stored TOML and active Account-symbol claims | [Datastore](design/packages/datastore.md) |
-| Standalone Runner, BtBot, and BtSweep execution | [Runner](design/concepts/runner.md) |
+| Standalone Runner, BtBot, and BtSweep execution | [Runner](design/runner.md) |
 | Thin Server API and Manager-to-process boundaries | [Server](design/concepts/server.md) |
 | Implemented Sweep template validation and expansion | [BtSweep package](design/packages/btsweep.md) |
 | Reusable Sweep records and standalone execution | [SweepManager](design/concepts/sweep-manager.md) |
@@ -184,7 +187,7 @@ hardcut is implemented and proven.
 | [Replay](design/concepts/replay.md) | End-to-end historical replay flow. |
 | [Result publisher](design/concepts/result-publisher.md) | Terminal replay publishing. |
 | [RSI signaler](design/concepts/rsi-signaler.md) | RSI implementation. |
-| [Runner](design/concepts/runner.md) | Standalone live Bot supervision. |
+
 | [RunnerControl](design/concepts/runner-control.md) | Runner lifecycle commands. |
 | [Controller store](design/concepts/controller-store.md) | Candidate Controller persistence boundary. |
 | [Server](design/concepts/server.md) | Optional master application host and process supervision. |

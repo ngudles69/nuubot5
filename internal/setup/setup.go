@@ -23,13 +23,15 @@ type Nuubot struct {
 	Bot        datastore.Bot
 	BotSpec    botspec.Spec
 	Clock      clock.Clock
+	Info       *hyperliquid.Info
+	WebSocket  *hyperliquid.WebSocket
 	Meta       meta.Instrument
 	ResultPath string
 }
 
 // Section 1 - Program Flow
 
-// Setup prepares shared application infrastructure for one standalone BtBot.
+// Setup prepares shared application infrastructure for one Bot.
 func Setup(
 	caller context.Context,
 	log *logging.Logger,
@@ -99,8 +101,8 @@ func Setup(
 
 	// Step 8: load mainnet Meta
 	var timeout = time.Duration(app.Process.RequestTimeoutSeconds) * time.Second
-	var client *hyperliquid.Client
-	client, err = hyperliquid.New("mainnet", timeout)
+	var client *hyperliquid.Info
+	client, err = hyperliquid.NewInfo("mainnet", timeout)
 	if err != nil {
 		return nil, fmt.Errorf("load Meta: %w", err)
 	}

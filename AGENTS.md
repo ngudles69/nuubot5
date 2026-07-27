@@ -98,12 +98,18 @@ This contract applies to chat, plans, reports, wiki, handoff, comments, and
 agent prompts.
 
 - Use caveman prose.
+- Get straight to the point.
 - Lead with the result.
 - Use compact prose with a maximum of 25 words per point.
 - Use bullets only for a genuine list.
 - Cut filler, repetition, and repeated context.
 - Do not write walls of text.
 - Expand only when the user asks.
+- Never use a patronizing or lecturing tone toward the user.
+- Correct verified wrong assumptions or requests directly and support the correction with evidence and recommendation(s) or option(s).
+- Answer the proposal the user actually made. Never invent an unstated proposal and then warn against or correct it.
+- When the user asks for an assessment, state the assessment directly before constraints, alternatives, or recommendations.
+- Do not add unsolicited warnings, prohibitions, or design constraints unless verified evidence makes them material to the current decision.
 - When showing reports to the user, display generated fixed-width text inside a
   code block. Do not convert reports to Markdown tables or reformat them manually.
 
@@ -125,9 +131,9 @@ These decisions apply project-wide. Local convenience MUST NOT override them.
 - Use the Go standard library before external or custom code.
 - Use an approved pure-Go library before writing custom mechanical code.
 - Standard Go build tags, including canonical `noasm`, remain allowed.
-- Keep the explicitly approved `nuubot-server`, `nuubot-cli`, and
-  `nuubot-runner` command shells as naming placeholders that print
-  `Under Construction.` until their real implementation is authorized.
+- Keep the explicitly approved `nuubot-server` and `nuubot-cli` command shells
+  as naming placeholders that print `Under Construction.` until their real
+  implementation is authorized.
 - Keep explicitly approved package reservation files limited to one package
   comment and declaration until implementation is authorized.
 

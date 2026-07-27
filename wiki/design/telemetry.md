@@ -267,7 +267,7 @@ Exact fresh-process elapsed time still includes both operations.
 
 ## Runner Persistence
 
-Runner remains unimplemented. This section defines approved future live behavior.
+Runner's lifecycle scaffold exists. Live telemetry remains unimplemented; this section defines approved future behavior.
 
 Runner owns one configurable heartbeat, defaults it to ten seconds, and reads time once per heartbeat.
 

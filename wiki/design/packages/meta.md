@@ -26,7 +26,7 @@ Setup calls Meta freshness admission.
 Meta owns exchange fetching, validation, normalization, persistence, and
 symbol lookup.
 
-Meta uses NuubotDB and the [internal Hyperliquid information client](../hyperliquid/meta.md).
+Meta uses NuubotDB and its own hardcoded-mainnet Hyperliquid Info object.
 
 ## Responsibilities
 

@@ -103,7 +103,7 @@ stop
 BtBot creates and initializes TickClock, then attaches it to the shared Nuubot
 harness before Controller initialization.
 
-Runner will attach its initialized WallClock through the same Nuubot field.
+Runner attaches its initialized WallClock through the same Nuubot field.
 
 Controller, BotCycle, and children read current time through
 `nuubot.Clock.NowMS()` instead of receiving timestamp arguments.

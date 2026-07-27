@@ -66,9 +66,10 @@ Do not modify a reference repository without explicit user authority.
 
 ## Approved Unimplemented Scope
 
-- `nuubot-server`, `nuubot-cli`, and `nuubot-runner` command shells reserve
-  canonical executable names and print `Under Construction.`.
-- Live Runner and live event handling.
+- `nuubot-server` and `nuubot-cli` command shells reserve canonical executable
+  names and print `Under Construction.`.
+- Runner command and lifecycle scaffold exist, but live Setup, Signaler input,
+  WebSocket transport, and live event handling remain unimplemented.
 - Server, API, web server, BotManager, and SweepManager.
 - Standalone BtSweep.
 - Live Venue execution, recovery, and CLOID handling.
@@ -79,7 +80,9 @@ Do not modify a reference repository without explicit user authority.
 
 Only the explicitly approved implementation sequence authorizes target work.
 
-The three command shells do not prove their named systems are implemented.
+The two placeholder command shells do not prove their named systems are implemented.
+
+The Runner scaffold does not prove live trading is implemented.
 
 DataEngine and ControllerStore remain candidates. Their ownership and final scope
 are unresolved.

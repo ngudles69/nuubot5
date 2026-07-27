@@ -1,8 +1,8 @@
 # Live Event Process
 
-Status: Candidate only. Transport ownership TBD.
+Status: Runner ownership approved; event and subscription mechanics remain unimplemented.
 Covers: No implemented source.
-Purpose: Record the owner-neutral live event flow without moving trading policy
+Purpose: Record the Runner-owned live event flow without moving trading policy
 into asynchronous work.
 
 ## Canonical Sources
@@ -11,8 +11,8 @@ into asynchronous work.
 
 ## Participants
 
-- The selected transport owner acquires and validates external events.
-- Runner owns subscriptions and local feed state.
+- Runner-owned WebSocket acquires and validates external events.
+- Runner owns the shared endpoint lifecycle.
 - Controller consumes synchronous event and timer calls.
 - Account solely owns reconciliation-dirty state.
 
@@ -37,9 +37,9 @@ bar event
 
 ## Decisions
 
-The selected transport owner decides message admission and routing.
+Runner-owned WebSocket decides subscription, message admission, and callback routing.
 
-Runner decides which owned local state receives an event.
+Requesting components provide their subscription requirements and callbacks.
 
 Controller decides stop-loss, Risk, recon, BotCycle, and execution actions.
 
@@ -77,5 +77,5 @@ This reduces Venue queries without making WebSocket delivery authoritative.
 
 ## Open Decisions
 
-- Shared versus process-local exchange WebSockets.
-- Final transport owner and subscription-sharing boundary.
+- Exact subscription identity and callback contract.
+- Reconnection and resubscription mechanics.

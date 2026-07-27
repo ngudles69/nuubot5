@@ -30,7 +30,7 @@ type Probe struct {
 	input   Input
 	capture string
 	target  info.Target
-	client  *hyperliquid.Client
+	client  *hyperliquid.Info
 }
 
 // Section 1 - Program Flow
@@ -117,7 +117,7 @@ func (p *Probe) Init(
 
 	// initialize Hyperliquid client
 	var timeout = time.Duration(cfg.Process.RequestTimeoutSeconds) * time.Second
-	p.client, err = hyperliquid.New(input.Network, timeout)
+	p.client, err = hyperliquid.NewInfo(input.Network, timeout)
 	if err != nil {
 		return fmt.Errorf("initialize parity probe: %w", err)
 	}

@@ -75,11 +75,11 @@ Account sends official action values and receives detached JSON.
 
 `internal/hyperliquid` validates and translates each response.
 
-Meta uses the Hyperliquid information client for raw exchange metadata.
+Meta uses its own hardcoded-mainnet Info object for raw exchange metadata.
 
-The selected live transport owner uses the Hyperliquid WebSocket boundary.
+Runner owns one shared Info object and one process-local shared WebSocket for its Bot.
 
-Shared versus process-local WebSocket ownership remains TBD.
+The future credentialed Exchange endpoint belongs to Account.
 
 ## In
 

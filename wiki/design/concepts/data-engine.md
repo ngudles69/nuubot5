@@ -1,9 +1,8 @@
 # DataEngine
 
-Status: Candidate only. Ownership TBD.
+Status: Superseded for standalone Runner; possible Server optimization remains unapproved.
 Covers: No implemented source.
-Purpose: Record the earlier shared live-event candidate while final transport
-ownership remains TBD.
+Purpose: Record the earlier shared live-event candidate.
 
 ## Canonical Sources
 
@@ -12,9 +11,9 @@ ownership remains TBD.
 
 ## Scope
 
-Shared live exchange connectivity remains TBD.
+Standalone Runner owns its process-local shared WebSocket.
 
-If DataEngine is retained, it may own shared WebSocket connections,
+If DataEngine is later approved for Server optimization, it may own shared WebSocket connections,
 subscription reference counts, message admission, reconnection, and typed event
 distribution for Server-supervised Runners.
 

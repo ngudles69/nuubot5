@@ -37,10 +37,9 @@ Server directly owns:
 - the WebServer; and
 - the HTTP application.
 
-Shared exchange WebSocket ownership remains TBD.
+Each Runner owns its process-local shared WebSocket.
 
-Server may later own shared exchange connectivity without making standalone
-Runner depend on it.
+A later Server optimization cannot make standalone Runner depend on Server connectivity.
 
 ## Responsibilities
 

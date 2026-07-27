@@ -14,7 +14,7 @@ const testAddress = "0x0000000000000000000000000000000000000001"
 
 // Section 1 - Program Flow
 
-func TestNewRejectsInvalidConfig(t *testing.T) {
+func TestNewInfoRejectsInvalidConfig(t *testing.T) {
 	var cases = []struct {
 		name    string
 		network string
@@ -30,7 +30,7 @@ func TestNewRejectsInvalidConfig(t *testing.T) {
 	}
 	for _, testCase = range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			var _, err = New(testCase.network, testCase.timeout)
+			var _, err = NewInfo(testCase.network, testCase.timeout)
 			if err == nil {
 				t.Fatalf("actual error nil, expected invalid configuration")
 			}
@@ -68,7 +68,7 @@ func TestClearinghouseStateTranslatesResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	var client = &Client{
+	var client = &Info{
 		baseURL: server.URL,
 		http:    &http.Client{Timeout: time.Second},
 	}
@@ -107,7 +107,7 @@ func TestClearinghouseStateTranslatesResponse(t *testing.T) {
 }
 
 func TestClearinghouseStateRejectsInvalidInput(t *testing.T) {
-	var client = &Client{
+	var client = &Info{
 		baseURL: "http://invalid",
 		http:    &http.Client{Timeout: time.Second},
 	}
@@ -220,7 +220,7 @@ func TestClearinghouseStateHonorsContext(t *testing.T) {
 		<-request.Context().Done()
 	}))
 	defer server.Close()
-	var client = &Client{
+	var client = &Info{
 		baseURL: server.URL,
 		http:    &http.Client{Timeout: time.Second},
 	}
@@ -235,7 +235,7 @@ func TestClearinghouseStateHonorsContext(t *testing.T) {
 
 // Section 2 - Domain Helpers
 
-func testClient(t *testing.T, status int, body string) (*Client, func()) {
+func testClient(t *testing.T, status int, body string) (*Info, func()) {
 	t.Helper()
 	var server = httptest.NewServer(http.HandlerFunc(func(
 		response http.ResponseWriter,
@@ -244,7 +244,7 @@ func testClient(t *testing.T, status int, body string) (*Client, func()) {
 		response.WriteHeader(status)
 		var _, _ = response.Write([]byte(body))
 	}))
-	return &Client{
+	return &Info{
 		baseURL: server.URL,
 		http:    &http.Client{Timeout: time.Second},
 	}, server.Close

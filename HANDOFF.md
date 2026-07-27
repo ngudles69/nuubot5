@@ -86,6 +86,23 @@ Account-Venue-Simulator boundary hardcut. Recon2 is retired.
 - Trade suite report is `workspace/logs/nuubot5-stest-s9-b13-1-20260727T143744Z.json`.
 - Committed the completed reorganization and proof-harness fix as `176ca90`.
 - Pushed `176ca90` to `origin/main`.
+- Added `wiki/design/entities.md` with backtest and live runtime ownership cardinality trees.
+- Linked the entity ownership page from `wiki/DESIGN.md`.
+- Strengthened `AGENTS.md`, `wiki/USER.md`, and `wiki/SOUL.md` against patronizing tone, invented proposals, and unsupported correction.
+- Corrections now require verified evidence plus useful recommendations or options.
+- Replaced the `nuubot-runner` print-only placeholder with a BtBot-shaped command and Runner lifecycle scaffold.
+- Runner owns WallClock, shared public Info, shared WebSocket, Controller, and supervision lifecycle.
+- Added public `hyperliquid.Info` with Meta and credential-free clearinghouse-state requests.
+- Renamed Hyperliquid `client.go` and its test to `endpoint-info.go` and `endpoint-info_test.go`.
+- Added the explicit unimplemented WebSocket lifecycle stub in `endpoint-ws.go`.
+- Added the Account-owned credentialed Exchange reservation in `endpoint-exchange.go` without implementation.
+- Nuubot now carries Runner-attached Clock, Info, and WebSocket shared infrastructure.
+- Meta refresh retains its separate hardcoded-mainnet Info object.
+- Added Runner package, process, entity, endpoint, Setup, binary, architecture, and project documentation.
+- Moved the canonical Runner design to `wiki/design/runner.md` and aligned every reference.
+- Runner remains non-runnable because Setup, Signaler construction, WebSocket transport, and live events remain replay-oriented or unimplemented.
+- Gofmt, project diagnostics, stale-reference scans, and Git whitespace checks pass.
+- `nuubot-runner` was not executed. No Runner tests or system tests were run by explicit instruction.
 
 ### TODO
 

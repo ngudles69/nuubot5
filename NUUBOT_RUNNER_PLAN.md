@@ -1657,7 +1657,7 @@ First release must prevent duplicate ownership and fail closed after crash witho
 - `internal/botspec/config.go`
 - `internal/botspec/botspec_test.go`
 - `wiki/design/concepts/filesystem.md`
-- `wiki/design/concepts/runner.md`
+- `wiki/design/runner.md`
 - `wiki/design/concepts/recovery.md`
 - `wiki/design/telemetry.md`
 
@@ -1924,7 +1924,7 @@ Shared packages retain trading policy.
 - `internal/toolkit/clock/clock_test.go`
 - `internal/controller/controller.go`
 - Existing affected tests
-- `wiki/design/concepts/runner.md`
+- `wiki/design/runner.md`
 - `wiki/design/concepts/live-events.md`
 - `wiki/design/concepts/wall-clock.md`
 - `wiki/design/concepts/shutdown.md`
@@ -2059,7 +2059,7 @@ The command needs one clear lifecycle shell, not replay behavior or hidden helpe
 - `internal/toolkit/logging/logging_test.go`
 - `build.sh`
 - `wiki/bin.md`
-- `wiki/design/concepts/runner.md`
+- `wiki/design/runner.md`
 - `wiki/DESIGN.md`
 
 ## Upstream Impact
@@ -2176,7 +2176,7 @@ Simnet proves shared live orchestration without private mutation risk.
 - `internal/runner/runner_test.go`
 - `wiki/PROJECT.md`
 - `wiki/ARCHITECTURE.md`
-- `wiki/design/concepts/runner.md`
+- `wiki/design/runner.md`
 - `wiki/design/telemetry.md`
 - `wiki/design/concepts/filesystem.md`
 
@@ -2618,7 +2618,7 @@ The testnet operator owns explicit mutation authority.
 - `internal/runner/runner_test.go`
 - `wiki/PROJECT.md`
 - `wiki/ARCHITECTURE.md`
-- `wiki/design/concepts/runner.md`
+- `wiki/design/runner.md`
 - `wiki/design/hyperliquid/exchange.md`
 - `wiki/design/telemetry.md`
 - `wiki/DESIGN.md`
@@ -3010,7 +3010,7 @@ Required owners include:
 - `wiki/ARCHITECTURE.md`
 - `wiki/DESIGN.md`
 - `wiki/bin.md`
-- `wiki/design/concepts/runner.md`
+- `wiki/design/runner.md`
 - `wiki/design/concepts/live-events.md`
 - `wiki/design/concepts/shutdown.md`
 - `wiki/design/concepts/venue.md`

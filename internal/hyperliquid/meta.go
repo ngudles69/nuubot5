@@ -61,7 +61,7 @@ type marginTierResponse struct {
 // Section 1 - Program Flow
 
 // PerpetualMeta reads the complete default perpetual Meta dataset.
-func (c *Client) PerpetualMeta(ctx context.Context) (PerpetualMeta, error) {
+func (c *Info) PerpetualMeta(ctx context.Context) (PerpetualMeta, error) {
 	// request perpetual meta payload
 	var response, err = c.PerpetualMetaPayload(ctx)
 	if err != nil {
@@ -78,7 +78,7 @@ func (c *Client) PerpetualMeta(ctx context.Context) (PerpetualMeta, error) {
 }
 
 // PerpetualMetaPayload reads one raw default perpetual Meta payload.
-func (c *Client) PerpetualMetaPayload(ctx context.Context) (Response, error) {
+func (c *Info) PerpetualMetaPayload(ctx context.Context) (Response, error) {
 	// post request payload
 	var response, err = c.Post(ctx, "/info", []byte(`{"type":"meta"}`))
 	if err != nil {
