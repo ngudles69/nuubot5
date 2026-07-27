@@ -119,6 +119,14 @@ Legacy Simulator payloads are not read or adapted.
 
 The last BBO remains transient.
 
+## Testing Boundary
+
+`internal/simulator/simulator_test.go` is the internal Simulator parity suite.
+
+It proves Simulator Venue semantics and pure exact comparison mechanics.
+
+It does not replace Account-to-Ledger integration or complete Bot system proof.
+
 ## Current Proof
 
 - Official request inputs contain no Account domain identity.

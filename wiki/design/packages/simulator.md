@@ -47,6 +47,16 @@ CLOID is mandatory, shape-validated, stored unchanged, and never domain-decoded.
 
 No caller supplies OID.
 
+## Testing
+
+Simulator tests are Venue parity tests.
+
+They prove official request and response shape, canonical Order and Fill state,
+matching, cancellation, position and finance behavior, detached JSON,
+persistence, failure atomicity, and exact comparison mechanics.
+
+External Hyperliquid fixture and testnet parity remain pending.
+
 ## Canonical State
 
 Each accepted Order creates one private `simOrder`.

@@ -133,6 +133,15 @@ status, exit reason, and optional AccountResult.
 
 Grid ExecutorResult also preserves cancellation, closure, retry, round-trip, and Level evidence.
 
+## Testing
+
+BotCycle has no isolated unit-test file.
+
+Its lifecycle, Signal delivery, reconciliation barrier, Executor coordination,
+and shutdown require the real integrated runtime path.
+
+Observer, Trade, and Grid system runs prove those paths through `stest.sh`.
+
 ## Telemetry
 
 `Telemetry()` returns the cycle number, status, and one current snapshot per Executor.

@@ -21,7 +21,7 @@ internal/account/account_test.go                       NO
 internal/account/doc.go                                NO
 internal/bot/bot.go                                    NO
 internal/botcycle/botcycle.go                          NO
-internal/botcycle/botcycle_test.go                     NO
+
 internal/botspec/botspec_test.go                       NO
 internal/botspec/build.go                              NO
 internal/botspec/config.go                             NO
@@ -42,9 +42,9 @@ internal/executor/executor.go                          NO
 internal/executor/grid.go                              NO
 internal/executor/grid_test.go                         NO
 internal/executor/observer.go                          NO
-internal/executor/observer_test.go                     NO
+
 internal/executor/trade.go                             NO
-internal/executor/trade_test.go                        NO
+
 internal/fill/doc.go                                   NO
 internal/fill/fill.go                                  NO
 internal/fill/fill_test.go                             NO

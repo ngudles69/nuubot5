@@ -57,6 +57,9 @@ expected PnL, fees, slippage, and persistence.
 
 Its compiled calculation uses arithmetic spacing with equal capital slices.
 
-Controller, BotSpec, and BtBot use RTest instead of isolated unit tests.
+BtBot, Controller, BotSpec, BotCycle, and Executor runtime lifecycle use system
+proof instead of isolated unit tests.
+
+Only pure deterministic Grid calculations retain Executor unit tests.
 
 See `wiki/testing.md`.

@@ -17,7 +17,15 @@ Good unit-test targets include:
 - Pure calculations and exact decimal behavior.
 - Data validation and translation.
 - Deterministic clock mechanics.
-- Ledger mutations and persistence transactions.
+- Ledger mutations, ownership, reconciliation, and persistence transactions.
+- Trade lifecycle and finance state transitions.
+- Order lifecycle, Fill aggregation, and reconciliation state.
+- Fill identity, enrichment, and immutable execution evidence.
+- Meta freshness, persistence, refresh, and instrument rounding.
+- OHLCV deterministic timestamp normalization and calculation mechanics.
+- Risk policy decisions, counters, lifecycle, and invalid selection.
+- Signaler closed-bar calculations, package history, flat JSON, and validation.
+- CLOID encoding, decoding, round trips, and invalid identity rejection.
 - Small state transitions with no missing owner.
 
 A unit test must not recreate global infrastructure with fake composition.
@@ -28,11 +36,21 @@ A unit test must not add test-only interfaces or alternate production paths.
 
 The following components must not have isolated unit tests:
 
+- BtBot.
 - Controller.
 - BotSpec.
-- BtBot.
+- BotCycle.
+- Executor runtime lifecycle.
+- ObserverExecutor.
+- TradeExecutor.
+- GridExecutor runtime lifecycle.
+- Replay Reader.
 
 These are integrated components.
+
+Replay is a thin concrete OHLCV-to-BBO streaming adapter. Isolated tests would
+require fake Reader plumbing or duplicate Parquet fixtures and would prove the
+harness instead of real replay behavior.
 
 Isolated tests require excessive harnesses, fake data, fake infrastructure, and fake process state.
 
@@ -40,13 +58,46 @@ A passing isolated test would prove that artificial harness, not the real module
 
 These components require the complete real construction and execution path.
 
-Their proof is RTest through `Setup -> BotSpec -> Controller -> BtBot`.
+Their proof runs through `Setup -> Nuubot -> Controller -> BotCycle -> Executor -> BtBot`.
 
-The current RTest entrypoint is `./stest.sh -bot 9`.
+Canonical system entrypoints are:
+
+- Observer: `./stest.sh -bot 9`.
+- TradeExecutor: `./stest.sh -bot 13`.
+- GridExecutor: `./stest.sh -bot 14`.
 
 The deleted historical `rtest.sh` command must not return.
 
-Do not create fake Setup, Controller, BotSpec, Signaler, Risk, Executor, replay, or Meta infrastructure for these components.
+Do not create fake Setup, Nuubot, Controller, BotSpec, BotCycle, Signaler, Risk,
+Executor, replay, or Meta infrastructure for these components.
+
+Ledger, Trade, Order, and Fill require strong direct tests because each package
+owns exact domain state and deterministic mutation rules.
+
+The only retained Executor unit tests prove pure deterministic Grid calculations.
+
+Those tests call Grid calculation helpers directly. They do not initialize or
+run GridExecutor, Account, Ledger, Simulator, BotCycle, Controller, or BtBot.
+
+Risk is directly testable. The current BalancedRisk stub must prove `Allow`,
+assessment counting, idempotent Stop, and rejection of unknown policy kinds.
+Future Risk decisions require direct boundary and precedence tests.
+
+Signaler calculations and immutable packages are directly testable. Tests must
+use closed-bar series and package values, not complete Controller infrastructure.
+
+## Simulator Parity Testing
+
+Simulator testing is Venue parity testing.
+
+It must prove official request and response shape, canonical Order and Fill
+state, matching, cancellation, position and finance behavior, detached JSON,
+persistence, failure atomicity, and exact comparison mechanics.
+
+Simulator tests do not prove Nuubot Controller, BotCycle, Executor, Account, or
+Ledger integration. System runs prove that complete path.
+
+External Hyperliquid fixture and testnet parity remain separately required.
 
 ## Integration Tests
 
@@ -55,9 +106,9 @@ Use integration tests when behavior requires multiple real owners or initialized
 Good integration-test targets include:
 
 - Setup loading App Config, stored Bot data, replay inputs, Meta, and result paths.
-- Controller receiving complete Setup and one validated typed BotSpec.
+- Controller receiving one complete Nuubot harness.
 - Controller constructing Signaler, Risks, BotCycles, and Executors.
-- BotCycle, Executor, Account, Ledger, and Simulator lifecycle behavior.
+- Account, Ledger, and Simulator lifecycle behavior at their real owned boundary.
 - Result publication from completed runtime results.
 - Persistence, recovery, and reconciliation across package boundaries.
 

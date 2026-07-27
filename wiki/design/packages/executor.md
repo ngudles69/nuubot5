@@ -46,6 +46,16 @@ BotCycle owns capability dispatch.
 
 It performs no reconciliation, mutation, logging, or persistence.
 
+## Testing
+
+Executor runtime lifecycle has no isolated unit-test files.
+
+ObserverExecutor, TradeExecutor, and GridExecutor runtime behavior require the
+real BotCycle, Account, Ledger, Simulator, Clock, Signal, and shutdown path.
+
+Only pure deterministic Grid calculations retain unit tests in
+`internal/executor/grid_test.go`.
+
 ## ObserverExecutor
 
 Observer proves fixed-side lifecycle and stop-loss behavior without Orders.

@@ -68,6 +68,7 @@ Account-Venue-Simulator boundary hardcut. Recon2 is retired.
 - Final Observer result log is `workspace/logs/nuubot5-stest-s6-b9-1-20260727T130730Z.log`.
 - Final Observer suite report is `workspace/logs/nuubot5-stest-s6-b9-1-20260727T130730Z.json`.
 - User authorized the final commit and push after manual Controller review.
+- User authorized commit and push of the testing-boundary cleanup.
 
 ### TODO
 
@@ -90,7 +91,21 @@ Account-Venue-Simulator boundary hardcut. Recon2 is retired.
 - BtBot and Controller retain the shared `nuubot` reference instead of duplicating Setup, BotSpec, identity, or config state.
 - A component may retain `nuubot.Log` as its local logger reference for convenient logging.
 - Controller owns runtime construction from `nuubot.BotSpec`.
-- Controller, BotSpec, and BtBot do not use isolated unit tests; RTest proves their real integrated path.
+- BtBot, Controller, BotSpec, BotCycle, and Executor runtime lifecycle do not use isolated unit tests.
+- Deleted isolated BotCycle, ObserverExecutor, and TradeExecutor test files.
+- Retained only pure deterministic Grid calculation tests in `internal/executor/grid_test.go`.
+- Observer, Trade, and Grid system runs prove their real integrated paths.
+- Ledger, Trade, Order, and Fill require strong direct domain tests.
+- Simulator tests are Venue parity tests, including official JSON, canonical state, persistence, failure atomicity, matching, and exact comparison mechanics.
+- Meta, OHLCV mechanics, Risk, Signaler calculations and packages, and CLOID are valid direct-test targets.
+- Replay Reader has no isolated tests; real replay and system runs prove its concrete OHLCV-to-BBO path.
+- Strengthened BalancedRisk proof for Allow, assessment counting, idempotent Stop, and unknown-kind rejection.
+- Grid Bot 15 passed 1 of 1 through `./stest.sh -bot 15` after test-boundary cleanup.
+- Grid suite total was 66,591 ms; BtBot was 61,689 ms; replay was 57,982 ms.
+- Grid result log is `workspace/logs/nuubot5-stest-s11-b15-1-20260727T131553Z.log`.
+- Grid suite report is `workspace/logs/nuubot5-stest-s11-b15-1-20260727T131553Z.json`.
+- Retained Grid calculation tests and strengthened Risk tests pass.
+- Full Go tests and full vet pass after final testing-boundary alignment.
 - Manual code review of `internal/controller/controller.go` passed on 2026-07-27.
 - Manual code review of `internal/botcycle/botcycle.go` passed on 2026-07-27.
 - A later requested full-test and vet rerun was user-stopped before producing output.
