@@ -84,10 +84,12 @@ Account-Venue-Simulator boundary hardcut. Recon2 is retired.
 - Trade suite total was 17,838 ms; BtBot was 14,073 ms; replay was 10,781 ms.
 - Trade result log is `workspace/logs/nuubot5-stest-s9-b13-1-20260727T143744Z.log`.
 - Trade suite report is `workspace/logs/nuubot5-stest-s9-b13-1-20260727T143744Z.json`.
+- Committed the completed reorganization and proof-harness fix as `176ca90`.
+- Pushed `176ca90` to `origin/main`.
 
 ### TODO
 
-- Root: commit and push the completed code reorganization and proof-harness fix.
+- None.
 
 ### PENDING USER APPROVAL
 
