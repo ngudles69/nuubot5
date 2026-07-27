@@ -21,6 +21,7 @@ func Publish(path string, input report.Input, report report.Run) error {
 		return fmt.Errorf("publish result: path is empty")
 	}
 	var domainPersisted bool
+	var partial = path + ".partial"
 	for _, cycle := range input.Controller.Cycles {
 		for _, executorResult := range cycle.Executors {
 			if executorResult.Account == nil {
@@ -31,6 +32,9 @@ func Publish(path string, input report.Input, report report.Run) error {
 				return fmt.Errorf("publish result: Accounts use different result paths")
 			}
 			if current.PersistMode == "max" {
+				if current.Nuubot.RuntimePath != partial {
+					return fmt.Errorf("publish result: Account uses invalid runtime path")
+				}
 				domainPersisted = true
 			}
 		}
@@ -42,16 +46,12 @@ func Publish(path string, input report.Input, report report.Run) error {
 		return fmt.Errorf("publish result: prepare directory: %v", err)
 	}
 
-	// append terminal proof to domain persistence
-	if domainPersisted {
-		return publishResult(path, input, report)
-	}
-
 	// prepare temporary result path
-	var partial = path + ".partial"
-	err = os.Remove(partial)
-	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("publish result: clear partial file: %v", err)
+	if !domainPersisted {
+		err = os.Remove(partial)
+		if err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("publish result: clear partial file: %v", err)
+		}
 	}
 	var published = false
 	defer func() {
@@ -60,7 +60,7 @@ func Publish(path string, input report.Input, report report.Run) error {
 		}
 	}()
 
-	// publish terminal proof only
+	// append terminal proof to fresh replay state
 	err = publishResult(partial, input, report)
 	if err != nil {
 		return err

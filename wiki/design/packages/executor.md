@@ -46,9 +46,18 @@ BotCycle owns capability dispatch.
 
 ```text
 Create
-  select Executor
+  validate loaded Executor status
+  select Executor with loaded status
   initialize Executor
 ```
+
+Runner passes the mutable status loaded from the Bot row.
+
+BtBot always overrides loaded status to `configured` before Controller initialization.
+
+Status is runtime state. It is not BotConfig or Bot identity.
+
+Executor construction rejects terminal `stopped` and `error` statuses.
 
 `Telemetry()` returns current status and optional Account state.
 

@@ -42,17 +42,22 @@ func LoadBot(path string, sweepID, botID uint64) (Bot, error) {
 	// query bot
 	var text string
 	err = db.QueryRow(
-		`SELECT bot_spec_id, config_toml, config_hash, config_json
-		FROM bot WHERE sweep_id = ? AND bot_id = ?`,
+		`SELECT bot_spec_id, config_toml, config_hash, status, config_json
+			FROM bot WHERE sweep_id = ? AND bot_id = ?`,
 		sweepID,
 		botID,
-	).Scan(&bot.BotSpecID, &bot.ConfigTOML, &bot.ConfigHash, &text)
+	).Scan(&bot.BotSpecID, &bot.ConfigTOML, &bot.ConfigHash, &bot.Status, &text)
 	if err != nil {
 		return bot, fmt.Errorf("load bot sweep_id=%d bot_id=%d: %w", sweepID, botID, err)
 	}
 	var actualHash = fmt.Sprintf("%x", sha256.Sum256([]byte(bot.ConfigTOML)))
 	if bot.BotSpecID == "" || bot.ConfigTOML == "" || bot.ConfigHash != actualHash {
 		return bot, fmt.Errorf("invalid stored BotSpec identity or Config hash")
+	}
+	switch bot.Status {
+	case BotConfigured, BotStarting, BotRunning, BotPaused, BotStopping, BotStopped, BotError:
+	default:
+		return bot, fmt.Errorf("invalid stored Bot status %q", bot.Status)
 	}
 
 	// decode bot

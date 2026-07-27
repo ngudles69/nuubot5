@@ -8,7 +8,11 @@ Purpose: Atomically publish one complete successful backtest result.
 
 BtBot calls ResultPublisher after replay verification and Controller shutdown.
 
-ResultPublisher owns the temporary database and final rename.
+BtBot owns fresh attempt-database preparation.
+
+Maximum persistence writes Ledger and Simulator runtime state into that attempt database.
+
+ResultPublisher appends terminal evidence and owns the final rename.
 
 It serializes immutable Controller, BotCycle, Executor, Account, Ledger, telemetry, RunReport, and replay results.
 
@@ -37,14 +41,15 @@ Simulator private Orders, Fills, indexes, counters, and persistence payload are 
 ## Atomic Flow
 
 ```text
-remove stale .partial
-publish immutable reconciled results
-publish Controller, replay, telemetry, and RunReport
+BtBot removes stale .partial data before Controller initialization
+Ledger and Simulator optionally persist complete runtime evidence
+ResultPublisher appends immutable reconciled results
+ResultPublisher appends Controller, replay, telemetry, and RunReport
 commit every transaction
 rename .partial to final .db
 ```
 
-Maximum-mode Accounts publish the same reconciled Ledger result shape.
+Maximum-mode Accounts use `.partial` throughout execution, preventing prior-run evidence from loading or merging.
 
 ResultPublisher does not copy Simulator durable state into terminal results.
 

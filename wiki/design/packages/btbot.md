@@ -31,6 +31,8 @@ BtBot receives no profiling configuration and contains no profiling lifecycle.
 
 ```text
 prepare shared Nuubot harness
+reset Bot status for fresh replay
+clear replay data
 retain replay and result inputs
 resolve replay range
 initialize ReplayReader
@@ -75,6 +77,26 @@ Stop calls.
 
 They may also reveal lifecycle sequencing or timing defects without claiming
 concurrent execution.
+
+## Crash Model
+
+BtBot does not recover interrupted runtime state.
+
+BtBot does not load persisted Ledger, Trade, Order, Fill, Controller, BotCycle, or Executor state.
+
+Every invocation resets loaded Bot status to `configured`, clears stale attempt data, and replays the complete requested historical range.
+
+`clearData` always deletes the attempt database and SQLite sidecars before Controller initialization.
+
+The previous completed result remains isolated until successful atomic replacement.
+
+If the BtBot process crashes, that run fails and is discarded.
+
+The next attempt reruns the backtest from the beginning.
+
+Runner Startup recovery does not apply to BtBot.
+
+See [Runner Startup](../startup.md) for the intentionally different live execution model.
 
 ## Proof
 

@@ -109,6 +109,7 @@ type Context struct {
 	Spec               botspec.ExecutorSpec
 	LatestBBO          market.BBO
 	StartingEquityUSDC decimal.Decimal
+	Status             Status
 }
 
 // Executor defines the required lifecycle for one execution policy.
@@ -155,20 +156,29 @@ type SignalHandler interface {
 
 // Create selects and initializes the configured Executor.
 func Create(ctx Context) (Executor, error) {
-	// Step 1: select Executor
+	// Step 1: validate Executor status
+	switch ctx.Status {
+	case Configured, Starting, Running, Paused, Stopping:
+	case Stopped, Error:
+		return nil, fmt.Errorf("cannot initialize terminal executor status: %s", ctx.Status)
+	default:
+		return nil, fmt.Errorf("unknown executor status: %s", ctx.Status)
+	}
+
+	// Step 2: select Executor
 	var selected Executor
 	switch ctx.Spec.Kind {
 	case "observer":
-		selected = &observer{status: Configured}
+		selected = &observer{status: ctx.Status}
 	case "trade":
-		selected = &tradeExecutor{status: Configured}
+		selected = &tradeExecutor{status: ctx.Status}
 	case "grid":
-		selected = &gridExecutor{status: Configured}
+		selected = &gridExecutor{status: ctx.Status}
 	default:
 		return nil, fmt.Errorf("unknown executor: %s", ctx.Spec.Kind)
 	}
 
-	// Step 2: initialize Executor
+	// Step 3: initialize Executor
 	var err = selected.OnInit(ctx)
 	if err != nil {
 		return nil, err

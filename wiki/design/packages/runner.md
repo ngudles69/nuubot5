@@ -17,6 +17,7 @@ Account will own the future credentialed Exchange endpoint.
 ```text
 Init
   general app global setup
+  reject terminal Bot
   retain runtime inputs
   create clock
   initialize clock
@@ -50,6 +51,14 @@ Stop
   return stop errors
   log stop completed
 ```
+
+## Data Preservation
+
+Runner never clears persisted runtime data.
+
+Terminal `error` and `stopped` Bots cannot restart. Rerun requires cloning into a new Bot ID.
+
+Failed evidence remains intact unless explicit backend repair is authorized.
 
 ## Current Limits
 

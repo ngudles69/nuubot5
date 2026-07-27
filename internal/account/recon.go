@@ -214,7 +214,7 @@ func (a *Account) initializeLedger() error {
 		Network:        cfg.Network,
 		Symbol:         cfg.Symbol,
 		PersistMode:    cfg.PersistMode,
-		Path:           cfg.Nuubot.ResultPath,
+		Path:           cfg.Nuubot.RuntimePath,
 	})
 	if err != nil {
 		return fmt.Errorf("initialize Account: %w", err)
@@ -233,7 +233,7 @@ func (a *Account) initializeVenue() error {
 		FeePct:      cfg.FeePct,
 		SlippagePct: cfg.SlippagePct,
 		PersistMode: cfg.PersistMode,
-		Path:        cfg.Nuubot.ResultPath,
+		Path:        cfg.Nuubot.RuntimePath,
 	})
 	if err != nil {
 		return fmt.Errorf("initialize Account: %w", err)

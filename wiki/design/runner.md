@@ -49,6 +49,7 @@ Meta refresh intentionally uses a separate Info object hardcoded to mainnet.
 ```text
 Init
   general app global setup
+  reject terminal Bot
   retain runtime inputs
   create clock
   initialize clock
@@ -104,6 +105,24 @@ Signaler must obtain initial live bars through the shared Info endpoint or anoth
 
 Live Setup and Signaler construction remain unimplemented.
 
+## Permanent Data Preservation Rule
+
+This rule is mandatory and must not be weakened, relocated, or omitted.
+
+Runner never clears, resets, truncates, replaces, or silently repairs persisted runtime data.
+
+This includes Bot, Ledger, Trade, Order, Fill, reconciliation, and Venue evidence.
+
+Terminal `error` and `stopped` Bots can never restart.
+
+Rerunning terminal behavior requires cloning the Bot into a new Bot ID.
+
+A code defect leaves the Bot in `error` with all evidence intact.
+
+Repair is explicit backend operator work. Recovery and normal startup never perform destructive repair.
+
+Preserved data supports reference, review, troubleshooting, strategy analysis, and code analysis.
+
 ## Invariants
 
 - One Runner owns one Controller.
@@ -112,6 +131,18 @@ Live Setup and Signaler construction remain unimplemented.
 - Future endpoint Start performs reachability checks before Controller and Clock run.
 - Stop remains idempotent after successful Start.
 - Exchange credentials and trading transport do not belong to Runner.
+
+## Startup
+
+Every Runner Bot uses one Init path and one Start path.
+
+Start always invokes Account reconciliation. Ledger state selects either the no-active-Trade fast path or full Venue reconciliation.
+
+Runner Startup also owns crash recovery and persisted lifecycle continuation.
+
+BtBot does not recover. An interrupted backtest reruns from the beginning.
+
+See [Startup](startup.md) for the approved unified contract.
 
 ## Required Proof
 

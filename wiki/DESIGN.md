@@ -11,6 +11,7 @@ Nuubot5 source proves implementation. Reservation files prove names only.
 - [`design/packages`](design/packages/) contains exactly one page per Go package.
 - [`design/concepts`](design/concepts/) contains flows, programs, venues, types, and cross-package rules.
 - [`design/runner.md`](design/runner.md) owns the standalone live Runner design.
+- [`design/startup.md`](design/startup.md) owns Runner startup and crash recovery across all live networks.
 - [`design/entities.md`](design/entities.md) shows backtest and live runtime ownership cardinality.
 - [`design/hyperliquid`](design/hyperliquid/) contains the internal Hyperliquid boundary details.
 - `internal/toolkit` groups reusable packages. It is not a Go package.
@@ -183,7 +184,7 @@ hardcut is implemented and proven.
 | [PocketBase](design/concepts/pocketbase.md) | Server-owned web, API, authentication, realtime, and SQLite framework. |
 | [Process store](design/concepts/process-store.md) | Process persistence boundary. |
 | [Reconciliation](design/concepts/recon.md) | Venue-to-ledger repair flow. |
-| [Recovery](design/concepts/recovery.md) | Startup state restoration. |
+
 | [Replay](design/concepts/replay.md) | End-to-end historical replay flow. |
 | [Result publisher](design/concepts/result-publisher.md) | Terminal replay publishing. |
 | [RSI signaler](design/concepts/rsi-signaler.md) | RSI implementation. |

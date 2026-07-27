@@ -38,8 +38,9 @@ Setup starts no goroutine or WebSocket.
 - the initialized TickClock or WallClock attached by the program owner;
 - the Runner-owned shared Info endpoint when live;
 - the Runner-owned shared WebSocket endpoint when live;
-- global Meta reference data; and
-- the per-Bot result path.
+- global Meta reference data;
+- the completed per-Bot result path; and
+- the active runtime database path.
 
 Nuubot contains shared infrastructure data.
 
@@ -47,7 +48,7 @@ It contains shared infrastructure, not procedural application behavior or featur
 
 BtBot, Controller, BotCycle, Executors, and Accounts receive the same Nuubot pointer.
 
-Components do not copy App Config, BotSpec, Meta, Bot identity, or ResultPath.
+Components do not copy App Config, BotSpec, Meta, Bot identity, ResultPath, or RuntimePath.
 
 A component may retain `nuubot.Log` as its local logger reference.
 

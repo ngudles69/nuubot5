@@ -170,6 +170,8 @@ main
 
 BtBot init
   prepare shared Nuubot harness
+  reset Bot status for fresh replay
+  clear replay data
   retain replay and result inputs
   resolve replay range
   initialize ReplayReader

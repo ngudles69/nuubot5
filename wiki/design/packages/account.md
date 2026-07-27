@@ -46,7 +46,7 @@ Account publishes neither child after partial initialization failure.
 
 | Input | Purpose |
 |---|---|
-| Nuubot | Supply Logger, App Config, Meta, and ResultPath |
+| Nuubot | Supply Logger, App Config, Meta, ResultPath, and RuntimePath |
 | Cycle and Executor numbers | Create stable result identity |
 | Account config | Select network, name, capital, fees, and persistence |
 | Selected credentials | Initialize a future live or testnet Venue |

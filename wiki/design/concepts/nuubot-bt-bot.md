@@ -76,6 +76,18 @@ Every log call receives one complete message string.
 
 The successful terminal message includes elapsed duration.
 
+## Crash Model
+
+The command provides no resume or recovery mode.
+
+A crashed process produces a failed backtest attempt.
+
+A later attempt starts BtBot from the beginning and replays the complete requested range.
+
+The command never asks BtBot to restore live runtime state.
+
+Runner startup and crash recovery are intentionally separate.
+
 ## Does Not
 
 - Load configuration.

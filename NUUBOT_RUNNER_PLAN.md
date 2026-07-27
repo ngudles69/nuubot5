@@ -1658,7 +1658,7 @@ First release must prevent duplicate ownership and fail closed after crash witho
 - `internal/botspec/botspec_test.go`
 - `wiki/design/concepts/filesystem.md`
 - `wiki/design/runner.md`
-- `wiki/design/concepts/recovery.md`
+- `wiki/design/startup.md`
 - `wiki/design/telemetry.md`
 
 ## Upstream Impact
@@ -2763,7 +2763,7 @@ Candidate owners requiring assessment:
 - `internal/executor`
 - `internal/account`
 - `internal/ledger`
-- `wiki/design/concepts/recovery.md`
+- `wiki/design/startup.md`
 
 ## Upstream Impact
 
@@ -3014,7 +3014,7 @@ Required owners include:
 - `wiki/design/concepts/live-events.md`
 - `wiki/design/concepts/shutdown.md`
 - `wiki/design/concepts/venue.md`
-- `wiki/design/concepts/recovery.md`
+- `wiki/design/startup.md`
 - `wiki/design/concepts/filesystem.md`
 - `wiki/design/packages/setup.md`
 - `wiki/design/packages/datastore.md`

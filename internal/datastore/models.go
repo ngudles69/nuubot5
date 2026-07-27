@@ -12,13 +12,27 @@ type ReplayInput struct {
 	EndAt       *time.Time
 }
 
-// Bot contains one exact stored Bot configuration and its replay input.
+// BotStatus identifies one stored Bot lifecycle state.
+type BotStatus string
+
+const (
+	BotConfigured BotStatus = "configured"
+	BotStarting   BotStatus = "starting"
+	BotRunning    BotStatus = "running"
+	BotPaused     BotStatus = "paused"
+	BotStopping   BotStatus = "stopping"
+	BotStopped    BotStatus = "stopped"
+	BotError      BotStatus = "error"
+)
+
+// Bot contains one exact stored Bot configuration, runtime status, and replay input.
 type Bot struct {
 	SweepID    uint64
 	BotID      uint64
 	BotSpecID  string
 	ConfigTOML string
 	ConfigHash string
+	Status     BotStatus
 	Replay     ReplayInput
 }
 

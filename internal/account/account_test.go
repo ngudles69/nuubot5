@@ -983,8 +983,9 @@ func accountNuubot(
 		App: appconfig.App{
 			Hyperliquid: appconfig.Hyperliquid{MinOrderNotionalUSDC: 11},
 		},
-		Meta:       instrument,
-		ResultPath: resultPath,
+		Meta:        instrument,
+		ResultPath:  resultPath,
+		RuntimePath: resultPath,
 	}
 }
 

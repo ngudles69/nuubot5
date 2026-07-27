@@ -2,7 +2,7 @@
 
 Status: Implemented.
 Covers: `internal/datastore/*.go`
-Purpose: Load one exact stored BotConfig and validated ReplayInput.
+Purpose: Load one exact stored BotConfig, mutable Bot status, and validated ReplayInput.
 
 ## Canonical Sources
 
@@ -27,8 +27,9 @@ Datastore opens one short-lived read-only SQLite connection.
 
 - Open the configured SQLite database read-only and immutable.
 - Query one exact Bot row.
-- Read exact BotSpecID, BotConfig TOML, Config SHA-256, and replay JSON.
+- Read exact BotSpecID, BotConfig TOML, Config SHA-256, mutable status, and replay JSON.
 - Verify Config TOML against the stored SHA-256.
+- Validate stored Bot lifecycle status.
 - Decode replay JSON.
 - Parse replay dates and optional Bot dates.
 - Preserve optional `StartAt` and `EndAt` in `ReplayInput`.
@@ -52,7 +53,7 @@ Datastore opens one short-lived read-only SQLite connection.
 
 Inputs are database path, Sweep ID, and Bot ID.
 
-Output is one `datastore.Bot`.
+Output is one `datastore.Bot` containing immutable configuration, mutable status, and ReplayInput.
 
 ## State and Invariants
 

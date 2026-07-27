@@ -91,6 +91,7 @@ func (c *BotCycle) Init(
 			Spec:               spec,
 			LatestBBO:          inputs.LatestBBOs[spec.Resource.Symbol],
 			StartingEquityUSDC: inputs.ResourceEquity[spec.Resource],
+			Status:             executor.Status(nuubot.Bot.Status),
 		})
 		if err != nil {
 			var reason = "init_error"

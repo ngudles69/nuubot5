@@ -101,16 +101,17 @@ func TestPublishWritesControllerAndReplayResult(t *testing.T) {
 
 func TestPublishPreservesMaximumAccountEvidence(t *testing.T) {
 	var path = filepath.Join(t.TempDir(), "result.db")
+	var runtimePath = path + ".partial"
 	var accountResult = account.Result{
 		Config: account.Config{
-			Nuubot: &setup.Nuubot{ResultPath: path},
+			Nuubot: &setup.Nuubot{ResultPath: path, RuntimePath: runtimePath},
 			Name:   "sim", Venue: "simulator", Network: "simnet", Symbol: "BTC",
 			PersistMode: ledger.Max,
 		},
 		Ledger: ledger.Result{Config: ledger.Config{
 			ID: 1, CycleNumber: 1, ExecutorNumber: 1,
 			Account: "sim", Network: "simnet", Symbol: "BTC",
-			PersistMode: ledger.Max, Path: path,
+			PersistMode: ledger.Max, Path: runtimePath,
 		}},
 	}
 	var ownedLedger ledger.Ledger

@@ -39,6 +39,7 @@ func TestLoadBotReturnsExactStoredConfig(t *testing.T) {
 			bot_spec_id TEXT NOT NULL,
 			config_toml TEXT NOT NULL,
 			config_hash TEXT NOT NULL,
+			status TEXT NOT NULL,
 			config_json TEXT NOT NULL
 		)
 	`)
@@ -48,12 +49,13 @@ func TestLoadBotReturnsExactStoredConfig(t *testing.T) {
 	var configTOML = "bot_spec = \"macross_trade_bot\"\n"
 	var configHash = fmt.Sprintf("%x", sha256.Sum256([]byte(configTOML)))
 	_, err = db.Exec(
-		`INSERT INTO bot VALUES (?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO bot VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		9,
 		6,
 		"macross_trade_bot",
 		configTOML,
 		configHash,
+		"running",
 		`{
 			"general":{"symbol":"BTC","start":"","end":""},
 			"data":{"ticks":"ticks"},
@@ -72,6 +74,7 @@ func TestLoadBotReturnsExactStoredConfig(t *testing.T) {
 	if bot.BotSpecID != "macross_trade_bot" ||
 		bot.ConfigTOML != configTOML ||
 		bot.ConfigHash != configHash ||
+		bot.Status != BotRunning ||
 		bot.Replay.Symbol != "BTC" {
 		t.Fatalf("unexpected bot: %#v", bot)
 	}

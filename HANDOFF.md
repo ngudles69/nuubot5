@@ -103,6 +103,24 @@ Account-Venue-Simulator boundary hardcut. Recon2 is retired.
 - Runner remains non-runnable because Setup, Signaler construction, WebSocket transport, and live events remain replay-oriented or unimplemented.
 - Gofmt, project diagnostics, stale-reference scans, and Git whitespace checks pass.
 - `nuubot-runner` was not executed. No Runner tests or system tests were run by explicit instruction.
+- Added `wiki/design/startup.md` as the canonical clean-start and crash-recovery design.
+- Deleted the separate Recovery concept because Startup owns both paths.
+- Linked Runner and the design index to the unified Startup contract.
+- Scoped Startup recovery to Runner across `simnet`, `testnet`, and `mainnet`.
+- Confirmed BtBot never restores runtime state; interrupted backtests rerun from the beginning.
+- Added the explicit no-recovery crash model to BtBot package and command design pages.
+- Datastore now loads and validates mutable Bot status from the existing Bot row.
+- BtBot always resets loaded status to `configured` and runs `clearData` before Controller initialization.
+- BtBot runtime persistence now uses a fresh `.partial` attempt database and preserves the prior completed result until publication.
+- Runner retains loaded status and contains no data-clearing path.
+- Runner rejects terminal `error` and `stopped` Bots before child construction.
+- Terminal Runner reruns require cloning into a new Bot ID; failed evidence remains intact.
+- Focused Datastore, Account, ResultPublisher, Executor, BotCycle, BtBot, and Runner tests pass.
+- Observer Bot 9 passed 1 of 1 with its stored `running` status reset to `configured` by BtBot.
+- Observer suite total was 6,198 ms; BtBot was 5,860 ms; replay was 2,309 ms.
+- Observer result log is `workspace/logs/nuubot5-stest-s6-b9-1-20260727T160925Z.log`.
+- Observer suite report is `workspace/logs/nuubot5-stest-s6-b9-1-20260727T160925Z.json`.
+- Project diagnostics, stale destructive-Runner scan, formatting, and diff checks pass.
 
 ### TODO
 
@@ -125,6 +143,11 @@ Account-Venue-Simulator boundary hardcut. Recon2 is retired.
 - BtBot and Controller retain the shared `nuubot` reference instead of duplicating Setup, BotSpec, identity, or config state.
 - A component may retain `nuubot.Log` as its local logger reference for convenient logging.
 - Controller owns runtime construction from `nuubot.BotSpec`.
+- New and recovered Bots use the same Init code to load Bot, Ledger, Trade, Order, and Fill state.
+- Every Bot uses the same Start code and invokes Account reconciliation.
+- Reconciliation skips Exchange Order and Fill pulls when Ledger has no active Trades, then advances cursors to current time.
+- Active Trades select normal Venue Order and Fill reconciliation.
+- Persisted `starting`, `running`, and `stopping` intent resumes only after normal initialization and startup reconciliation.
 - BtBot, Controller, BotSpec, BotCycle, and Executor runtime lifecycle do not use isolated unit tests.
 - Deleted isolated BotCycle, ObserverExecutor, and TradeExecutor test files.
 - Retained only pure deterministic Grid calculation tests in `internal/executor/grid_test.go`.

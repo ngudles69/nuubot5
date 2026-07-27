@@ -28,7 +28,11 @@ Recon copies validated official evidence into Ledger.
 
 Ledger evidence is the terminal publishable trading record.
 
-ResultPublisher creates `.partial`, writes evidence, commits, and renames to `.db`.
+BtBot clears `.partial` before runtime initialization.
+
+Maximum persistence writes complete runtime evidence into `.partial` during execution.
+
+ResultPublisher appends terminal evidence, commits, and renames `.partial` to `.db`.
 
 It writes every terminal Account result, including maximum persistence mode.
 

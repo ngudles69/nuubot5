@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"nuubot/internal/controller"
+	"nuubot/internal/datastore"
 	"nuubot/internal/hyperliquid"
 	"nuubot/internal/setup"
 	"nuubot/internal/toolkit/clock"
@@ -47,7 +48,13 @@ func (r *Runner) Init(
 		return fmt.Errorf("prepare setup: %w", err)
 	}
 
-	// Step 2: retain runtime inputs
+	// Step 2: reject terminal Bot
+	switch nuubot.Bot.Status {
+	case datastore.BotError, datastore.BotStopped:
+		return fmt.Errorf("runner cannot initialize terminal bot status %q", nuubot.Bot.Status)
+	}
+
+	// Step 3: retain runtime inputs
 	if nuubot.App.Process.PollSeconds == 0 {
 		return fmt.Errorf("runner poll interval must be positive")
 	}
@@ -56,42 +63,42 @@ func (r *Runner) Init(
 	r.stopRequested = make(chan struct{})
 	var timeout = time.Duration(nuubot.App.Process.RequestTimeoutSeconds) * time.Second
 
-	// Step 3: create clock
+	// Step 4: create clock
 	r.clock, err = clock.Create(clock.Wall)
 	if err != nil {
 		return fmt.Errorf("create clock: %w", err)
 	}
 
-	// Step 4: initialize clock
+	// Step 5: initialize clock
 	err = r.clock.Init(log, uint64(time.Now().UnixMilli()))
 	if err != nil {
 		return fmt.Errorf("initialize clock: %w", err)
 	}
 
-	// Step 5: attach clock to Nuubot
+	// Step 6: attach clock to Nuubot
 	nuubot.Clock = r.clock
 
-	// Step 6: initialize Info endpoint
+	// Step 7: initialize Info endpoint
 	r.info, err = hyperliquid.NewInfo(nuubot.App.Network.Default, timeout)
 	if err != nil {
 		return fmt.Errorf("initialize Info endpoint: %w", err)
 	}
 	nuubot.Info = r.info
 
-	// Step 7: initialize WebSocket endpoint
+	// Step 8: initialize WebSocket endpoint
 	r.webSocket, err = hyperliquid.NewWebSocket(nuubot.App.Network.Default, timeout)
 	if err != nil {
 		return fmt.Errorf("initialize WebSocket endpoint: %w", err)
 	}
 	nuubot.WebSocket = r.webSocket
 
-	// Step 8: initialize Controller
+	// Step 9: initialize Controller
 	err = r.controller.Init(nuubot)
 	if err != nil {
 		return fmt.Errorf("initialize Controller: %w", err)
 	}
 
-	// Step 9: register Controller timer
+	// Step 10: register Controller timer
 	err = r.clock.RegisterTimer(clock.Timer{
 		Name:       "controller",
 		IntervalMS: uint64(r.pollInterval.Milliseconds()),
@@ -100,7 +107,7 @@ func (r *Runner) Init(
 		return fmt.Errorf("register Controller timer: %w", err)
 	}
 
-	// Step 10: log init completed
+	// Step 11: log init completed
 	log.Info(fmt.Sprintf(
 		"runner initialized bot_spec=%s symbol=%s",
 		nuubot.Bot.BotSpecID,

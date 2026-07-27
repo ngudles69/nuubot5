@@ -18,15 +18,16 @@ import (
 
 // Nuubot contains shared application infrastructure prepared for one Bot.
 type Nuubot struct {
-	Log        *logging.Logger
-	App        config.App
-	Bot        datastore.Bot
-	BotSpec    botspec.Spec
-	Clock      clock.Clock
-	Info       *hyperliquid.Info
-	WebSocket  *hyperliquid.WebSocket
-	Meta       meta.Instrument
-	ResultPath string
+	Log         *logging.Logger
+	App         config.App
+	Bot         datastore.Bot
+	BotSpec     botspec.Spec
+	Clock       clock.Clock
+	Info        *hyperliquid.Info
+	WebSocket   *hyperliquid.WebSocket
+	Meta        meta.Instrument
+	ResultPath  string
+	RuntimePath string
 }
 
 // Section 1 - Program Flow
@@ -123,20 +124,22 @@ func Setup(
 	// Shared WebSocket ownership remains TBD. Setup starts no background work.
 
 	// Step 9: prepare Nuubot
+	var resultPath = filepath.Join(
+		root,
+		"workspace",
+		"db",
+		"sweeps",
+		fmt.Sprintf("sweep_%d", sweepID),
+		fmt.Sprintf("bot_%d.db", botID),
+	)
 	var nuubot = &Nuubot{
-		Log:     log,
-		App:     app,
-		Bot:     botInput,
-		BotSpec: botSpec,
-		Meta:    instrument,
-		ResultPath: filepath.Join(
-			root,
-			"workspace",
-			"db",
-			"sweeps",
-			fmt.Sprintf("sweep_%d", sweepID),
-			fmt.Sprintf("bot_%d.db", botID),
-		),
+		Log:         log,
+		App:         app,
+		Bot:         botInput,
+		BotSpec:     botSpec,
+		Meta:        instrument,
+		ResultPath:  resultPath,
+		RuntimePath: resultPath,
 	}
 
 	// Step 10: log setup completed
