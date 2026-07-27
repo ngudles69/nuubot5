@@ -50,7 +50,7 @@ var _ ReconHandler = (*gridExecutor)(nil)
 // Section 1 - Program Flow
 
 // OnInit initializes GridExecutor and logs its validated levels without submitting Orders.
-func (e *gridExecutor) OnInit(ctx Context) error {
+func (e *gridExecutor) OnInit(ctx BotCycleContext) error {
 	// Step 1: bind GridExecutor inputs
 	e.log = ctx.Nuubot.Log
 	e.nuubot = ctx.Nuubot

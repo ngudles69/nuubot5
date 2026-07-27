@@ -121,6 +121,7 @@ Account-Venue-Simulator boundary hardcut. Recon2 is retired.
 - Observer result log is `workspace/logs/nuubot5-stest-s6-b9-1-20260727T160925Z.log`.
 - Observer suite report is `workspace/logs/nuubot5-stest-s6-b9-1-20260727T160925Z.json`.
 - Project diagnostics, stale destructive-Runner scan, formatting, and diff checks pass.
+- Renamed `executor.Context` to `executor.BotCycleContext`; local variables remain `ctx`.
 
 ### TODO
 

@@ -45,7 +45,7 @@ var _ ReconHandler = (*tradeExecutor)(nil)
 // Section 1 - Program Flow
 
 // OnInit initializes TradeExecutor without submitting Orders.
-func (e *tradeExecutor) OnInit(ctx Context) error {
+func (e *tradeExecutor) OnInit(ctx BotCycleContext) error {
 	// Step 1: bind TradeExecutor inputs
 	e.log = ctx.Nuubot.Log
 	e.nuubot = ctx.Nuubot

@@ -83,7 +83,7 @@ func (c *BotCycle) Init(
 	var specs = nuubot.BotSpec.Executors
 	c.executors = make([]executor.Executor, 0, len(specs))
 	for index, spec := range specs {
-		var created, err = executor.Create(executor.Context{
+		var created, err = executor.Create(executor.BotCycleContext{
 			Nuubot:             nuubot,
 			CycleNumber:        number,
 			ExecutorNumber:     index + 1,

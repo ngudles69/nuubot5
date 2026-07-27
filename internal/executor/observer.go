@@ -41,7 +41,7 @@ var _ BBOIngestHandler = (*observer)(nil)
 // Section 1 - Program Flow
 
 // OnInit initializes ObserverExecutor.
-func (e *observer) OnInit(ctx Context) error {
+func (e *observer) OnInit(ctx BotCycleContext) error {
 	e.log = ctx.Nuubot.Log
 	e.spec = ctx.Spec
 	if e.status != Configured {

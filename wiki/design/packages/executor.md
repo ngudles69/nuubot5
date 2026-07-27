@@ -25,7 +25,7 @@ Direction never comes from Signal.
 
 ```go
 type Executor interface {
-    OnInit(Context) error
+    OnInit(BotCycleContext) error
     OnStop(string) error
     Status() Status
     ExitReason() string

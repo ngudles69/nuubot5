@@ -100,8 +100,8 @@ const (
 	Error      Status = "error"
 )
 
-// Context contains one Executor's initialization inputs.
-type Context struct {
+// BotCycleContext contains one Executor's BotCycle initialization inputs.
+type BotCycleContext struct {
 	Nuubot             *setup.Nuubot
 	CycleNumber        int
 	ExecutorNumber     int
@@ -114,7 +114,7 @@ type Context struct {
 
 // Executor defines the required lifecycle for one execution policy.
 type Executor interface {
-	OnInit(Context) error
+	OnInit(BotCycleContext) error
 	OnStop(string) error
 	Status() Status
 	ExitReason() string
@@ -155,7 +155,7 @@ type SignalHandler interface {
 // Section 1 - Program Flow
 
 // Create selects and initializes the configured Executor.
-func Create(ctx Context) (Executor, error) {
+func Create(ctx BotCycleContext) (Executor, error) {
 	// Step 1: validate Executor status
 	switch ctx.Status {
 	case Configured, Starting, Running, Paused, Stopping:
