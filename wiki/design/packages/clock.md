@@ -100,6 +100,14 @@ stop
 
 ## Trigger Ownership
 
+BtBot creates and initializes TickClock, then attaches it to the shared Nuubot
+harness before Controller initialization.
+
+Runner will attach its initialized WallClock through the same Nuubot field.
+
+Controller, BotCycle, and children read current time through
+`nuubot.Clock.NowMS()` instead of receiving timestamp arguments.
+
 BtBot advances TickClock from admitted replay ticks.
 
 WallClock `Start` launches its wall-time loop. The loop waits for the next

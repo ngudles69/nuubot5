@@ -125,9 +125,9 @@ The database stores the exact submitted TOML text.
 
 Start copies that text and hash into one immutable BotGeneration.
 
-BtBot strictly transforms saved TOML through the exact BotSpecID.
+Setup strictly transforms saved TOML through the exact BotSpecID.
 
-Controller receives complete Setup plus the resulting typed BotSpec.
+Controller receives the resulting typed BotSpec through the shared Nuubot harness.
 
 Execution code never rereads the original TOML file.
 
@@ -160,17 +160,19 @@ identity, provenance, runtime object, or runtime state.
 
 ## Construction
 
-BtBot passes BotSpecID and exact BotConfig TOML to `botspec.Build`.
+Setup passes BotSpecID and exact BotConfig TOML to `botspec.Build`.
 
 `botspec.Build` decodes, validates, applies explicitly defined defaults, and
 shapes typed specification values.
 
 It returns one immutable BotSpec or an error.
 
-BtBot passes complete Setup plus BotSpec to Controller.
+Setup stores BotSpec in one shared Nuubot harness and returns it to BtBot.
 
-Complete Setup contains App Config, Bot identity and provenance, ReplayInput,
-Meta, and ResultPath.
+Nuubot contains Logger, App Config, Bot identity and provenance, ReplayInput,
+BotSpec, Meta, and ResultPath.
+
+Controller, BotCycle, Executors, and Accounts receive the same Nuubot pointer.
 
 Controller constructs Signaler and Risk runtime objects.
 

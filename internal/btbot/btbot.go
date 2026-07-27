@@ -6,7 +6,6 @@ import (
 	stdruntime "runtime"
 	"time"
 
-	"nuubot/internal/botspec"
 	"nuubot/internal/controller"
 	"nuubot/internal/market"
 	"nuubot/internal/replay"
@@ -81,15 +80,15 @@ func (r *BtBot) Init(
 	r.log = log
 
 	// Step 1: general app global setup
-	var nuubotSetup, err = setup.Setup(caller, log, sweepID, botID)
+	var nuubot, err = setup.Setup(caller, log, sweepID, botID)
 	if err != nil {
 		return fmt.Errorf("prepare setup: %w", err)
 	}
 
 	// Step 2: retain runtime inputs
-	var replayInput = nuubotSetup.Bot.Replay
+	var replayInput = nuubot.Bot.Replay
 	r.symbol = replayInput.Symbol
-	r.resultPath = nuubotSetup.ResultPath
+	r.resultPath = nuubot.ResultPath
 
 	// Step 3: set replay range
 	var start = replayInput.ReplayStart
@@ -115,38 +114,31 @@ func (r *BtBot) Init(
 		return fmt.Errorf("initialize replay reader: %w", err)
 	}
 
-	// Step 5: build BotSpec
-	var botSpec botspec.Spec
-	botSpec, err = botspec.Build(
-		nuubotSetup.Bot.BotSpecID,
-		nuubotSetup.Bot.ConfigTOML,
-	)
-	if err != nil {
-		return fmt.Errorf("build BotSpec: %w", err)
-	}
-
-	// Step 6: initialize Controller
-	err = r.controller.Init(log, nuubotSetup, botSpec)
-	if err != nil {
-		return fmt.Errorf("initialize Controller: %w", err)
-	}
-
-	// Step 7: create clock
+	// Step 5: create clock
 	r.clock, err = clock.Create(clock.Tick)
 	if err != nil {
 		return fmt.Errorf("create clock: %w", err)
 	}
 
-	// Step 8: initialize clock
+	// Step 6: initialize clock
 	err = r.clock.Init(log, startMS)
 	if err != nil {
 		return fmt.Errorf("initialize clock: %w", err)
 	}
 
+	// Step 7: attach clock to Nuubot
+	nuubot.Clock = r.clock
+
+	// Step 8: initialize Controller
+	err = r.controller.Init(nuubot)
+	if err != nil {
+		return fmt.Errorf("initialize Controller: %w", err)
+	}
+
 	// Step 9: register Controller timer
 	err = r.clock.RegisterTimer(clock.Timer{
 		Name:       "controller",
-		IntervalMS: nuubotSetup.App.BtBot.ControllerTimerIntervalMS,
+		IntervalMS: nuubot.App.BtBot.ControllerTimerIntervalMS,
 	}, r.controllerRun)
 	if err != nil {
 		return fmt.Errorf("register Controller timer: %w", err)
@@ -155,8 +147,8 @@ func (r *BtBot) Init(
 	// Step 10: initialize replay stats
 	r.stats = stats{
 		ticksExpected: durationMS / 1000,
-		runsExpected: (durationMS + nuubotSetup.App.BtBot.ControllerTimerIntervalMS - 1) /
-			nuubotSetup.App.BtBot.ControllerTimerIntervalMS,
+		runsExpected: (durationMS + nuubot.App.BtBot.ControllerTimerIntervalMS - 1) /
+			nuubot.App.BtBot.ControllerTimerIntervalMS,
 		expectedFirstMS: startMS + 1000,
 		expectedLastMS:  endMS,
 	}
@@ -164,7 +156,7 @@ func (r *BtBot) Init(
 	// Step 11: log init completed
 	log.Info(fmt.Sprintf(
 		"btbot initialized bot_spec=%s symbol=%s",
-		nuubotSetup.Bot.BotSpecID,
+		nuubot.Bot.BotSpecID,
 		r.symbol,
 	))
 	return nil
@@ -374,14 +366,14 @@ func (r *BtBot) Stop() error {
 
 // Section 2 - Domain Helpers
 
-func (r *BtBot) controllerRun(nowMS uint64) error {
+func (r *BtBot) controllerRun(_ uint64) error {
 	// run Controller - triggered by Timer
 	r.stats.runsTriggered++
-	var stop, err = r.controller.Run(nowMS)
+	var stop, err = r.controller.Run()
 	if err != nil {
 		return fmt.Errorf("run Controller: %w", err)
 	}
-	r.collectTelemetry(nowMS, false)
+	r.collectTelemetry(r.clock.NowMS(), false)
 	// remember stop request
 	if stop {
 		r.stopRequested = true

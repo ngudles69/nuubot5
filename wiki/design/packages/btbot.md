@@ -8,7 +8,7 @@ Purpose: Run one bounded historical Bot replay and prove exact completion.
 
 BtBot owns:
 
-- complete Setup infrastructure;
+- one shared Nuubot harness;
 - one ReplayReader;
 - one TickClock;
 - one Controller;
@@ -30,13 +30,14 @@ BtBot receives no profiling configuration and contains no profiling lifecycle.
 ## Initialization
 
 ```text
-prepare complete Setup infrastructure
+prepare shared Nuubot harness
 retain replay and result inputs
 resolve replay range
 initialize ReplayReader
-transform exact BotConfig TOML into typed BotSpec
-initialize Controller from complete Setup plus BotSpec
-create and initialize TickClock
+create TickClock
+initialize TickClock
+attach TickClock to Nuubot
+initialize Controller from Nuubot
 register Controller timer
 initialize replay stats
 log init completed

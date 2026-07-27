@@ -37,6 +37,37 @@ Account-Venue-Simulator boundary hardcut. Recon2 is retired.
 - Manual code review of `internal/btbot/btbot.go` is complete.
 - User approved the final BtBot flow, intent comments, loop state, Timer callback comment, and Stop logging.
 - User prohibited more agents during this review session.
+- Added behavior-preserving code-reorganization rules to `wiki/coding/STYLE.md`.
+- Created global Codex skill `C:\Users\PC\.codex\skills\code-reorg\SKILL.md`.
+- Codex skill activates through `code reorg`, `code-reorg`, or `reorg <file>`.
+- Reorganized Controller `Init`, `Start`, `Run`, and `Stop` with grouped code and contiguous `Step N:` intent comments.
+- Controller reorganization changes only comments and whitespace; operation order and behavior remain unchanged.
+- Aligned `wiki/design/packages/controller.md` with exact Controller step text.
+- Full Go tests, full vet, formatting, diagnostics, and diff checks pass after Controller reorganization.
+- Observer RTest passed 1 of 1 after Controller reorganization.
+- Observer suite total was 5,979 ms; BtBot average was 5,642 ms; replay was 2,207 ms.
+- Observer result log is `workspace/logs/nuubot5-stest-s6-b9-1-20260727T115049Z.log`.
+- Observer suite report is `workspace/logs/nuubot5-stest-s6-b9-1-20260727T115049Z.json`.
+- Replaced `setup.Infrastructure` with one shared `*setup.Nuubot` application harness.
+- Setup now builds and validates BotSpec before returning Nuubot.
+- Moved pure Executor specification and resource types into BotSpec, removing the Setup-BotSpec-Executor import cycle.
+- BtBot, Controller, BotCycle, Executor, and Account now receive the same Nuubot pointer.
+- Controller retains only `c.nuubot` plus the approved `c.log` convenience reference.
+- Removed duplicate Controller Setup, BotSpec, and Bot identity fields.
+- Renamed BotCycle Account reconciliation from `Reconcile` to `AcctRecon`.
+- Reorganized BotCycle with grouped flow and exact `Step N:` intent comments.
+- Renamed `botcycle.Control` to `botcycle.BotCycle`.
+- Split BotCycle initialization and start into explicit `Init` and `Start` lifecycle methods.
+- Added BotCycle init, init-completed, start, started, stop, stopped-stats, and repeated-stop logging.
+- Aligned Nuubot, Setup, BotSpec, BtBot, Controller, BotCycle, Executor, and Account documentation.
+- Full Go tests, full vet, diagnostics, formatting, and diff checks pass after the Nuubot hardcut.
+- Focused BotCycle and Controller proof passes after BotCycle reorganization.
+- Final full Go tests, full vet, diagnostics, formatting, stale-reference scan, and diff checks pass.
+- Final Observer RTest passed 1 of 1 through `./stest.sh -bot 9`.
+- Final Observer suite total was 5,917 ms; BtBot was 5,592 ms; replay was 2,213 ms.
+- Final Observer result log is `workspace/logs/nuubot5-stest-s6-b9-1-20260727T130730Z.log`.
+- Final Observer suite report is `workspace/logs/nuubot5-stest-s6-b9-1-20260727T130730Z.json`.
+- User authorized the final commit and push after manual Controller review.
 
 ### TODO
 
@@ -54,8 +85,25 @@ Account-Venue-Simulator boundary hardcut. Recon2 is retired.
 - Do not use `admission`, `admit`, or `admitted` for this flow; validation returns a BotSpec or an error.
 - BotSpec contains BotSpecID plus Controller, Signaler, Risk, and Executor specifications.
 - Complete Setup contains App Config, Meta, replay inputs, ResultPath, Bot instance identity, and provenance.
-- Controller consumes complete Setup plus BotSpec and owns runtime construction.
+- Setup returns one shared `setup.Nuubot` application harness containing global infrastructure and the typed BotSpec.
+- `Nuubot` contains shared infrastructure data, not procedural behavior, functionality, or features.
+- BtBot and Controller retain the shared `nuubot` reference instead of duplicating Setup, BotSpec, identity, or config state.
+- A component may retain `nuubot.Log` as its local logger reference for convenient logging.
+- Controller owns runtime construction from `nuubot.BotSpec`.
 - Controller, BotSpec, and BtBot do not use isolated unit tests; RTest proves their real integrated path.
+- Manual code review of `internal/controller/controller.go` passed on 2026-07-27.
+- Manual code review of `internal/botcycle/botcycle.go` passed on 2026-07-27.
+- A later requested full-test and vet rerun was user-stopped before producing output.
+- The successful full tests, full vet, and Observer proof recorded above remain the latest completed proof.
+- High-frequency `Controller.Run()` has no entry or exit logging; terminal Controller stats prove its execution without log spam.
+- Keep the `c.cycle != nil` guard in `Controller.Run`; nil is normal between cycles, and Controller must continue to Signal evaluation.
+- Signaler produces one complete flat Signal package containing standard Actions and arbitrary BotSpec-defined custom fields.
+- Controller passes the unchanged current package into `BotCycle.Run(signal)` before applying its standard lifecycle Action.
+- BotCycle passes the unchanged package to supported running Executors; each Executor reads only fields required by its BotSpec.
+- Never split one Signal package into separate standard and custom carriers.
+- `recordBBOGap` measures the gap since the prior BBO; do not add min/max BBO-gap metrics until required.
+- Clock is shared Nuubot infrastructure attached after initialization by BtBot or Runner.
+- Controller, BotCycle, and children read current time through `nuubot.Clock.NowMS()`; `Run` and `OnRecon` do not receive timestamp arguments.
 
 ## Active Boundary Hardcut
 

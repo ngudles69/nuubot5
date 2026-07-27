@@ -11,6 +11,7 @@ import (
 	"nuubot/internal/account"
 	"nuubot/internal/bot"
 	"nuubot/internal/botcycle"
+	"nuubot/internal/botspec"
 	"nuubot/internal/controller"
 	"nuubot/internal/executor"
 	"nuubot/internal/ledger"
@@ -102,8 +103,8 @@ func TestPublishPreservesMaximumAccountEvidence(t *testing.T) {
 	var path = filepath.Join(t.TempDir(), "result.db")
 	var accountResult = account.Result{
 		Config: account.Config{
-			Infrastructure: setup.Infrastructure{ResultPath: path},
-			Name:           "sim", Venue: "simulator", Network: "simnet", Symbol: "BTC",
+			Nuubot: &setup.Nuubot{ResultPath: path},
+			Name:   "sim", Venue: "simulator", Network: "simnet", Symbol: "BTC",
 			PersistMode: ledger.Max,
 		},
 		Ledger: ledger.Result{Config: ledger.Config{
@@ -130,7 +131,7 @@ func TestPublishPreservesMaximumAccountEvidence(t *testing.T) {
 			CycleNumber: 1,
 			Executors: []executor.Result{{
 				ID: "trade", Kind: "trade", Side: executor.Long,
-				Resource: executor.Resource{
+				Resource: botspec.Resource{
 					Venue:             "simulator",
 					Network:           "simnet",
 					PhysicalAccountID: "sim",
@@ -185,7 +186,7 @@ func TestPublishWritesGridLevels(t *testing.T) {
 			CycleNumber: 1,
 			Executors: []executor.Result{{
 				ID: "grid", Role: "grid", Kind: "grid", Side: executor.Long,
-				Resource: executor.Resource{
+				Resource: botspec.Resource{
 					Venue:             "simulator",
 					Network:           "simnet",
 					PhysicalAccountID: "sim",

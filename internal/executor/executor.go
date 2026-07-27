@@ -7,9 +7,10 @@ import (
 	"github.com/shopspring/decimal"
 
 	"nuubot/internal/account"
+	"nuubot/internal/botspec"
 	"nuubot/internal/market"
 	"nuubot/internal/setup"
-	"nuubot/internal/toolkit/logging"
+	"nuubot/internal/signaler"
 )
 
 // ErrRejected identifies an Executor admission rejection.
@@ -20,52 +21,13 @@ const (
 	Short = "short"
 )
 
-// Resource identifies one exclusive exchange resource.
-type Resource struct {
-	Venue             string
-	Network           string
-	PhysicalAccountID string
-	Symbol            string
-}
-
-// Key returns the exact resource identity.
-func (r Resource) Key() string {
-	return fmt.Sprintf(
-		"%s/%s/%s/%s",
-		r.Venue,
-		r.Network,
-		r.PhysicalAccountID,
-		r.Symbol,
-	)
-}
-
-// Spec contains one immutable Executor definition.
-type Spec struct {
-	ID             string
-	Role           string
-	Kind           string
-	Side           string
-	Resource       Resource
-	CapitalUSDC    decimal.Decimal
-	OrderSizeUSDC  decimal.Decimal
-	GridLevels     int
-	RangePct       decimal.Decimal
-	MinExpectedPnL decimal.Decimal
-	TakeProfitPct  decimal.Decimal
-	StopLossPct    decimal.Decimal
-	FeePct         decimal.Decimal
-	SlippagePct    decimal.Decimal
-	PersistMode    string
-	Recon          string
-}
-
 // Result contains one immutable terminal Executor result.
 type Result struct {
 	ID            string
 	Role          string
 	Kind          string
 	Side          string
-	Resource      Resource
+	Resource      botspec.Resource
 	Status        Status
 	ExitReason    string
 	CapitalUSDC   decimal.Decimal
@@ -82,7 +44,7 @@ type Result struct {
 type Telemetry struct {
 	ID       string
 	Kind     string
-	Resource Resource
+	Resource botspec.Resource
 	Status   Status
 	Account  *account.Snapshot
 }
@@ -140,12 +102,11 @@ const (
 
 // Context contains one Executor's initialization inputs.
 type Context struct {
-	Infrastructure     setup.Infrastructure
-	Log                *logging.Logger
+	Nuubot             *setup.Nuubot
 	CycleNumber        int
 	ExecutorNumber     int
-	SignalTimestampMS  uint64
-	Spec               Spec
+	Signal             signaler.Package
+	Spec               botspec.ExecutorSpec
 	LatestBBO          market.BBO
 	StartingEquityUSDC decimal.Decimal
 }
@@ -182,7 +143,12 @@ type AccountReconciler interface {
 
 // ReconHandler consumes one accepted reconciliation barrier.
 type ReconHandler interface {
-	OnRecon(uint64) error
+	OnRecon() error
+}
+
+// SignalHandler consumes one immutable Signal package.
+type SignalHandler interface {
+	OnSignal(signaler.Package) error
 }
 
 // Section 1 - Program Flow

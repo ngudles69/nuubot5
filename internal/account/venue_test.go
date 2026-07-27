@@ -3,7 +3,7 @@ package account
 import (
 	"bytes"
 	"fmt"
-	"io"
+
 	"testing"
 
 	"github.com/shopspring/decimal"
@@ -11,7 +11,6 @@ import (
 	"nuubot/internal/hyperliquid"
 	"nuubot/internal/market"
 	"nuubot/internal/order"
-	"nuubot/internal/toolkit/logging"
 )
 
 type venueRecorder struct {
@@ -25,7 +24,7 @@ type venueRecorder struct {
 
 func TestAccountSendsOnlyOfficialVenueOrderAction(t *testing.T) {
 	var actual Account
-	var err = actual.Init(logging.Create(io.Discard), accountTestConfig(40, "recon"))
+	var err = actual.Init(accountTestConfig(40, "recon"))
 	if err != nil {
 		t.Fatalf("initialize Account: %v", err)
 	}

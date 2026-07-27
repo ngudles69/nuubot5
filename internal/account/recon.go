@@ -11,7 +11,6 @@ import (
 	"nuubot/internal/ledger"
 	"nuubot/internal/order"
 	"nuubot/internal/simulator"
-	"nuubot/internal/toolkit/logging"
 )
 
 const feeRepairWindowMS = 1000
@@ -37,9 +36,9 @@ type reconAttempt struct {
 // Section 1 - Program Flow
 
 // Init prepares one Venue-backed Account.
-func (a *Account) Init(log *logging.Logger, cfg Config) error {
+func (a *Account) Init(cfg Config) error {
 	// bind Account inputs
-	a.bindInputs(log, cfg)
+	a.bindInputs(cfg)
 
 	// validate Account identity
 	var err = a.validateIdentity()
@@ -162,8 +161,8 @@ func (a *Account) recordReconOutcome(refreshed bool, err error) {
 	a.reconStats.Succeeded++
 }
 
-func (a *Account) bindInputs(log *logging.Logger, cfg Config) {
-	a.log = log
+func (a *Account) bindInputs(cfg Config) {
+	a.log = cfg.Nuubot.Log
 	a.config = cfg
 }
 
@@ -176,12 +175,12 @@ func (a *Account) validateIdentity() error {
 	if cfg.Venue != "simulator" || cfg.Network != "simnet" {
 		return fmt.Errorf("initialize Account: first trading tranche requires simulator simnet")
 	}
-	if cfg.Infrastructure.Meta.Symbol != cfg.Symbol ||
-		cfg.Infrastructure.Meta.IsDelisted ||
-		cfg.Infrastructure.Meta.Retired {
+	if cfg.Nuubot.Meta.Symbol != cfg.Symbol ||
+		cfg.Nuubot.Meta.IsDelisted ||
+		cfg.Nuubot.Meta.Retired {
 		return fmt.Errorf("initialize Account: symbol Meta is unavailable")
 	}
-	if cfg.Infrastructure.App.Hyperliquid.MinOrderNotionalUSDC == 0 ||
+	if cfg.Nuubot.App.Hyperliquid.MinOrderNotionalUSDC == 0 ||
 		!cfg.EquityUSDC.IsPositive() {
 		return fmt.Errorf("initialize Account: notional floor and equity must be positive")
 	}
@@ -208,7 +207,7 @@ func (a *Account) initializeLedger() error {
 		Network:        cfg.Network,
 		Symbol:         cfg.Symbol,
 		PersistMode:    cfg.PersistMode,
-		Path:           cfg.Infrastructure.ResultPath,
+		Path:           cfg.Nuubot.ResultPath,
 	})
 	if err != nil {
 		return fmt.Errorf("initialize Account: %w", err)
@@ -221,13 +220,13 @@ func (a *Account) initializeVenue() error {
 	var simulated simulator.Simulator
 	var err = simulated.Init(simulator.Config{
 		Account:     cfg.Name,
-		Asset:       int(cfg.Infrastructure.Meta.AssetID),
+		Asset:       int(cfg.Nuubot.Meta.AssetID),
 		Symbol:      cfg.Symbol,
 		Equity:      cfg.EquityUSDC,
 		FeePct:      cfg.FeePct,
 		SlippagePct: cfg.SlippagePct,
 		PersistMode: cfg.PersistMode,
-		Path:        cfg.Infrastructure.ResultPath,
+		Path:        cfg.Nuubot.ResultPath,
 	})
 	if err != nil {
 		return fmt.Errorf("initialize Account: %w", err)

@@ -1,7 +1,6 @@
 package executor
 
 import (
-	"bytes"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -9,8 +8,8 @@ import (
 	"github.com/shopspring/decimal"
 
 	"nuubot/internal/account"
+	"nuubot/internal/botspec"
 	"nuubot/internal/market"
-	"nuubot/internal/toolkit/logging"
 )
 
 // Section 1 - Program Flow
@@ -27,7 +26,7 @@ func TestTradeExecutorRunsOneBracket(t *testing.T) {
 	if actual.Telemetry().Account == nil {
 		t.Fatal("observed Account telemetry is missing")
 	}
-	if err = actual.OnRecon(3_000); err != nil {
+	if err = actual.OnRecon(); err != nil {
 		t.Fatalf("submit bracket: %v", err)
 	}
 	var entrySnapshot account.Snapshot
@@ -46,7 +45,7 @@ func TestTradeExecutorRunsOneBracket(t *testing.T) {
 	if _, _, _, err = actual.Reconcile(4_000, false); err != nil {
 		t.Fatalf("reconcile take-profit: %v", err)
 	}
-	if err = actual.OnRecon(4_000); err != nil {
+	if err = actual.OnRecon(); err != nil {
 		t.Fatalf("complete bracket: %v", err)
 	}
 	if actual.Status() != Stopping {
@@ -73,7 +72,7 @@ func TestTradeExecutorStopClosesOpenPosition(t *testing.T) {
 	if _, _, _, err = actual.Reconcile(3_000, false); err != nil {
 		t.Fatalf("reconcile initial Account: %v", err)
 	}
-	if err = actual.OnRecon(3_000); err != nil {
+	if err = actual.OnRecon(); err != nil {
 		t.Fatalf("submit bracket: %v", err)
 	}
 	if _, _, _, err = actual.Reconcile(3_000, false); err != nil {
@@ -104,7 +103,7 @@ func TestTradeExecutorStopClosesRoundedShortPosition(t *testing.T) {
 	if _, _, _, err = actual.Reconcile(3_000, false); err != nil {
 		t.Fatalf("reconcile initial Account: %v", err)
 	}
-	if err = actual.OnRecon(3_000); err != nil {
+	if err = actual.OnRecon(); err != nil {
 		t.Fatalf("submit bracket: %v", err)
 	}
 	if _, _, _, err = actual.Reconcile(3_000, false); err != nil {
@@ -135,7 +134,7 @@ func TestTradeExecutorRejectsPersistedTradeUntilRunnerRecoveryExists(t *testing.
 	if _, _, _, err = first.Reconcile(3_000, false); err != nil {
 		t.Fatalf("reconcile first Account: %v", err)
 	}
-	if err = first.OnRecon(3_000); err != nil {
+	if err = first.OnRecon(); err != nil {
 		t.Fatalf("submit persisted bracket: %v", err)
 	}
 	if _, _, _, err = first.Reconcile(3_000, false); err != nil {
@@ -173,17 +172,16 @@ func tradeExecutorContext(
 	t.Helper()
 	var initial = market.BBO{TimestampMS: 3_000, Price: price}
 	return Context{
-		Infrastructure:    executorInfrastructure(resultPath),
-		Log:               logging.Create(&bytes.Buffer{}),
-		CycleNumber:       1,
-		ExecutorNumber:    1,
-		SignalTimestampMS: 2_000,
-		LatestBBO:         initial,
-		Spec: Spec{
+		Nuubot:         executorNuubot(t, resultPath),
+		CycleNumber:    1,
+		ExecutorNumber: 1,
+		Signal:         executorTestSignal(t),
+		LatestBBO:      initial,
+		Spec: botspec.ExecutorSpec{
 			ID:   "trade",
 			Kind: "trade",
 			Side: map[bool]string{true: Long, false: Short}[enterLong],
-			Resource: Resource{
+			Resource: botspec.Resource{
 				Venue:             "simulator",
 				Network:           "simnet",
 				PhysicalAccountID: "sim",

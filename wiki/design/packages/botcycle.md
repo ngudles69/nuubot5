@@ -19,6 +19,47 @@ Admission rejection is nonfatal to Controller.
 
 Unexpected initialization failure is fatal.
 
+## Program Flow
+
+```text
+BotCycle Init
+  retain BotCycle inputs and log init
+  create Executors
+  log init completed
+
+BotCycle Start
+  log start
+  start Executors after every sibling initializes
+  mark BotCycle running
+  log start completed
+
+BotCycle Run
+  validate run state
+  record run
+  deliver current Signal to running Executors
+  check coordinated completion
+
+BotCycle Stop
+  log stop
+  ignore repeated stop request
+  mark BotCycle not running
+  stop Executors
+  collect immutable Executor results
+  mark BotCycle completed and stopped
+  resolve exit reason
+  calculate terminal result
+  report results and stats
+
+BotCycle AcctRecon
+  read current Clock time
+  reconcile running Executor Accounts
+  reject partial Account snapshots
+
+BotCycle OnBBO
+  record BotCycle time
+  deliver BBO to running Executors
+```
+
 ## Coordination
 
 Every Executor starts as one unit.
@@ -33,7 +74,7 @@ BotCycle Stop reaches every sibling with one parent reason.
 
 ## Reconciliation
 
-BotCycle reconciles every capable running Executor Account before completing one barrier.
+`AcctRecon` reconciles every capable running Executor Account before completing one barrier.
 
 The result reports any failure and the maximum consecutive Account Recon failure count.
 
@@ -42,6 +83,21 @@ Any failure suppresses the complete Snapshot barrier. Controller receives no par
 A successful barrier returns every immutable Account Snapshot to Controller.
 
 Only after Risk allows the successful barrier does BotCycle deliver `OnRecon`.
+
+`OnRecon` lets each supported running Executor act on accepted Account truth.
+
+TradeExecutor may submit or complete its bracket. GridExecutor may submit initial
+Orders or re-enter completed Levels.
+
+`Run(signal)` receives the complete unchanged Signal package from Controller.
+
+It passes that package to supported running Executors, then checks Executor
+statuses and reports coordinated BotCycle completion or failure.
+
+BotCycle does not split standard and custom Signal fields.
+
+BotCycle retains Nuubot and reads `nuubot.Clock.NowMS()` when current time is
+required. `Run` and `OnRecon` receive no timestamp argument.
 
 ## Market Data
 

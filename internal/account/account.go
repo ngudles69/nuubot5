@@ -38,7 +38,7 @@ var ErrNotSubmitted = errors.New("account Order batch was not submitted")
 
 // Config contains one Account's identity, policy, and direct-child inputs.
 type Config struct {
-	Infrastructure setup.Infrastructure
+	Nuubot         *setup.Nuubot
 	LedgerID       uint64
 	CycleNumber    int
 	ExecutorNumber int
@@ -458,7 +458,7 @@ func (a *Account) CancelOrders(cloids []string, timestampMS uint64) error {
 	var cancels = make([]hyperliquid.CancelByCLOIDRequest, 0, len(cloids))
 	for _, value := range cloids {
 		cancels = append(cancels, hyperliquid.CancelByCLOIDRequest{
-			Asset: int(a.config.Infrastructure.Meta.AssetID),
+			Asset: int(a.config.Nuubot.Meta.AssetID),
 			CLOID: value,
 		})
 	}
@@ -660,13 +660,13 @@ func (a *Account) normalizeSpecs(specs []OrderSpec) ([]OrderSpec, error) {
 			spec.Price == nil || !spec.Price.IsPositive() || spec.TimestampMS == 0 {
 			return nil, fmt.Errorf("place Account Orders: invalid or mixed batch")
 		}
-		var roundedPrice = a.config.Infrastructure.Meta.RoundPrice(*spec.Price)
+		var roundedPrice = a.config.Nuubot.Meta.RoundPrice(*spec.Price)
 		normalized[index].Price = &roundedPrice
 		if spec.TriggerPrice != nil {
-			var trigger = a.config.Infrastructure.Meta.RoundPrice(*spec.TriggerPrice)
+			var trigger = a.config.Nuubot.Meta.RoundPrice(*spec.TriggerPrice)
 			normalized[index].TriggerPrice = &trigger
 		}
-		normalized[index].Quantity = a.config.Infrastructure.Meta.RoundSize(spec.Quantity)
+		normalized[index].Quantity = a.config.Nuubot.Meta.RoundSize(spec.Quantity)
 		if !normalized[index].Quantity.IsPositive() {
 			return nil, fmt.Errorf("place Account Orders: quantity rounds to zero")
 		}
@@ -680,13 +680,13 @@ func (a *Account) normalizeSpecs(specs []OrderSpec) ([]OrderSpec, error) {
 	}
 	if newTrade {
 		var minNotionalUSDC = decimal.NewFromInt(
-			int64(a.config.Infrastructure.App.Hyperliquid.MinOrderNotionalUSDC),
+			int64(a.config.Nuubot.App.Hyperliquid.MinOrderNotionalUSDC),
 		)
 		var quantity = decimal.Zero
-		var step = decimal.New(1, -a.config.Infrastructure.Meta.SizeDecimals)
+		var step = decimal.New(1, -a.config.Nuubot.Meta.SizeDecimals)
 		for _, spec := range normalized {
 			var required = minNotionalUSDC.Div(*spec.Price).
-				Truncate(a.config.Infrastructure.Meta.SizeDecimals)
+				Truncate(a.config.Nuubot.Meta.SizeDecimals)
 			if required.Mul(*spec.Price).LessThan(minNotionalUSDC) {
 				required = required.Add(step)
 			}
@@ -710,7 +710,7 @@ func (a *Account) createCLOID(
 	orderLevel uint16,
 	spec OrderSpec,
 ) (string, error) {
-	if a.config.Infrastructure.Meta.AssetID > 0xffff ||
+	if a.config.Nuubot.Meta.AssetID > 0xffff ||
 		spec.TimestampMS/1000 > 0x7fffffff {
 		return "", fmt.Errorf("place Account Orders: CLOID identity exceeds fixed range")
 	}
@@ -728,7 +728,7 @@ func (a *Account) createCLOID(
 	}
 	var value, err = cloid.Encode(cloid.Fields{
 		BotCycleID: uint32(a.config.CycleNumber),
-		SymbolID:   uint16(a.config.Infrastructure.Meta.AssetID),
+		SymbolID:   uint16(a.config.Nuubot.Meta.AssetID),
 		Exchange:   1,
 		Network:    network,
 		Side:       side,
@@ -758,7 +758,7 @@ func (a *Account) venueOrderRequest(
 	value string,
 ) (hyperliquid.OrderRequest, error) {
 	var request = hyperliquid.OrderRequest{
-		Asset:      int(a.config.Infrastructure.Meta.AssetID),
+		Asset:      int(a.config.Nuubot.Meta.AssetID),
 		IsBuy:      spec.Side == order.Buy,
 		Price:      spec.Price.String(),
 		Size:       spec.Quantity.String(),

@@ -288,6 +288,16 @@ Levels MUST be uppercase and right-aligned to a minimum width of five.
 Terminal logs MUST prove completion, locate failures, measure work, or report
 domain results.
 
+High-level control structures MUST log lifecycle entry and successful
+completion. The caller's single error log appears after entry when completion
+is absent.
+
+Trusted internal logger dependencies MUST be used directly without nil guards
+or silent fallbacks.
+
+High-frequency `Run` calls MUST use counters and terminal summaries instead of
+per-call lifecycle logs.
+
 Components MUST report their own statistics.
 
 Parents MUST NOT collect child statistics only to re-log them.

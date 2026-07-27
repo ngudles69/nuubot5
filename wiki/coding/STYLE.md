@@ -162,6 +162,49 @@ A missing, extra, renamed, reordered, or falsely implemented step fails review.
 `internal/btbot/btbot.go` is the canonical example for numbered `Init`, `Start`,
 `Loop`, and `Stop` flow.
 
+### Code Reorganization
+
+Code reorganization is structure-only work. It MUST NOT change functionality.
+
+A reorganization MUST preserve:
+
+- public and internal behavior;
+- function signatures and interfaces;
+- call and callback order;
+- branch and return behavior;
+- error identity, wrapping, and precedence;
+- lifecycle and state-transition order;
+- logging messages, levels, and timing;
+- data values, calculations, and validation;
+- concurrency and ownership behavior;
+- persistence, schemas, and external effects; and
+- performance-sensitive work unless separately authorized.
+
+A reorganization MAY:
+
+- group related declarations and work;
+- narrow or clarify local variable names and scope;
+- add or correct `Step N:` intent comments;
+- separate coherent intent blocks with whitespace;
+- move declarations before loops when their values are reused; and
+- arrange existing independent blocks into visible dependency order only when
+  equivalence is proven.
+
+Do not add features, guards, logs, defaults, retries, fallbacks, validation,
+error handling, tests, dependencies, or abstractions during reorganization.
+
+Do not delete behavior, proof, validation, or error paths during reorganization.
+
+Read the complete target file before editing.
+
+Read its owning design and trace directly affected callers before moving code.
+
+If a proposed move may change behavior, stop and report it. Do not include that
+move in the reorganization.
+
+Run formatting, diagnostics, diff checks, and proportionate existing proof after
+the reorganization.
+
 Use one statement per intent:
 
 ```go
@@ -863,6 +906,18 @@ Logger values MUST be named `log`.
 Component messages MUST identify their owned operation.
 
 Programs MUST construct one complete string before calling `log`.
+
+High-level control structures MUST log lifecycle entry immediately and
+completion after successful fallible work.
+
+The entry log and missing completion log bracket failures. The owning caller's
+single error log identifies the failed operation between those boundaries.
+
+Required internal logger dependencies are trusted and used directly. Do not add
+nil guards or silent logging fallbacks inside internal control structures.
+
+High-frequency `Run` calls MUST use counters and terminal summaries instead of
+per-call entry and completion logs.
 
 Lifecycle success messages MUST follow all fallible lifecycle work.
 

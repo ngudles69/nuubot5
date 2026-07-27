@@ -8,12 +8,14 @@ import (
 	"github.com/shopspring/decimal"
 
 	"nuubot/internal/account"
+	"nuubot/internal/botspec"
 	appconfig "nuubot/internal/config"
 	"nuubot/internal/executor"
 	"nuubot/internal/market"
 	"nuubot/internal/meta"
 	"nuubot/internal/setup"
 	"nuubot/internal/signaler"
+	"nuubot/internal/toolkit/clock"
 	"nuubot/internal/toolkit/logging"
 )
 
@@ -22,6 +24,7 @@ type reconExecutor struct {
 	consecutiveFailures uint64
 	reconErr            error
 	reconciles          int
+	signal              signaler.Package
 	status              executor.Status
 }
 
@@ -36,6 +39,10 @@ func (e *reconExecutor) Result() (executor.Result, error) {
 func (e *reconExecutor) Reconcile(uint64, bool) (account.Snapshot, bool, uint64, error) {
 	e.reconciles++
 	return e.snapshot, e.reconErr == nil, e.consecutiveFailures, e.reconErr
+}
+func (e *reconExecutor) OnSignal(signal signaler.Package) error {
+	e.signal = signal
+	return nil
 }
 
 // Section 1 - Program Flow
@@ -55,8 +62,11 @@ func TestBotCycleReconHasNoPartialSnapshotBarrier(t *testing.T) {
 		snapshot: account.Snapshot{ExecutorNumber: 3, ObservedMS: 1_000},
 		status:   executor.Running,
 	}
-	var cycle = Control{executors: []executor.Executor{first, second, third}}
-	var result, err = cycle.Reconcile(1_000, false)
+	var cycle = BotCycle{
+		nuubot:    botCycleNuubot(t, nil),
+		executors: []executor.Executor{first, second, third},
+	}
+	var result, err = cycle.AcctRecon(false)
 	if err == nil {
 		t.Fatal("failed reconciliation barrier returned nil error")
 	}
@@ -73,23 +83,56 @@ func TestBotCycleReconHasNoPartialSnapshotBarrier(t *testing.T) {
 	}
 }
 
+func TestBotCycleDeliversCompleteSignalPackage(t *testing.T) {
+	var signal, err = signaler.CreatePackage(
+		"BTC",
+		2_000,
+		signaler.NoAction,
+		"bull",
+		0,
+		map[string]any{"enter_long": true, "abc": true},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var running = &reconExecutor{status: executor.Running}
+	var configured = &reconExecutor{status: executor.Configured}
+	var cycle = BotCycle{
+		executors: []executor.Executor{running, configured},
+		running:   true,
+	}
+	if _, err = cycle.Run(signal); err != nil {
+		t.Fatal(err)
+	}
+	var enterLong, exists = running.signal.Bool("enter_long")
+	if running.signal.TimestampMS() != 2_000 || !exists || !enterLong {
+		t.Fatalf("running Executor received incomplete Signal")
+	}
+	if configured.signal.TimestampMS() != 0 {
+		t.Fatalf("non-running Executor received Signal")
+	}
+}
+
 func TestBotCycleDispatchesObserverBBO(t *testing.T) {
 	var signal = cycleSignal(t, true)
-	var cycle Control
+	var cycle BotCycle
+	var nuubot = botCycleNuubot(t, []botspec.ExecutorSpec{{
+		ID: "observer", Kind: "observer", Side: executor.Long,
+		Resource:    botspec.Resource{Symbol: "BTC"},
+		StopLossPct: decimal.RequireFromString("0.01"),
+	}})
 	var err = cycle.Init(
-		logging.Create(&bytes.Buffer{}),
+		nuubot,
 		1,
 		signal,
 		Inputs{LatestBBOs: map[string]market.BBO{
 			"BTC": {TimestampMS: 2_000, Price: 100},
 		}},
-		[]executor.Spec{{
-			ID: "observer", Kind: "observer", Side: executor.Long,
-			Resource:    executor.Resource{Symbol: "BTC"},
-			StopLossPct: decimal.RequireFromString("0.01"),
-		}},
 	)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err = cycle.Start(); err != nil {
 		t.Fatal(err)
 	}
 	var first = market.BBO{TimestampMS: 3_000, Price: 100}
@@ -103,7 +146,7 @@ func TestBotCycleDispatchesObserverBBO(t *testing.T) {
 	}
 	cycle.OnBBO(second)
 	var completed bool
-	completed, err = cycle.Run(4_000)
+	completed, err = cycle.Run(signal)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,17 +165,17 @@ func TestBotCycleDispatchesObserverBBO(t *testing.T) {
 
 func TestBotCycleReturnsAdmissionRejection(t *testing.T) {
 	var signal = cycleSignal(t, false)
-	var cycle Control
+	var cycle BotCycle
+	var nuubot = botCycleNuubot(t, []botspec.ExecutorSpec{{
+		ID: "observer", Kind: "observer", Side: "both",
+		Resource:    botspec.Resource{Symbol: "BTC"},
+		StopLossPct: decimal.RequireFromString("0.01"),
+	}})
 	var err = cycle.Init(
-		logging.Create(&bytes.Buffer{}),
+		nuubot,
 		1,
 		signal,
 		Inputs{},
-		[]executor.Spec{{
-			ID: "observer", Kind: "observer", Side: "both",
-			Resource:    executor.Resource{Symbol: "BTC"},
-			StopLossPct: decimal.RequireFromString("0.01"),
-		}},
 	)
 	if !errors.Is(err, ErrRejected) {
 		t.Fatalf("actual error %v, expected admission rejection", err)
@@ -140,20 +183,22 @@ func TestBotCycleReturnsAdmissionRejection(t *testing.T) {
 }
 
 func TestBotCycleIngestsGridBBOWhileStopping(t *testing.T) {
-	var cycle Control
+	var cycle BotCycle
+	var nuubot = botCycleNuubot(t, []botspec.ExecutorSpec{gridSpec()})
 	var err = cycle.Init(
-		logging.Create(&bytes.Buffer{}),
+		nuubot,
 		1,
 		cycleSignal(t, true),
 		Inputs{
-			Infrastructure: botCycleInfrastructure(),
 			LatestBBOs: map[string]market.BBO{
 				"BTC": {TimestampMS: 2_000, Price: 100},
 			},
 		},
-		[]executor.Spec{gridSpec()},
 	)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err = cycle.Start(); err != nil {
 		t.Fatal(err)
 	}
 	var boundary = market.BBO{TimestampMS: 3_000, Price: 105}
@@ -198,11 +243,23 @@ func cycleSignal(t *testing.T, start bool) signaler.Package {
 	return signal
 }
 
-func botCycleInfrastructure() setup.Infrastructure {
-	return setup.Infrastructure{
+func botCycleNuubot(t *testing.T, specs []botspec.ExecutorSpec) *setup.Nuubot {
+	t.Helper()
+	var log = logging.Create(&bytes.Buffer{})
+	var activeClock, err = clock.Create(clock.Tick)
+	if err != nil {
+		t.Fatalf("create BotCycle test Clock: %v", err)
+	}
+	if err = activeClock.Init(log, 1_000); err != nil {
+		t.Fatalf("initialize BotCycle test Clock: %v", err)
+	}
+	return &setup.Nuubot{
+		Log:   log,
+		Clock: activeClock,
 		App: appconfig.App{
 			Hyperliquid: appconfig.Hyperliquid{MinOrderNotionalUSDC: 11},
 		},
+		BotSpec: botspec.Spec{Executors: specs},
 		Meta: meta.Instrument{
 			Network:       "testnet",
 			Kind:          "perp",
@@ -213,13 +270,13 @@ func botCycleInfrastructure() setup.Infrastructure {
 	}
 }
 
-func gridSpec() executor.Spec {
-	return executor.Spec{
+func gridSpec() botspec.ExecutorSpec {
+	return botspec.ExecutorSpec{
 		ID:   "grid",
 		Role: "grid",
 		Kind: "grid",
 		Side: executor.Long,
-		Resource: executor.Resource{
+		Resource: botspec.Resource{
 			Venue:             "simulator",
 			Network:           "simnet",
 			PhysicalAccountID: "sim",

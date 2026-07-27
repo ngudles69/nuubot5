@@ -7,17 +7,20 @@ import (
 	"github.com/shopspring/decimal"
 
 	"nuubot/internal/account"
+	"nuubot/internal/botspec"
 	"nuubot/internal/ledger"
 	"nuubot/internal/market"
 	"nuubot/internal/order"
+	"nuubot/internal/setup"
 	"nuubot/internal/toolkit/logging"
 	"nuubot/internal/trade"
 )
 
 type tradeExecutor struct {
 	log            *logging.Logger
+	nuubot         *setup.Nuubot
 	account        account.Account
-	spec           Spec
+	spec           botspec.ExecutorSpec
 	cycleNumber    int
 	executorNumber int
 	signalMS       uint64
@@ -43,7 +46,8 @@ var _ ReconHandler = (*tradeExecutor)(nil)
 
 // OnInit initializes TradeExecutor without submitting Orders.
 func (e *tradeExecutor) OnInit(ctx Context) error {
-	e.log = ctx.Log
+	e.log = ctx.Nuubot.Log
+	e.nuubot = ctx.Nuubot
 	e.spec = ctx.Spec
 	if e.status != Configured {
 		return fmt.Errorf("trade executor cannot initialize from current state")
@@ -86,12 +90,12 @@ func (e *tradeExecutor) OnInit(ctx Context) error {
 	e.lastBBO = ctx.LatestBBO
 	e.cycleNumber = ctx.CycleNumber
 	e.executorNumber = ctx.ExecutorNumber
-	e.signalMS = ctx.SignalTimestampMS
+	e.signalMS = ctx.Signal.TimestampMS()
 
 	// initialize Account
 	var ledgerID = uint64(ctx.CycleNumber)<<32 | uint64(ctx.ExecutorNumber)
-	var err = e.account.Init(ctx.Log, account.Config{
-		Infrastructure: ctx.Infrastructure,
+	var err = e.account.Init(account.Config{
+		Nuubot:         ctx.Nuubot,
 		LedgerID:       ledgerID,
 		CycleNumber:    ctx.CycleNumber,
 		ExecutorNumber: ctx.ExecutorNumber,
@@ -267,7 +271,7 @@ func (e *tradeExecutor) Reconcile(
 }
 
 // OnRecon runs TradeExecutor policy after one accepted reconciliation barrier.
-func (e *tradeExecutor) OnRecon(_ uint64) error {
+func (e *tradeExecutor) OnRecon() error {
 	if e.status != Running {
 		return nil
 	}

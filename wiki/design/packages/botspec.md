@@ -38,7 +38,9 @@ BotSpec never contains:
 
 BotSpec creates no Signaler, Risk, BotCycle, Executor, Account, or Venue object.
 
-Controller receives complete Setup plus BotSpec and constructs runtime objects.
+Setup stores BotSpec in the shared Nuubot harness.
+
+Controller reads BotSpec from Nuubot and constructs runtime objects.
 
 Extra TOML fields remain stored and ignored.
 

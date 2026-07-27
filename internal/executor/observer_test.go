@@ -8,7 +8,10 @@ import (
 
 	"github.com/shopspring/decimal"
 
+	"nuubot/internal/botspec"
 	"nuubot/internal/market"
+	"nuubot/internal/setup"
+	"nuubot/internal/signaler"
 	"nuubot/internal/toolkit/logging"
 )
 
@@ -17,13 +20,13 @@ import (
 func TestObserverHandlesBBOAndRecordsStopLoss(t *testing.T) {
 	var output bytes.Buffer
 	var created, err = Create(Context{
-		Log:               logging.Create(&output),
-		CycleNumber:       1,
-		ExecutorNumber:    1,
-		SignalTimestampMS: 2_000,
-		Spec: Spec{
+		Nuubot:         &setup.Nuubot{Log: logging.Create(&output)},
+		CycleNumber:    1,
+		ExecutorNumber: 1,
+		Signal:         executorTestSignal(t),
+		Spec: botspec.ExecutorSpec{
 			ID: "observer", Kind: "observer", Side: Long,
-			Resource:    Resource{Symbol: "BTC"},
+			Resource:    botspec.Resource{Symbol: "BTC"},
 			StopLossPct: decimal.RequireFromString("0.01"),
 		},
 	})
@@ -65,13 +68,13 @@ func TestObserverHandlesBBOAndRecordsStopLoss(t *testing.T) {
 
 func TestObserverRejectsInvalidConfiguredSide(t *testing.T) {
 	var _, err = Create(Context{
-		Log:               logging.Create(&bytes.Buffer{}),
-		CycleNumber:       1,
-		ExecutorNumber:    1,
-		SignalTimestampMS: 2_000,
-		Spec: Spec{
+		Nuubot:         &setup.Nuubot{Log: logging.Create(&bytes.Buffer{})},
+		CycleNumber:    1,
+		ExecutorNumber: 1,
+		Signal:         executorTestSignal(t),
+		Spec: botspec.ExecutorSpec{
 			ID: "observer", Kind: "observer", Side: "both",
-			Resource:    Resource{Symbol: "BTC"},
+			Resource:    botspec.Resource{Symbol: "BTC"},
 			StopLossPct: decimal.RequireFromString("0.01"),
 		},
 	})
@@ -81,5 +84,27 @@ func TestObserverRejectsInvalidConfiguredSide(t *testing.T) {
 }
 
 // Section 2 - Domain Helpers
+
+func executorTestSignal(t *testing.T) signaler.Package {
+	t.Helper()
+	var signal, err = signaler.CreatePackage(
+		"BTC",
+		2_000,
+		signaler.NoAction,
+		"bull",
+		0,
+		map[string]any{
+			"enter_long":    true,
+			"enter_short":   false,
+			"exit_long":     false,
+			"exit_short":    false,
+			"regime_change": false,
+		},
+	)
+	if err != nil {
+		t.Fatalf("create Executor test Signal: %v", err)
+	}
+	return signal
+}
 
 // Section 3 - Generic Helpers

@@ -8,6 +8,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"nuubot/internal/account"
+	"nuubot/internal/botspec"
 	"nuubot/internal/ledger"
 	"nuubot/internal/market"
 	"nuubot/internal/order"
@@ -20,8 +21,9 @@ const gridDeploymentPct = 95
 
 type gridExecutor struct {
 	log            *logging.Logger
+	nuubot         *setup.Nuubot
 	account        account.Account
-	spec           Spec
+	spec           botspec.ExecutorSpec
 	cycleNumber    int
 	executorNumber int
 	signalMS       uint64
@@ -49,7 +51,8 @@ var _ ReconHandler = (*gridExecutor)(nil)
 
 // OnInit initializes GridExecutor and logs its validated levels without submitting Orders.
 func (e *gridExecutor) OnInit(ctx Context) error {
-	e.log = ctx.Log
+	e.log = ctx.Nuubot.Log
+	e.nuubot = ctx.Nuubot
 	e.spec = ctx.Spec
 	if e.status != Configured {
 		return fmt.Errorf("grid executor cannot initialize from current state")
@@ -92,12 +95,12 @@ func (e *gridExecutor) OnInit(ctx Context) error {
 	e.lastBBO = ctx.LatestBBO
 	e.cycleNumber = ctx.CycleNumber
 	e.executorNumber = ctx.ExecutorNumber
-	e.signalMS = ctx.SignalTimestampMS
+	e.signalMS = ctx.Signal.TimestampMS()
 
 	// calculate grid levels
 	var err error
 	e.levels, err = calculateGridLevels(
-		ctx.Infrastructure,
+		ctx.Nuubot,
 		ctx.Spec,
 		ctx.LatestBBO,
 		equity,
@@ -109,8 +112,8 @@ func (e *gridExecutor) OnInit(ctx Context) error {
 
 	// initialize Account
 	var ledgerID = uint64(ctx.CycleNumber)<<32 | uint64(ctx.ExecutorNumber)
-	err = e.account.Init(ctx.Log, account.Config{
-		Infrastructure: ctx.Infrastructure,
+	err = e.account.Init(account.Config{
+		Nuubot:         ctx.Nuubot,
 		LedgerID:       ledgerID,
 		CycleNumber:    ctx.CycleNumber,
 		ExecutorNumber: ctx.ExecutorNumber,
@@ -353,10 +356,12 @@ func (e *gridExecutor) Reconcile(
 }
 
 // OnRecon re-enters completed levels.
-func (e *gridExecutor) OnRecon(nowMS uint64) error {
+func (e *gridExecutor) OnRecon() error {
 	if e.status != Running {
 		return nil
 	}
+
+	var nowMS = e.nuubot.Clock.NowMS()
 
 	// re-enter completed levels
 	for _, index := range e.activeLevelIndexes() {
@@ -616,22 +621,22 @@ func (e *gridExecutor) stopError(err error) error {
 }
 
 func calculateGridLevels(
-	infrastructure setup.Infrastructure,
-	spec Spec,
+	nuubot *setup.Nuubot,
+	spec botspec.ExecutorSpec,
 	bbo market.BBO,
 	equity decimal.Decimal,
 ) ([]GridLevel, error) {
 	var start = decimal.NewFromFloat(bbo.Price)
 	var one = decimal.NewFromInt(1)
 	var minNotionalUSDC = decimal.NewFromInt(
-		int64(infrastructure.App.Hyperliquid.MinOrderNotionalUSDC),
+		int64(nuubot.App.Hyperliquid.MinOrderNotionalUSDC),
 	)
-	var lower = infrastructure.Meta.RoundPrice(start.Mul(one.Sub(spec.RangePct)))
-	var upper = infrastructure.Meta.RoundPrice(start.Mul(one.Add(spec.RangePct)))
+	var lower = nuubot.Meta.RoundPrice(start.Mul(one.Sub(spec.RangePct)))
+	var upper = nuubot.Meta.RoundPrice(start.Mul(one.Add(spec.RangePct)))
 	var step = upper.Sub(lower).Div(decimal.NewFromInt(int64(spec.GridLevels - 1)))
 	var prices = make([]decimal.Decimal, spec.GridLevels)
 	for index := range prices {
-		prices[index] = infrastructure.Meta.RoundPrice(
+		prices[index] = nuubot.Meta.RoundPrice(
 			lower.Add(step.Mul(decimal.NewFromInt(int64(index)))),
 		)
 		if index > 0 && !prices[index].GreaterThan(prices[index-1]) {
@@ -669,18 +674,18 @@ func calculateGridLevels(
 		level.IntendedAction = "enter_long"
 		if spec.Side == Long {
 			if start.LessThan(level.InitialEntryPrice) {
-				level.InitialEntryPrice = infrastructure.Meta.RoundPrice(start)
+				level.InitialEntryPrice = nuubot.Meta.RoundPrice(start)
 			}
 		} else {
 			exitIndex = index - 1
 			level.IntendedAction = "enter_short"
 			if start.GreaterThan(level.InitialEntryPrice) {
-				level.InitialEntryPrice = infrastructure.Meta.RoundPrice(start)
+				level.InitialEntryPrice = nuubot.Meta.RoundPrice(start)
 			}
 		}
 		level.ExitPrice = levels[exitIndex].GridPrice
 		var sizingPrice = decimal.Max(level.InitialEntryPrice, level.ReentryPrice)
-		level.Quantity = infrastructure.Meta.RoundSize(
+		level.Quantity = nuubot.Meta.RoundSize(
 			slice.Div(one.Add(feeRate)).Div(sizingPrice),
 		)
 		if !level.Quantity.IsPositive() {

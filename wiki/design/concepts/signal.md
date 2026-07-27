@@ -2,7 +2,7 @@
 
 Status: Implemented.
 Covers: `internal/signaler`, `internal/controller`
-Purpose: Carry immutable strategy lifecycle state into Controller.
+Purpose: Carry one immutable strategy package through Controller, BotCycle, and Executors.
 
 ## Shape
 
@@ -13,7 +13,7 @@ One Package contains:
 - typed Action;
 - regime;
 - risk score; and
-- diagnostic fields.
+- arbitrary BotSpec-defined custom fields.
 
 Actions are `NoAction`, `StartCycle`, and `StopCycle`.
 
@@ -38,16 +38,21 @@ There is no queue and no fresh-crossover requirement.
 
 Signaler calculates.
 
-Controller arbitrates.
+Controller reads the standard Action and arbitrates lifecycle.
 
-BotCycle coordinates.
+Controller passes the complete unchanged package into active `BotCycle.Run`.
 
-Executor executes its fixed Config.
+BotCycle passes the complete unchanged package to supported running Executors.
+
+Each Executor reads only the standard or custom fields required by its fixed BotSpec.
 
 Signaler calls none of those owners.
 
 ## Evidence
 
 Controller records each newly observed Package timestamp and Action once.
+
+An active BotCycle receives the complete current package on every Controller
+pass. Custom Executor handling must preserve persistent traffic-light semantics.
 
 ResultPublisher stores ordered Signal decisions.

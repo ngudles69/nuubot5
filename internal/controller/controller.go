@@ -11,7 +11,7 @@ import (
 	"nuubot/internal/bot"
 	"nuubot/internal/botcycle"
 	"nuubot/internal/botspec"
-	"nuubot/internal/executor"
+
 	"nuubot/internal/market"
 	"nuubot/internal/risk"
 	"nuubot/internal/setup"
@@ -83,9 +83,9 @@ type Telemetry struct {
 }
 
 type cycleControl interface {
-	Reconcile(uint64, bool) (botcycle.ReconResult, error)
-	OnRecon(uint64) error
-	Run(uint64) (bool, error)
+	AcctRecon(bool) (botcycle.ReconResult, error)
+	OnRecon() error
+	Run(signaler.Package) (bool, error)
 	Stop(string) (string, error)
 	IngestBBO(market.BBO) error
 	OnBBO(market.BBO)
@@ -96,9 +96,7 @@ type cycleControl interface {
 // Controller owns synchronous Bot decisions and its direct children.
 type Controller struct {
 	log             *logging.Logger
-	infrastructure  setup.Infrastructure
-	spec            botspec.Spec
-	identity        bot.Identity
+	nuubot          *setup.Nuubot
 	signaler        signaler.Signaler
 	risks           []risk.Risk
 	cycle           cycleControl
@@ -107,7 +105,7 @@ type Controller struct {
 	signalLog       []SignalDecision
 	riskLog         []RiskDecision
 	lastRisk        []risk.Decision
-	resourceEquity  map[executor.Resource]decimal.Decimal
+	resourceEquity  map[botspec.Resource]decimal.Decimal
 	botCapital      decimal.Decimal
 	peakEquity      decimal.Decimal
 	maxDrawdown     decimal.Decimal
@@ -125,47 +123,39 @@ type Controller struct {
 // Section 1 - Program Flow
 
 // Init prepares one Controller from Setup and one typed BotSpec.
-func (c *Controller) Init(
-	log *logging.Logger,
-	infrastructure setup.Infrastructure,
-	spec botspec.Spec,
-) error {
-	var storedBot = infrastructure.Bot
-	var replay = storedBot.Replay
-	if log == nil || storedBot.BotSpecID == "" || storedBot.ConfigTOML == "" ||
-		spec.ID != storedBot.BotSpecID || replay.Symbol == "" ||
-		spec.Controller.MaxCycles == 0 ||
-		spec.Signaler.Kind == "" || len(spec.Executors) == 0 {
-		return fmt.Errorf("controller inputs are incomplete")
-	}
-	for _, executorSpec := range spec.Executors {
-		if executorSpec.Resource.Symbol != replay.Symbol {
-			return fmt.Errorf(
-				"controller Executor symbol %s lacks replay input",
-				executorSpec.Resource.Symbol,
-			)
-		}
+func (c *Controller) Init(nuubot *setup.Nuubot) error {
+	// Step 1: retain Nuubot and log init
+	c.nuubot = nuubot
+	c.log = nuubot.Log
+	c.log.Info("controller init")
+	var botInput = nuubot.Bot
+	var replayInput = botInput.Replay
+	var spec = nuubot.BotSpec
+
+	// Step 2: set Signaler replay range
+	var end = replayInput.ReplayEnd
+	if replayInput.EndAt != nil && replayInput.EndAt.Before(end) {
+		end = *replayInput.EndAt
 	}
 
-	var end = replay.ReplayEnd
-	if replay.EndAt != nil && replay.EndAt.Before(end) {
-		end = *replay.EndAt
-	}
+	// Step 3: create Signaler
 	var signals, err = signaler.Create(
-		log,
+		c.log,
 		spec.Signaler,
-		replay.Symbol,
-		replay.TicksPath,
-		replay.ReplayStart,
+		replayInput.Symbol,
+		replayInput.TicksPath,
+		replayInput.ReplayStart,
 		end,
 	)
 	if err != nil {
 		return fmt.Errorf("initialize Controller Signaler: %w", err)
 	}
+
+	// Step 4: create Risks
 	var risks = make([]risk.Risk, 0, len(spec.Risks))
 	for index, riskSpec := range spec.Risks {
 		var created risk.Risk
-		created, err = risk.Create(log, index+1, riskSpec.Kind)
+		created, err = risk.Create(c.log, index+1, riskSpec.Kind)
 		if err != nil {
 			for stopIndex := len(risks) - 1; stopIndex >= 0; stopIndex-- {
 				risks[stopIndex].Stop()
@@ -176,21 +166,16 @@ func (c *Controller) Init(
 		risks = append(risks, created)
 	}
 
-	c.log = log
-	c.infrastructure = infrastructure
-	c.spec = spec
-	c.identity = bot.Identity{
-		SweepID:    storedBot.SweepID,
-		BotID:      storedBot.BotID,
-		BotSpecID:  storedBot.BotSpecID,
-		ConfigTOML: storedBot.ConfigTOML,
-		ConfigHash: storedBot.ConfigHash,
-	}
+	// Step 5: retain Controller components
 	c.signaler = signals
 	c.risks = risks
+
+	// Step 6: initialize Controller state
 	c.latestBBOs = make(map[string]market.BBO)
-	c.resourceEquity = make(map[executor.Resource]decimal.Decimal)
+	c.resourceEquity = make(map[botspec.Resource]decimal.Decimal)
 	c.lastRisk = make([]risk.Decision, len(spec.Risks))
+
+	// Step 7: initialize resource capital
 	for _, executorSpec := range spec.Executors {
 		if !executorSpec.CapitalUSDC.IsPositive() {
 			continue
@@ -209,59 +194,75 @@ func (c *Controller) Init(
 		c.botCapital = c.botCapital.Add(executorSpec.CapitalUSDC)
 	}
 	c.peakEquity = c.botCapital
-	log.Info(fmt.Sprintf(
-		"controller initialized bot_spec=%s spec_hash=%s",
-		storedBot.BotSpecID,
-		storedBot.ConfigHash,
+
+	// Step 8: log init completed
+	c.log.Info(fmt.Sprintf(
+		"controller init completed bot_spec=%s spec_hash=%s",
+		botInput.BotSpecID,
+		botInput.ConfigHash,
 	))
 	return nil
 }
 
 // Start starts Controller processing.
 func (c *Controller) Start() error {
+	// Step 1: log start
+	c.log.Info("controller start")
+
+	// Step 2: validate start state
 	if c.started || c.stopped {
 		return fmt.Errorf("controller cannot start from current state")
 	}
+
+	// Step 3: mark Controller started
 	c.started = true
+
+	// Step 4: log start completed
 	c.log.Info("controller started")
 	return nil
 }
 
 // Run executes one timer-driven control pass.
-func (c *Controller) Run(nowMS uint64) (bool, error) {
+func (c *Controller) Run() (bool, error) {
+	// Step 1: validate run state
 	if !c.started || c.stopped {
 		return false, fmt.Errorf("controller cannot run from current state")
 	}
+
+	// Step 2: read Clock, record run, and check stop request
+	var nowMS = c.nuubot.Clock.NowMS()
 	c.stats.runs++
 	if c.stopReason != "" {
 		return true, nil
 	}
 
+	// Step 3: reconcile active BotCycle
 	var snapshots []account.Snapshot
 	if c.cycle != nil {
-		var barrier, err = c.cycle.Reconcile(nowMS, false)
-		if barrier.MaxConsecutiveFailures >= 3 {
+		var result, err = c.cycle.AcctRecon(false)
+		if result.MaxConsecutiveFailures >= 3 {
 			if err != nil {
 				return false, fmt.Errorf(
 					"reconcile BotCycle failed %d consecutive times: %w",
-					barrier.MaxConsecutiveFailures,
+					result.MaxConsecutiveFailures,
 					err,
 				)
 			}
 			return false, fmt.Errorf(
 				"reconcile BotCycle failed %d consecutive times",
-				barrier.MaxConsecutiveFailures,
+				result.MaxConsecutiveFailures,
 			)
 		}
 		if err != nil {
-			if barrier.Failed && barrier.MaxConsecutiveFailures > 0 {
+			if result.Failed && result.MaxConsecutiveFailures > 0 {
 				return false, nil
 			}
 			return false, fmt.Errorf("reconcile BotCycle: %w", err)
 		}
-		snapshots = barrier.Snapshots
+		snapshots = result.Snapshots
 	}
 
+	// Step 4: assess Risks
 	var blockStart bool
 	var stopCycle bool
 	var stopController bool
@@ -288,6 +289,8 @@ func (c *Controller) Run(nowMS uint64) (bool, error) {
 			return false, fmt.Errorf("Risk returned invalid decision: %s", decision)
 		}
 	}
+
+	// Step 5: apply Risk decisions
 	if stopController {
 		c.requestStop("risk")
 		return true, nil
@@ -301,34 +304,24 @@ func (c *Controller) Run(nowMS uint64) (bool, error) {
 		return false, nil
 	}
 
+	// Step 6: deliver accepted reconciliation
 	if c.cycle != nil {
-		if err := c.cycle.OnRecon(nowMS); err != nil {
+		if err := c.cycle.OnRecon(); err != nil {
 			return false, fmt.Errorf("deliver BotCycle recon: %w", err)
-		}
-		var completed, err = c.cycle.Run(nowMS)
-		if err != nil {
-			return false, fmt.Errorf("run BotCycle: %w", err)
-		}
-		if completed {
-			if err = c.closeCycle("completed"); err != nil {
-				return false, fmt.Errorf("close completed BotCycle: %w", err)
-			}
-			if c.stats.cyclesClosed >= c.spec.Controller.MaxCycles {
-				c.requestStop("max_cycles")
-				return true, nil
-			}
-			return false, nil
 		}
 	}
 
+	// Step 7: read current Signal
 	var packages = c.signaler.Signals(
-		c.infrastructure.Bot.Replay.Symbol,
+		c.nuubot.Bot.Replay.Symbol,
 		nowMS,
 		1,
 	)
 	if len(packages) == 0 {
 		return false, nil
 	}
+
+	// Step 8: record new Signal
 	var current = packages[len(packages)-1]
 	var newSignal = current.TimestampMS() > c.lastSignalMS
 	if newSignal {
@@ -340,6 +333,25 @@ func (c *Controller) Run(nowMS uint64) (bool, error) {
 		})
 	}
 
+	// Step 9: run active BotCycle with current Signal
+	if c.cycle != nil {
+		var completed, err = c.cycle.Run(current)
+		if err != nil {
+			return false, fmt.Errorf("run BotCycle: %w", err)
+		}
+		if completed {
+			if err = c.closeCycle("completed"); err != nil {
+				return false, fmt.Errorf("close completed BotCycle: %w", err)
+			}
+			if c.stats.cyclesClosed >= c.nuubot.BotSpec.Controller.MaxCycles {
+				c.requestStop("max_cycles")
+				return true, nil
+			}
+			return false, nil
+		}
+	}
+
+	// Step 10: apply Signal action
 	switch current.Action() {
 	case signaler.NoAction:
 		return false, nil
@@ -360,7 +372,7 @@ func (c *Controller) Run(nowMS uint64) (bool, error) {
 		if blockStart {
 			return false, nil
 		}
-		if c.stats.cyclesStarted >= c.spec.Controller.MaxCycles {
+		if c.stats.cyclesStarted >= c.nuubot.BotSpec.Controller.MaxCycles {
 			c.requestStop("max_cycles")
 			return true, nil
 		}
@@ -385,17 +397,34 @@ func (c *Controller) Run(nowMS uint64) (bool, error) {
 
 // Stop closes the active BotCycle and stops direct children.
 func (c *Controller) Stop(reason string) error {
+	// Step 1: log stop
+	c.log.Info("controller stop")
+
+	// Step 2: ignore repeated stop request
 	if c.stopped {
+		c.log.Info("controller stopping - ignoring stop request")
 		return nil
 	}
+
+	// Step 3: request Controller stop
 	c.requestStop(reason)
 	c.started = false
+
+	// Step 4: close active BotCycle
 	var firstErr = c.closeCycle(c.stopReason)
+
+	// Step 5: stop Risks
 	for index := len(c.risks) - 1; index >= 0; index-- {
 		c.risks[index].Stop()
 	}
+
+	// Step 6: stop Signaler
 	c.signaler.Stop()
+
+	// Step 7: mark Controller stopped
 	c.stopped = true
+
+	// Step 8: log stopped results and stats
 	c.log.Info(fmt.Sprintf(
 		"controller stopped ticks_accepted=%d runs=%d signal_packages_read=%d "+
 			"start_actions_skipped=%d cycles_started=%d cycles_rejected=%d "+
@@ -413,6 +442,8 @@ func (c *Controller) Stop(reason string) error {
 		c.stats.stopLossExits,
 		c.stopReason,
 	))
+
+	// Step 9: return stop error
 	return firstErr
 }
 
@@ -426,7 +457,7 @@ func (c *Controller) IngestBBO(bbo market.BBO) error {
 	if bbo.Symbol == "" {
 		return fmt.Errorf("controller requires symbol-qualified BBO")
 	}
-	c.recordCycleTime(bbo.TimestampMS)
+	c.recordBBOGap(bbo.TimestampMS)
 	c.latestBBOs[bbo.Symbol] = bbo
 	if c.cycle != nil {
 		if err := c.cycle.IngestBBO(bbo); err != nil {
@@ -440,8 +471,15 @@ func (c *Controller) IngestBBO(bbo market.BBO) error {
 
 // Result returns one independently owned terminal Controller result.
 func (c *Controller) Result() Result {
+	var botInput = c.nuubot.Bot
 	var result = Result{
-		Identity:        c.identity,
+		Identity: bot.Identity{
+			SweepID:    botInput.SweepID,
+			BotID:      botInput.BotID,
+			BotSpecID:  botInput.BotSpecID,
+			ConfigTOML: botInput.ConfigTOML,
+			ConfigHash: botInput.ConfigHash,
+		},
 		Signals:         append([]SignalDecision(nil), c.signalLog...),
 		Risks:           append([]RiskDecision(nil), c.riskLog...),
 		ExitReason:      c.stopReason,
@@ -525,17 +563,17 @@ func (c *Controller) Telemetry() Telemetry {
 	}
 }
 
-func (c *Controller) recordCycleTime(nowMS uint64) {
+func (c *Controller) recordBBOGap(nowMS uint64) {
 	if c.firstMS == 0 {
 		c.firstMS = nowMS
 		c.lastMS = nowMS
 		return
 	}
-	var elapsed = nowMS - c.lastMS
+	var bboGapMS = nowMS - c.lastMS
 	if c.cycle == nil {
-		c.timeOutCyclesMS += elapsed
+		c.timeOutCyclesMS += bboGapMS
 	} else {
-		c.timeInCyclesMS += elapsed
+		c.timeInCyclesMS += bboGapMS
 	}
 	c.lastMS = nowMS
 }
@@ -549,18 +587,20 @@ func addReconStats(total *account.ReconStats, current account.ReconStats) {
 }
 
 func (c *Controller) openCycle(signal signaler.Package) error {
-	var cycle botcycle.Control
+	var cycle botcycle.BotCycle
 	var err = cycle.Init(
-		c.log,
+		c.nuubot,
 		int(c.stats.cyclesStarted+c.stats.cyclesRejected+1),
 		signal,
 		botcycle.Inputs{
-			Infrastructure: c.infrastructure,
 			LatestBBOs:     c.latestBBOs,
 			ResourceEquity: c.resourceEquity,
 		},
-		c.spec.Executors,
 	)
+	if err != nil {
+		return err
+	}
+	err = cycle.Start()
 	if err != nil {
 		return err
 	}
@@ -610,8 +650,8 @@ func (c *Controller) riskInput(
 		equity = equity.Add(value)
 	}
 	for _, snapshot := range snapshots {
-		for _, spec := range c.spec.Executors {
-			var resource = executor.Resource{
+		for _, spec := range c.nuubot.BotSpec.Executors {
+			var resource = botspec.Resource{
 				Venue:             snapshot.Venue,
 				Network:           snapshot.Network,
 				PhysicalAccountID: snapshot.Account,

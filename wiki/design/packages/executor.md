@@ -12,8 +12,10 @@ One immutable Executor Spec contains:
 - `(venue, network, physical_account_id, symbol)` resource;
 - declared capital and order size;
 - strategy-specific levels, thresholds, and percentages;
-- Meta and minimum notional; and
-- result persistence path.
+- strategy-specific persistence policy.
+
+Meta, application-wide minimum notional, Logger, and ResultPath come from the
+shared Nuubot harness. They are not Executor specification fields.
 
 BotSpec admission rejects duplicate resources inside one Bot.
 
@@ -32,8 +34,11 @@ type Executor interface {
 }
 ```
 
-Optional narrow capabilities handle BBO, reconciliation, and Account
-snapshots.
+Optional narrow capabilities handle complete Signal packages, BBO,
+reconciliation, and Account snapshots.
+
+`SignalHandler.OnSignal` receives the unchanged `signaler.Package`. Each
+Executor reads only the fields required by its BotSpec.
 
 BotCycle owns capability dispatch.
 

@@ -2,36 +2,70 @@
 
 Status: Implemented for standalone historical replay.
 Covers: `internal/controller/controller.go`
-Purpose: Construct and run one configured Bot from complete Setup and typed BotSpec.
+Purpose: Construct and run one configured Bot from one shared Nuubot harness.
 
 ## Ownership
 
-Controller receives complete `setup.Infrastructure` and one immutable
-`botspec.Spec`.
+Controller receives one shared `*setup.Nuubot` and retains it as `c.nuubot`.
 
-Complete Setup supplies App Config, Bot identity and provenance, replay inputs,
-Meta, and ResultPath.
+Nuubot supplies Logger, App Config, Bot identity and provenance, replay input,
+typed BotSpec, Meta, and ResultPath.
 
-BotSpec supplies typed Controller, Signaler, Risk, and Executor specifications.
+Controller retains `nuubot.Log` as `c.log` for convenient logging.
+
+Controller does not duplicate Nuubot, BotSpec, Bot identity, App Config, Meta, or ResultPath.
 
 Controller constructs and owns one persistent Signaler, configured Risks, and
 zero or one active BotCycle.
 
 BotCycle constructs configured Executors when a cycle starts.
 
-Controller never reparses App Config or loads Setup infrastructure.
+Controller never reparses App Config, BotConfig, or Setup infrastructure.
 
-## Control Pass
+## Program Flow
 
 ```text
-reconcile active BotCycle
-build immutable RiskInput
-assess every Risk
-deliver accepted reconciliation
-close a terminal BotCycle
-read current Signaler action
-start or stop one BotCycle
+Controller Init
+  retain Nuubot and log init
+  set Signaler replay range
+  create Signaler
+  create Risks
+  retain Controller components
+  initialize Controller state
+  initialize resource capital
+  log init completed
+
+Controller Start
+  log start
+  validate start state
+  mark Controller started
+  log start completed
+
+Controller Run
+  validate run state
+  read Clock, record run, and check stop request
+  reconcile active BotCycle
+  assess Risks
+  apply Risk decisions
+  deliver accepted reconciliation
+  read current Signal
+  record new Signal
+  run active BotCycle with current Signal
+  apply Signal action
+
+Controller Stop
+  log stop
+  ignore repeated stop request
+  request Controller stop
+  close active BotCycle
+  stop Risks
+  stop Signaler
+  mark Controller stopped
+  log stopped results and stats
+  return stop error
 ```
+
+## Control Pass
 
 Reconciliation precedes Risk and Executor policy.
 
@@ -54,11 +88,18 @@ Every Risk assesses the same immutable RiskInput before Controller acts.
 
 Signaler actions are `NoAction`, `StartCycle`, and `StopCycle`.
 
-Controller never queues a Signal.
+Controller never queues or splits a Signal package.
+
+Controller reads current time from `nuubot.Clock`.
+
+Controller reads the complete current package, passes it unchanged into active
+`BotCycle.Run(signal)`, then applies its standard lifecycle Action.
+
+Controller passes no timestamp into `AcctRecon`, `OnRecon`, or `BotCycle.Run`.
 
 Controller has no isolated unit tests.
 
-RTest proves Controller through the real `Setup -> BotSpec -> Controller -> BtBot`
+RTest proves Controller through the real `Setup -> Nuubot -> Controller -> BtBot`
 path using `./stest.sh -bot 9`.
 
 After completion, the current `StartCycle` action may start another cycle on

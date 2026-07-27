@@ -7,7 +7,6 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/shopspring/decimal"
 
-	"nuubot/internal/executor"
 	"nuubot/internal/signaler"
 )
 
@@ -15,6 +14,8 @@ const (
 	MacrossObserver = "macross_observer_bot"
 	MacrossTrade    = "macross_trade_bot"
 	MacrossGrid     = "macross_grid_bot"
+	long            = "long"
+	short           = "short"
 )
 
 type controllerConfig struct {
@@ -162,12 +163,12 @@ func buildMacrossGrid(configTOML string) (Spec, error) {
 	if len(cfg.Executors) != 1 {
 		return Spec{}, fmt.Errorf("%s requires one Grid Executor", MacrossGrid)
 	}
-	var spec executor.Spec
+	var spec ExecutorSpec
 	spec, err = buildGridExecutor(cfg.Executors[0])
 	if err != nil {
 		return Spec{}, err
 	}
-	result.Executors = []executor.Spec{spec}
+	result.Executors = []ExecutorSpec{spec}
 	return result, nil
 }
 
@@ -189,9 +190,9 @@ func buildMacrossTrade(configTOML string) (Spec, error) {
 	if len(cfg.Executors) == 0 {
 		return Spec{}, fmt.Errorf("%s requires at least one Executor", MacrossTrade)
 	}
-	var resources = make(map[executor.Resource]bool, len(cfg.Executors))
+	var resources = make(map[Resource]bool, len(cfg.Executors))
 	for _, raw := range cfg.Executors {
-		var spec executor.Spec
+		var spec ExecutorSpec
 		spec, err = buildTradeExecutor(raw)
 		if err != nil {
 			return Spec{}, err
@@ -230,17 +231,17 @@ func buildMacrossObserver(configTOML string) (Spec, error) {
 	var stopLoss decimal.Decimal
 	stopLoss, err = decimal.NewFromString(raw.StopLossPct)
 	if err != nil || raw.ID == "" || raw.Kind != "observer" ||
-		(raw.Side != executor.Long && raw.Side != executor.Short) ||
+		(raw.Side != long && raw.Side != short) ||
 		raw.Symbol == "" ||
 		!stopLoss.IsPositive() ||
 		stopLoss.GreaterThanOrEqual(decimal.NewFromInt(1)) {
 		return Spec{}, fmt.Errorf("invalid %s Observer Executor", MacrossObserver)
 	}
-	result.Executors = []executor.Spec{{
+	result.Executors = []ExecutorSpec{{
 		ID:          raw.ID,
 		Kind:        raw.Kind,
 		Side:        raw.Side,
-		Resource:    executor.Resource{Symbol: raw.Symbol},
+		Resource:    Resource{Symbol: raw.Symbol},
 		StopLossPct: stopLoss,
 	}}
 	return result, nil
@@ -291,7 +292,7 @@ func buildMacross(
 	return result, nil
 }
 
-func buildTradeExecutor(raw tradeExecutorConfig) (executor.Spec, error) {
+func buildTradeExecutor(raw tradeExecutorConfig) (ExecutorSpec, error) {
 	var values = make([]decimal.Decimal, 0, 6)
 	for _, text := range []string{
 		raw.CapitalUSDC,
@@ -303,18 +304,18 @@ func buildTradeExecutor(raw tradeExecutorConfig) (executor.Spec, error) {
 	} {
 		var value, err = decimal.NewFromString(text)
 		if err != nil {
-			return executor.Spec{}, fmt.Errorf("invalid Executor decimal: %w", err)
+			return ExecutorSpec{}, fmt.Errorf("invalid Executor decimal: %w", err)
 		}
 		values = append(values, value)
 	}
-	var resource = executor.Resource{
+	var resource = Resource{
 		Venue:             raw.Venue,
 		Network:           raw.Network,
 		PhysicalAccountID: raw.PhysicalAccountID,
 		Symbol:            raw.Symbol,
 	}
 	if raw.ID == "" || raw.Role == "" || raw.Kind != "trade" ||
-		(raw.Side != executor.Long && raw.Side != executor.Short) ||
+		(raw.Side != long && raw.Side != short) ||
 		resource.Venue != "simulator" ||
 		resource.Network != "simnet" ||
 		resource.PhysicalAccountID == "" ||
@@ -330,9 +331,9 @@ func buildTradeExecutor(raw tradeExecutorConfig) (executor.Spec, error) {
 		values[5].IsNegative() ||
 		(raw.PersistMode != "none" && raw.PersistMode != "max") ||
 		(raw.Recon != "" && raw.Recon != "recon") {
-		return executor.Spec{}, fmt.Errorf("invalid %s Trade Executor", MacrossTrade)
+		return ExecutorSpec{}, fmt.Errorf("invalid %s Trade Executor", MacrossTrade)
 	}
-	return executor.Spec{
+	return ExecutorSpec{
 		ID:            raw.ID,
 		Role:          raw.Role,
 		Kind:          raw.Kind,
@@ -349,7 +350,7 @@ func buildTradeExecutor(raw tradeExecutorConfig) (executor.Spec, error) {
 	}, nil
 }
 
-func buildGridExecutor(raw gridExecutorConfig) (executor.Spec, error) {
+func buildGridExecutor(raw gridExecutorConfig) (ExecutorSpec, error) {
 	var values = make([]decimal.Decimal, 0, 5)
 	for _, text := range []string{
 		raw.CapitalUSDC,
@@ -360,18 +361,18 @@ func buildGridExecutor(raw gridExecutorConfig) (executor.Spec, error) {
 	} {
 		var value, err = decimal.NewFromString(text)
 		if err != nil {
-			return executor.Spec{}, fmt.Errorf("invalid Executor decimal: %w", err)
+			return ExecutorSpec{}, fmt.Errorf("invalid Executor decimal: %w", err)
 		}
 		values = append(values, value)
 	}
-	var resource = executor.Resource{
+	var resource = Resource{
 		Venue:             raw.Venue,
 		Network:           raw.Network,
 		PhysicalAccountID: raw.PhysicalAccountID,
 		Symbol:            raw.Symbol,
 	}
 	if raw.ID == "" || raw.Role == "" || raw.Kind != "grid" ||
-		(raw.Side != executor.Long && raw.Side != executor.Short) ||
+		(raw.Side != long && raw.Side != short) ||
 		resource.Venue != "simulator" ||
 		resource.Network != "simnet" ||
 		resource.PhysicalAccountID == "" ||
@@ -385,9 +386,9 @@ func buildGridExecutor(raw gridExecutorConfig) (executor.Spec, error) {
 		values[4].IsNegative() ||
 		(raw.PersistMode != "none" && raw.PersistMode != "max") ||
 		(raw.Recon != "" && raw.Recon != "recon") {
-		return executor.Spec{}, fmt.Errorf("invalid %s Grid Executor", MacrossGrid)
+		return ExecutorSpec{}, fmt.Errorf("invalid %s Grid Executor", MacrossGrid)
 	}
-	return executor.Spec{
+	return ExecutorSpec{
 		ID:             raw.ID,
 		Role:           raw.Role,
 		Kind:           raw.Kind,

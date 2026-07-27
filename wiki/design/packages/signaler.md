@@ -14,7 +14,7 @@ type Signaler interface {
 ```
 
 One Package contains symbol, timestamp, typed Action, regime, risk score, and
-diagnostic fields.
+arbitrary BotSpec-defined custom fields.
 
 Actions are:
 
@@ -22,9 +22,14 @@ Actions are:
 - `StartCycle`; and
 - `StopCycle`.
 
-There are no entry-direction or close-direction fields.
+Standard Actions remain `NoAction`, `StartCycle`, and `StopCycle`.
 
-Executor Config owns side, symbol, Account, role, capital, and order sizing.
+Custom fields may include values such as `enter_long`, `enter_short`,
+`exit_long`, `exit_short`, or BotSpec-specific signals.
+
+Controller passes the complete unchanged package through BotCycle to Executors.
+
+Executor Config still owns side, symbol, Account, role, capital, and order sizing.
 
 ## Implementations
 

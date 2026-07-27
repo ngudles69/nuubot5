@@ -24,8 +24,8 @@ import (
 
 func TestAccountRunsOneReconciledBracket(t *testing.T) {
 	var actual Account
-	var err = actual.Init(logging.Create(io.Discard), Config{
-		Infrastructure: accountInfrastructure(meta.Instrument{
+	var err = actual.Init(Config{
+		Nuubot: accountNuubot(meta.Instrument{
 			Network:       "testnet",
 			Kind:          "perp",
 			Symbol:        "BTC",
@@ -178,7 +178,7 @@ func TestAccountRunsOneReconciledBracket(t *testing.T) {
 func TestAccountReconFailurePublishesOnlyTelemetry(t *testing.T) {
 	var path = filepath.Join(t.TempDir(), "result.db")
 	var actual Account
-	var err = actual.Init(logging.Create(io.Discard), simulatorFailureConfig(path, 6))
+	var err = actual.Init(simulatorFailureConfig(path, 6))
 	if err != nil {
 		t.Fatalf("initialize Account: %v", err)
 	}
@@ -273,7 +273,7 @@ func TestAccountReconFailurePublishesOnlyTelemetry(t *testing.T) {
 
 func TestAccountMaxPersistenceRecoversDirtyVenueState(t *testing.T) {
 	var cfg = Config{
-		Infrastructure: accountInfrastructure(meta.Instrument{
+		Nuubot: accountNuubot(meta.Instrument{
 			Network:       "testnet",
 			Kind:          "perp",
 			Symbol:        "BTC",
@@ -294,7 +294,7 @@ func TestAccountMaxPersistenceRecoversDirtyVenueState(t *testing.T) {
 		PersistMode:    "max",
 	}
 	var first Account
-	var err = first.Init(logging.Create(io.Discard), cfg)
+	var err = first.Init(cfg)
 	if err != nil {
 		t.Fatalf("initialize first Account: %v", err)
 	}
@@ -347,7 +347,7 @@ func TestAccountMaxPersistenceRecoversDirtyVenueState(t *testing.T) {
 	}
 
 	var restored Account
-	if err = restored.Init(logging.Create(io.Discard), cfg); err != nil {
+	if err = restored.Init(cfg); err != nil {
 		t.Fatalf("initialize restored Account: %v", err)
 	}
 	var restoredWarm, _ = market.CreateBBO(1100, 100)
@@ -387,7 +387,7 @@ func TestAccountMaxPersistenceRecoversDirtyVenueState(t *testing.T) {
 
 	var mismatched Account
 	cfg.FeePct = decimal.RequireFromString("0.04")
-	err = mismatched.Init(logging.Create(io.Discard), cfg)
+	err = mismatched.Init(cfg)
 	if err == nil {
 		t.Fatal("Simulator policy mismatch was admitted")
 	}
@@ -397,7 +397,7 @@ func TestAccountMaxPersistenceRecoversSimulatorSubmitFailure(t *testing.T) {
 	var path = filepath.Join(t.TempDir(), "result.db")
 	var cfg = simulatorFailureConfig(path, 8)
 	var first Account
-	var err = first.Init(logging.Create(io.Discard), cfg)
+	var err = first.Init(cfg)
 	if err != nil {
 		t.Fatalf("initialize first Account: %v", err)
 	}
@@ -450,7 +450,7 @@ func TestAccountMaxPersistenceRecoversSimulatorSubmitFailure(t *testing.T) {
 	}
 
 	var restored Account
-	if err = restored.Init(logging.Create(io.Discard), cfg); err != nil {
+	if err = restored.Init(cfg); err != nil {
 		t.Fatalf("initialize restored Account: %v", err)
 	}
 	var restoredWarm, _ = market.CreateBBO(1100, 100)
@@ -475,7 +475,7 @@ func TestAccountDoesNotMarkAcceptedSimulatorOrderRetriable(t *testing.T) {
 	var path = filepath.Join(t.TempDir(), "result.db")
 	var cfg = simulatorFailureConfig(path, 9)
 	var actual Account
-	var err = actual.Init(logging.Create(io.Discard), cfg)
+	var err = actual.Init(cfg)
 	if err != nil {
 		t.Fatalf("initialize Account: %v", err)
 	}
@@ -536,7 +536,7 @@ func TestAccountReconRetainsImmediateFillAfterSubmitPersistenceFailure(t *testin
 	var path = filepath.Join(t.TempDir(), "result.db")
 	var cfg = simulatorFailureConfig(path, 10)
 	var actual Account
-	var err = actual.Init(logging.Create(io.Discard), cfg)
+	var err = actual.Init(cfg)
 	if err != nil {
 		t.Fatalf("initialize Account: %v", err)
 	}
@@ -648,7 +648,7 @@ func TestEnrichFillCLOIDsRejectsAmbiguousVenueIdentity(t *testing.T) {
 
 func TestAccountReconTelemetryReportsNoBulkOrderStatusQueries(t *testing.T) {
 	var actual Account
-	var err = actual.Init(logging.Create(io.Discard), accountTestConfig(34, "recon"))
+	var err = actual.Init(accountTestConfig(34, "recon"))
 	if err != nil {
 		t.Fatalf("initialize Account: %v", err)
 	}
@@ -674,7 +674,7 @@ func TestAccountReconTelemetryReportsNoBulkOrderStatusQueries(t *testing.T) {
 
 func TestAccountReconTelemetryPreservesFailedOrderStatusQuery(t *testing.T) {
 	var actual Account
-	var err = actual.Init(logging.Create(io.Discard), accountTestConfig(35, "recon"))
+	var err = actual.Init(accountTestConfig(35, "recon"))
 	if err != nil {
 		t.Fatalf("initialize Account: %v", err)
 	}
@@ -722,7 +722,7 @@ func TestAccountMaxPersistenceRepairsMissingSubmittingOrder(t *testing.T) {
 	var path = filepath.Join(t.TempDir(), "result.db")
 	var cfg = simulatorFailureConfig(path, 9)
 	var first Account
-	var err = first.Init(logging.Create(io.Discard), cfg)
+	var err = first.Init(cfg)
 	if err != nil {
 		t.Fatalf("initialize first Account: %v", err)
 	}
@@ -793,7 +793,7 @@ func TestAccountMaxPersistenceRepairsMissingSubmittingOrder(t *testing.T) {
 	}
 
 	var restored Account
-	if err = restored.Init(logging.Create(io.Discard), cfg); err != nil {
+	if err = restored.Init(cfg); err != nil {
 		t.Fatalf("initialize restored Account: %v", err)
 	}
 	var restoredWarm, _ = market.CreateBBO(1100, 100)
@@ -829,7 +829,7 @@ func TestAccountMaxPersistenceRepairsMissingSubmittingOrder(t *testing.T) {
 
 func TestAccountRepairsCursorAdvancedMissingFee(t *testing.T) {
 	var actual Account
-	var err = actual.Init(logging.Create(io.Discard), accountTestConfig(20, "recon"))
+	var err = actual.Init(accountTestConfig(20, "recon"))
 	if err != nil {
 		t.Fatalf("initialize Account: %v", err)
 	}
@@ -888,7 +888,7 @@ func TestAccountRepairsCursorAdvancedMissingFee(t *testing.T) {
 
 func TestAccountKeepsFeeIncompleteClosurePendingAndFinalFinanceStatic(t *testing.T) {
 	var actual Account
-	var err = actual.Init(logging.Create(io.Discard), accountTestConfig(21, "recon"))
+	var err = actual.Init(accountTestConfig(21, "recon"))
 	if err != nil {
 		t.Fatalf("initialize Account: %v", err)
 	}
@@ -962,7 +962,7 @@ func TestAccountKeepsFeeIncompleteClosurePendingAndFinalFinanceStatic(t *testing
 
 func accountTestConfig(ledgerID uint64, recon string) Config {
 	return Config{
-		Infrastructure: accountInfrastructure(meta.Instrument{
+		Nuubot: accountNuubot(meta.Instrument{
 			Network: "testnet", Kind: "perp", Symbol: "BTC",
 			AssetID: 0, SizeDecimals: 5, PriceDecimals: 1,
 		}, ""),
@@ -974,11 +974,12 @@ func accountTestConfig(ledgerID uint64, recon string) Config {
 	}
 }
 
-func accountInfrastructure(
+func accountNuubot(
 	instrument meta.Instrument,
 	resultPath string,
-) setup.Infrastructure {
-	return setup.Infrastructure{
+) *setup.Nuubot {
+	return &setup.Nuubot{
+		Log: logging.Create(io.Discard),
 		App: appconfig.App{
 			Hyperliquid: appconfig.Hyperliquid{MinOrderNotionalUSDC: 11},
 		},
@@ -999,7 +1000,7 @@ func assertTradeFinanceEqual(t *testing.T, actual trade.ReconState, expected tra
 
 func simulatorFailureConfig(path string, ledgerID uint64) Config {
 	return Config{
-		Infrastructure: accountInfrastructure(meta.Instrument{
+		Nuubot: accountNuubot(meta.Instrument{
 			Network:       "mainnet",
 			Kind:          "perp",
 			Symbol:        "BTC",

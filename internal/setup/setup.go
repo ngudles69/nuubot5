@@ -7,102 +7,126 @@ import (
 	"path/filepath"
 	"time"
 
+	"nuubot/internal/botspec"
 	"nuubot/internal/config"
 	"nuubot/internal/datastore"
 	"nuubot/internal/hyperliquid"
 	"nuubot/internal/meta"
+	"nuubot/internal/toolkit/clock"
 	"nuubot/internal/toolkit/logging"
 )
 
-// Infrastructure contains process-wide inputs prepared for one Bot.
-type Infrastructure struct {
+// Nuubot contains shared application infrastructure prepared for one Bot.
+type Nuubot struct {
+	Log        *logging.Logger
 	App        config.App
 	Bot        datastore.Bot
+	BotSpec    botspec.Spec
+	Clock      clock.Clock
 	Meta       meta.Instrument
 	ResultPath string
 }
 
 // Section 1 - Program Flow
 
-// Setup prepares process-wide infrastructure for one standalone BtBot.
+// Setup prepares shared application infrastructure for one standalone BtBot.
 func Setup(
 	caller context.Context,
 	log *logging.Logger,
 	sweepID,
 	botID uint64,
-) (Infrastructure, error) {
+) (*Nuubot, error) {
+	// Step 1: validate caller context
 	if caller == nil {
-		return Infrastructure{}, fmt.Errorf("setup requires caller context")
+		return nil, fmt.Errorf("setup requires caller context")
 	}
-	// resolve root
+
+	// Step 2: resolve repository root
 	var root, err = os.Getwd()
 	if err != nil {
-		return Infrastructure{}, fmt.Errorf("get working directory: %w", err)
+		return nil, fmt.Errorf("get working directory: %w", err)
 	}
-	// load config
-	var cfg config.App
+
+	// Step 3: load App Config
 	var configPath = os.Getenv("NUUBOT_CONFIG")
 	if configPath == "" {
 		configPath = filepath.Join(root, "workspace", "config", "config.toml")
 	} else if !filepath.IsAbs(configPath) {
 		configPath = filepath.Join(root, configPath)
 	}
-	cfg, err = config.LoadApp(configPath)
+	var app config.App
+	app, err = config.LoadApp(configPath)
 	if err != nil {
-		return Infrastructure{}, fmt.Errorf("load setup AppConfig: %w", err)
+		return nil, fmt.Errorf("load setup AppConfig: %w", err)
 	}
-	// prepare datastore
-	var storedBot datastore.Bot
-	storedBot, err = datastore.LoadBot(
-		config.Rooted(root, cfg.Paths.Database),
+
+	// Step 4: load Bot input
+	var botInput datastore.Bot
+	botInput, err = datastore.LoadBot(
+		config.Rooted(root, app.Paths.Database),
 		sweepID,
 		botID,
 	)
 	if err != nil {
-		return Infrastructure{}, fmt.Errorf("prepare datastore: %w", err)
-	}
-	// validate ticks path
-	storedBot.Replay.TicksPath, err = config.ResolveDataPath(
-		config.Rooted(root, cfg.Paths.SharedData),
-		storedBot.Replay.TicksPath,
-	)
-	if err != nil {
-		return Infrastructure{}, fmt.Errorf("validate ticks path: %w", err)
+		return nil, fmt.Errorf("prepare datastore: %w", err)
 	}
 
-	// load mainnet Meta
-	var timeout = time.Duration(cfg.Process.RequestTimeoutSeconds) * time.Second
+	// Step 5: resolve replay input path
+	botInput.Replay.TicksPath, err = config.ResolveDataPath(
+		config.Rooted(root, app.Paths.SharedData),
+		botInput.Replay.TicksPath,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("validate ticks path: %w", err)
+	}
+
+	// Step 6: build BotSpec
+	var botSpec botspec.Spec
+	botSpec, err = botspec.Build(botInput.BotSpecID, botInput.ConfigTOML)
+	if err != nil {
+		return nil, fmt.Errorf("build BotSpec: %w", err)
+	}
+
+	// Step 7: validate Executor replay symbols
+	for _, executorSpec := range botSpec.Executors {
+		if executorSpec.Resource.Symbol != botInput.Replay.Symbol {
+			return nil, fmt.Errorf(
+				"controller Executor symbol %s lacks replay input",
+				executorSpec.Resource.Symbol,
+			)
+		}
+	}
+
+	// Step 8: load mainnet Meta
+	var timeout = time.Duration(app.Process.RequestTimeoutSeconds) * time.Second
 	var client *hyperliquid.Client
 	client, err = hyperliquid.New("mainnet", timeout)
 	if err != nil {
-		return Infrastructure{}, fmt.Errorf("load Meta: %w", err)
+		return nil, fmt.Errorf("load Meta: %w", err)
 	}
 	var requestContext, cancel = context.WithTimeout(caller, timeout)
 	defer cancel()
 	var instrument meta.Instrument
 	instrument, err = meta.EnsureFresh(
 		requestContext,
-		config.Rooted(root, cfg.Paths.Database),
-		storedBot.Replay.Symbol,
+		config.Rooted(root, app.Paths.Database),
+		botInput.Replay.Symbol,
 		time.Now().UTC(),
 		client,
 	)
 	if err != nil {
-		return Infrastructure{}, fmt.Errorf("load Meta: %w", err)
+		return nil, fmt.Errorf("load Meta: %w", err)
 	}
 
 	// Shared WebSocket ownership remains TBD. Setup starts no background work.
 
-	// return setup
-	log.Info(fmt.Sprintf(
-		"setup initialized bot_spec=%s symbol=%s",
-		storedBot.BotSpecID,
-		storedBot.Replay.Symbol,
-	))
-	return Infrastructure{
-		App:  cfg,
-		Bot:  storedBot,
-		Meta: instrument,
+	// Step 9: prepare Nuubot
+	var nuubot = &Nuubot{
+		Log:     log,
+		App:     app,
+		Bot:     botInput,
+		BotSpec: botSpec,
+		Meta:    instrument,
 		ResultPath: filepath.Join(
 			root,
 			"workspace",
@@ -111,7 +135,15 @@ func Setup(
 			fmt.Sprintf("sweep_%d", sweepID),
 			fmt.Sprintf("bot_%d.db", botID),
 		),
-	}, nil
+	}
+
+	// Step 10: log setup completed
+	log.Info(fmt.Sprintf(
+		"setup initialized bot_spec=%s symbol=%s",
+		botInput.BotSpecID,
+		botInput.Replay.Symbol,
+	))
+	return nuubot, nil
 }
 
 // Section 2 - Domain Helpers

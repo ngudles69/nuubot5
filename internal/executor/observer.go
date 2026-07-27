@@ -3,6 +3,7 @@ package executor
 import (
 	"fmt"
 
+	"nuubot/internal/botspec"
 	"nuubot/internal/market"
 	"nuubot/internal/toolkit/logging"
 )
@@ -22,7 +23,7 @@ type observerStats struct {
 
 type observer struct {
 	log            *logging.Logger
-	spec           Spec
+	spec           botspec.ExecutorSpec
 	cycleNumber    int
 	executorNumber int
 	signalMS       uint64
@@ -41,14 +42,14 @@ var _ BBOIngestHandler = (*observer)(nil)
 
 // OnInit initializes ObserverExecutor.
 func (e *observer) OnInit(ctx Context) error {
-	e.log = ctx.Log
+	e.log = ctx.Nuubot.Log
 	e.spec = ctx.Spec
 	if e.status != Configured {
 		return fmt.Errorf("observer executor cannot initialize from current state")
 	}
 	e.cycleNumber = ctx.CycleNumber
 	e.executorNumber = ctx.ExecutorNumber
-	e.signalMS = ctx.SignalTimestampMS
+	e.signalMS = ctx.Signal.TimestampMS()
 	e.side = ctx.Spec.Side
 	e.stopLossPct, _ = ctx.Spec.StopLossPct.Float64()
 	e.status = Starting

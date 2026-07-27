@@ -2,19 +2,22 @@
 
 Status: Implemented for standalone BtBot.
 Covers: `internal/setup/setup.go`
-Purpose: Prepare global infrastructure and runtime inputs for one Bot.
+Purpose: Prepare one shared Nuubot application harness for one Bot.
 
 ## Flow
 
 ```text
+validate caller context
 resolve repository root
 load strict App Config
 load exact stored Bot by SweepID and BotID
 verify BotConfig SHA-256
 resolve replay path below shared-data root
+build typed BotSpec
+validate Executor replay symbols
 load fresh mainnet Meta through caller context
-prepare per-Bot result path
-return immutable Infrastructure
+prepare Nuubot
+log setup completed
 ```
 
 Setup loads no credentials for Simulator backtests.
@@ -23,23 +26,34 @@ Setup never creates `context.Background()`.
 
 Setup starts no goroutine or WebSocket.
 
-## Infrastructure
+## Nuubot
 
-The returned `setup.Infrastructure` contains:
+`setup.Setup` returns one shared `*setup.Nuubot` containing:
 
+- Logger;
 - complete App Config;
 - stored Bot identity and exact BotConfig TOML;
 - ReplayInput;
+- typed BotSpec;
+- the initialized TickClock or WallClock attached by the program owner;
 - global Meta reference data; and
 - the per-Bot result path.
 
-BtBot transforms exact BotConfig TOML into one typed BotSpec.
+Nuubot contains shared infrastructure data.
 
-BtBot passes complete Setup and BotSpec separately to Controller.
+It contains shared infrastructure, not procedural application behavior or features.
 
-Setup values never enter BotSpec.
+BtBot, Controller, BotCycle, Executors, and Accounts receive the same Nuubot pointer.
+
+Components do not copy App Config, BotSpec, Meta, Bot identity, or ResultPath.
+
+A component may retain `nuubot.Log` as its local logger reference.
+
+BtBot or Runner creates and initializes its selected Clock, then attaches that
+Clock to Nuubot before Controller initialization. Runtime code reads current
+time through `nuubot.Clock.NowMS()`.
 
 ## Failure
 
-Missing BotSpec identity, invalid Config hash, invalid replay path, missing Meta,
-delisted Meta, or caller cancellation fails Setup.
+Missing BotSpec identity, invalid Config hash, invalid replay path, invalid BotSpec,
+missing replay symbols, missing Meta, delisted Meta, or caller cancellation fails Setup.

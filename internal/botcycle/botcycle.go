@@ -7,6 +7,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"nuubot/internal/account"
+	"nuubot/internal/botspec"
 	"nuubot/internal/executor"
 	"nuubot/internal/market"
 	"nuubot/internal/setup"
@@ -19,9 +20,8 @@ var ErrRejected = errors.New("bot cycle rejected")
 
 // Inputs contains approved Executor inputs owned above BotCycle.
 type Inputs struct {
-	Infrastructure setup.Infrastructure
 	LatestBBOs     map[string]market.BBO
-	ResourceEquity map[executor.Resource]decimal.Decimal
+	ResourceEquity map[botspec.Resource]decimal.Decimal
 }
 
 // Result contains one immutable terminal BotCycle result.
@@ -48,11 +48,11 @@ type Telemetry struct {
 	Executors   []executor.Telemetry
 }
 
-// Control owns one active BotCycle and its Executors.
-type Control struct {
+// BotCycle owns one coordinated Executor lifecycle.
+type BotCycle struct {
 	log       *logging.Logger
+	nuubot    *setup.Nuubot
 	number    int
-	signal    signaler.Package
 	executors []executor.Executor
 	result    Result
 	ticks     uint64
@@ -67,26 +67,27 @@ type Control struct {
 // Section 1 - Program Flow
 
 // Init prepares one BotCycle and its configured Executors.
-func (c *Control) Init(
-	log *logging.Logger,
+func (c *BotCycle) Init(
+	nuubot *setup.Nuubot,
 	number int,
 	signal signaler.Package,
 	inputs Inputs,
-	specs []executor.Spec,
 ) error {
-	c.log = log
+	// Step 1: retain BotCycle inputs and log init
+	c.log = nuubot.Log
+	c.nuubot = nuubot
 	c.number = number
-	c.signal = signal
+	c.log.Info("bot cycle init")
 
-	// create executors
+	// Step 2: create Executors
+	var specs = nuubot.BotSpec.Executors
 	c.executors = make([]executor.Executor, 0, len(specs))
 	for index, spec := range specs {
 		var created, err = executor.Create(executor.Context{
-			Infrastructure:     inputs.Infrastructure,
-			Log:                log,
+			Nuubot:             nuubot,
 			CycleNumber:        number,
 			ExecutorNumber:     index + 1,
-			SignalTimestampMS:  signal.TimestampMS(),
+			Signal:             signal,
 			Spec:               spec,
 			LatestBBO:          inputs.LatestBBOs[spec.Resource.Symbol],
 			StartingEquityUSDC: inputs.ResourceEquity[spec.Resource],
@@ -111,13 +112,28 @@ func (c *Control) Init(
 		c.executors = append(c.executors, created)
 	}
 
-	// start executors after every sibling initializes
+	// Step 3: log init completed
+	c.log.Info(fmt.Sprintf(
+		"bot cycle init completed cycle=%d action=%s signal_ts_ms=%d",
+		number,
+		signal.Action(),
+		signal.TimestampMS(),
+	))
+	return nil
+}
+
+// Start starts every initialized Executor as one coordinated unit.
+func (c *BotCycle) Start() error {
+	// Step 1: log start
+	c.log.Info("bot cycle start")
+
+	// Step 2: start Executors after every sibling initializes
 	for index, activeExecutor := range c.executors {
-		var starter, supported = activeExecutor.(executor.StartHandler)
+		var startHandler, supported = activeExecutor.(executor.StartHandler)
 		if !supported {
 			continue
 		}
-		var err = starter.OnStart()
+		var err = startHandler.OnStart()
 		if err != nil {
 			return errors.Join(
 				fmt.Errorf("start executor %d: %w", index+1, err),
@@ -126,25 +142,40 @@ func (c *Control) Init(
 		}
 	}
 
-	// initialize botcycle
+	// Step 3: mark BotCycle running
 	c.running = true
-	log.Info(fmt.Sprintf(
-		"bot cycle initialized cycle=%d action=%s signal_ts_ms=%d",
-		number,
-		signal.Action(),
-		signal.TimestampMS(),
-	))
+
+	// Step 4: log start completed
+	c.log.Info("bot cycle started")
 	return nil
 }
 
-// Run checks one timer-driven BotCycle completion pass.
-func (c *Control) Run(_ uint64) (bool, error) {
+// Run delivers the current Signal and checks BotCycle completion.
+func (c *BotCycle) Run(signal signaler.Package) (bool, error) {
+	// Step 1: validate run state
 	if !c.running {
 		return false, fmt.Errorf("bot cycle cannot run from current state")
 	}
+
+	// Step 2: record run
 	c.runs++
 
-	// check coordinated completion
+	// Step 3: deliver current Signal to running Executors
+	for index, activeExecutor := range c.executors {
+		if activeExecutor.Status() != executor.Running {
+			continue
+		}
+		var handler, supported = activeExecutor.(executor.SignalHandler)
+		if !supported {
+			continue
+		}
+		var err = handler.OnSignal(signal)
+		if err != nil {
+			return false, fmt.Errorf("deliver executor %d Signal: %w", index+1, err)
+		}
+	}
+
+	// Step 4: check coordinated completion
 	for index, activeExecutor := range c.executors {
 		switch activeExecutor.Status() {
 		case executor.Error:
@@ -158,16 +189,23 @@ func (c *Control) Run(_ uint64) (bool, error) {
 }
 
 // Stop stops Executors in reverse ownership order.
-func (c *Control) Stop(reason string) (string, error) {
+func (c *BotCycle) Stop(reason string) (string, error) {
+	// Step 1: log stop
+	c.log.Info("bot cycle stop")
+
+	// Step 2: ignore repeated stop request
 	if c.stopped {
+		c.log.Info("bot cycle stopping - ignoring stop request")
 		return c.exitReason(reason), nil
 	}
+
+	// Step 3: mark BotCycle not running
 	c.running = false
 
-	// stop executors
+	// Step 4: stop Executors
 	var firstErr = c.stopExecutors(reason)
 
-	// collect immutable Executor results
+	// Step 5: collect immutable Executor results
 	for index, activeExecutor := range c.executors {
 		var result, err = activeExecutor.Result()
 		if err != nil && firstErr == nil {
@@ -181,13 +219,15 @@ func (c *Control) Stop(reason string) (string, error) {
 			}
 		}
 	}
+
+	// Step 6: mark BotCycle completed and stopped
 	c.completed = true
 	c.stopped = true
 
-	// resolve exit reason
+	// Step 7: resolve exit reason
 	var exitReason = c.exitReason(reason)
 
-	// calculate duration
+	// Step 8: calculate terminal result
 	var durationMS uint64
 	if c.endMS >= c.startMS {
 		durationMS = c.endMS - c.startMS
@@ -197,7 +237,7 @@ func (c *Control) Stop(reason string) (string, error) {
 	c.result.EndMS = c.endMS
 	c.result.DurationMS = durationMS
 
-	// report proof
+	// Step 9: report results and stats
 	c.log.Info(fmt.Sprintf(
 		"bot cycle stopped cycle=%d start_ts_ms=%d end_ts_ms=%d "+
 			"duration_ms=%d executors=%d ticks_received=%d runs=%d stop_reason=%s",
@@ -215,11 +255,14 @@ func (c *Control) Stop(reason string) (string, error) {
 
 // Section 2 - Domain Helpers
 
-// Reconcile refreshes every capable Executor Account as one barrier.
-func (c *Control) Reconcile(
-	nowMS uint64,
-	forced bool,
-) (ReconResult, error) {
+// Section 2.1 - Account Reconciliation
+
+// AcctRecon refreshes every capable Executor Account as one barrier.
+func (c *BotCycle) AcctRecon(forced bool) (ReconResult, error) {
+	// Step 1: read current Clock time
+	var nowMS = c.nuubot.Clock.NowMS()
+
+	// Step 2: reconcile running Executor Accounts
 	var result ReconResult
 	var failures []error
 	for index, activeExecutor := range c.executors {
@@ -243,6 +286,8 @@ func (c *Control) Reconcile(
 		}
 		result.Snapshots = append(result.Snapshots, snapshot)
 	}
+
+	// Step 3: reject partial Account snapshots
 	if len(failures) != 0 {
 		result.Failed = true
 		result.Snapshots = nil
@@ -252,7 +297,8 @@ func (c *Control) Reconcile(
 }
 
 // OnRecon delivers one accepted reconciliation barrier.
-func (c *Control) OnRecon(nowMS uint64) error {
+func (c *BotCycle) OnRecon() error {
+	// deliver accepted reconciliation to running Executors
 	for index, activeExecutor := range c.executors {
 		if activeExecutor.Status() != executor.Running {
 			continue
@@ -261,7 +307,7 @@ func (c *Control) OnRecon(nowMS uint64) error {
 		if !supported {
 			continue
 		}
-		var err = handler.OnRecon(nowMS)
+		var err = handler.OnRecon()
 		if err != nil {
 			return fmt.Errorf("run executor %d recon handler: %w", index+1, err)
 		}
@@ -269,8 +315,11 @@ func (c *Control) OnRecon(nowMS uint64) error {
 	return nil
 }
 
+// Section 2.2 - Results and Telemetry
+
 // Result returns one independently owned terminal BotCycle result.
-func (c *Control) Result() Result {
+func (c *BotCycle) Result() Result {
+	// Step 1: copy BotCycle result
 	var result = Result{
 		CycleNumber: c.result.CycleNumber,
 		StartMS:     c.result.StartMS,
@@ -278,6 +327,8 @@ func (c *Control) Result() Result {
 		DurationMS:  c.result.DurationMS,
 		Recon:       c.result.Recon,
 	}
+
+	// Step 2: copy Executor results
 	for _, current := range c.result.Executors {
 		result.Executors = append(result.Executors, current.Clone())
 	}
@@ -285,7 +336,8 @@ func (c *Control) Result() Result {
 }
 
 // Telemetry returns one immutable current BotCycle observation.
-func (c *Control) Telemetry() Telemetry {
+func (c *BotCycle) Telemetry() Telemetry {
+	// Step 1: resolve BotCycle status
 	var status = "configured"
 	switch {
 	case c.stopped:
@@ -295,6 +347,8 @@ func (c *Control) Telemetry() Telemetry {
 	case c.running:
 		status = "running"
 	}
+
+	// Step 2: build BotCycle telemetry
 	var result = Telemetry{
 		CycleNumber: c.number,
 		Status:      status,
@@ -305,9 +359,11 @@ func (c *Control) Telemetry() Telemetry {
 	return result
 }
 
+// Section 2.3 - Market Data
+
 // IngestBBO routes one BBO through supported Simulator handlers.
-func (c *Control) IngestBBO(bbo market.BBO) error {
-	// ingest executor bbo
+func (c *BotCycle) IngestBBO(bbo market.BBO) error {
+	// ingest BBO through supported Executors
 	for index, activeExecutor := range c.executors {
 		var status = activeExecutor.Status()
 		if status != executor.Running && status != executor.Stopping {
@@ -326,15 +382,15 @@ func (c *Control) IngestBBO(bbo market.BBO) error {
 }
 
 // OnBBO distributes one BBO through supported normal handlers.
-func (c *Control) OnBBO(bbo market.BBO) {
-	// record cycle time
+func (c *BotCycle) OnBBO(bbo market.BBO) {
+	// Step 1: record BotCycle time
 	if c.startMS == 0 {
 		c.startMS = bbo.TimestampMS
 	}
 	c.endMS = bbo.TimestampMS
 	c.ticks++
 
-	// deliver executor bbo
+	// Step 2: deliver BBO to running Executors
 	for _, activeExecutor := range c.executors {
 		if activeExecutor.Status() != executor.Running {
 			continue
@@ -346,7 +402,9 @@ func (c *Control) OnBBO(bbo market.BBO) {
 	}
 }
 
-func (c *Control) stopExecutors(reason string) error {
+// Section 2.4 - Lifecycle Helpers
+
+func (c *BotCycle) stopExecutors(reason string) error {
 	var firstErr error
 	for index := len(c.executors) - 1; index >= 0; index-- {
 		var err = c.executors[index].OnStop(reason)
@@ -357,7 +415,7 @@ func (c *Control) stopExecutors(reason string) error {
 	return firstErr
 }
 
-func (c *Control) exitReason(fallback string) string {
+func (c *BotCycle) exitReason(fallback string) string {
 	if len(c.executors) == 0 {
 		return fallback
 	}

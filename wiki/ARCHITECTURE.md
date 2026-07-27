@@ -23,7 +23,7 @@ Status: Implemented for standalone historical replay.
 One configured Bot selects one exact compiled BotSpec and stores its exact
 BotConfig TOML in the database.
 
-BtBot transforms one exact stored BotConfig into one immutable typed BotSpec.
+Setup transforms one exact stored BotConfig into one immutable typed BotSpec and returns one shared Nuubot harness.
 
 ```text
 Runner or BtBot
@@ -111,9 +111,9 @@ ReplayReader validates Parquet values before returning BBO values.
 TickClock invokes BtBot's registered Controller callback from replay
 timestamps.
 
-BtBot transforms exact BotConfig TOML into one typed BotSpec.
+Setup transforms exact BotConfig TOML into one typed BotSpec.
 
-Controller receives complete Setup plus BotSpec.
+Controller receives one shared Nuubot harness containing Setup infrastructure and BotSpec.
 
 Controller constructs Signaler and Risks, then owns Signal, Risk, BotCycle,
 capital, drawdown, and graceful shutdown decisions.
@@ -169,13 +169,13 @@ main
   log one result
 
 BtBot init
-  prepare global Setup
+  prepare shared Nuubot harness
   retain replay and result inputs
   resolve replay range
   initialize ReplayReader
-  transform BotConfig into typed BotSpec
-  initialize Controller from Setup and BotSpec
   create and initialize TickClock
+  attach TickClock to Nuubot
+  initialize Controller from Nuubot
   register Controller timer
   initialize replay stats
   log init completed

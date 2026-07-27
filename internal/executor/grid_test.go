@@ -7,19 +7,21 @@ import (
 	"github.com/shopspring/decimal"
 
 	"nuubot/internal/account"
+	"nuubot/internal/botspec"
 	"nuubot/internal/cloid"
 	appconfig "nuubot/internal/config"
 	"nuubot/internal/market"
 	"nuubot/internal/meta"
 	"nuubot/internal/order"
 	"nuubot/internal/setup"
+	"nuubot/internal/toolkit/clock"
 	"nuubot/internal/toolkit/logging"
 )
 
 // Section 1 - Program Flow
 
 func TestGridExecutorRunsAllLevelsAndFlattensAtBound(t *testing.T) {
-	var ctx = gridExecutorContext()
+	var ctx = gridExecutorContext(t)
 	var created, err = Create(ctx)
 	if err != nil {
 		t.Fatalf("create GridExecutor: %v", err)
@@ -31,7 +33,7 @@ func TestGridExecutorRunsAllLevelsAndFlattensAtBound(t *testing.T) {
 	if _, _, _, err = actual.Reconcile(3_000, false); err != nil {
 		t.Fatalf("reconcile initial Account: %v", err)
 	}
-	if err = actual.OnRecon(3_000); err != nil {
+	if err = actual.OnRecon(); err != nil {
 		t.Fatalf("submit initial Grid: %v", err)
 	}
 	var initial, resultErr = actual.account.Result()
@@ -116,9 +118,9 @@ func TestGridExecutorRunsAllLevelsAndFlattensAtBound(t *testing.T) {
 }
 
 func TestGridCalculationKeepsInitialEntryInsideCapitalSlice(t *testing.T) {
-	var spec = gridExecutorContext().Spec
+	var spec = gridExecutorContext(t).Spec
 	var levels, err = calculateGridLevels(
-		executorInfrastructure(""),
+		executorNuubot(t, ""),
 		spec,
 		market.BBO{TimestampMS: 3_000, Price: 100},
 		decimal.NewFromInt(100),
@@ -147,7 +149,7 @@ func TestGridCalculationKeepsInitialEntryInsideCapitalSlice(t *testing.T) {
 }
 
 func TestShortGridSubmitsTopDown(t *testing.T) {
-	var ctx = gridExecutorContext()
+	var ctx = gridExecutorContext(t)
 	ctx.Spec.Side = Short
 	var created, err = Create(ctx)
 	if err != nil {
@@ -160,7 +162,7 @@ func TestShortGridSubmitsTopDown(t *testing.T) {
 	if _, _, _, err = actual.Reconcile(3_000, false); err != nil {
 		t.Fatalf("reconcile short Account: %v", err)
 	}
-	if err = actual.OnRecon(3_000); err != nil {
+	if err = actual.OnRecon(); err != nil {
 		t.Fatalf("submit short Grid: %v", err)
 	}
 	var result account.Result
@@ -192,7 +194,7 @@ func TestShortGridSubmitsTopDown(t *testing.T) {
 }
 
 func TestGridCountsBoundaryTickRoundTrips(t *testing.T) {
-	var created, err = Create(gridExecutorContext())
+	var created, err = Create(gridExecutorContext(t))
 	if err != nil {
 		t.Fatalf("create GridExecutor: %v", err)
 	}
@@ -203,7 +205,7 @@ func TestGridCountsBoundaryTickRoundTrips(t *testing.T) {
 	if _, _, _, err = actual.Reconcile(3_000, false); err != nil {
 		t.Fatalf("reconcile initial Account: %v", err)
 	}
-	if err = actual.OnRecon(3_000); err != nil {
+	if err = actual.OnRecon(); err != nil {
 		t.Fatalf("submit initial Grid: %v", err)
 	}
 	var entry = market.BBO{TimestampMS: 4_000, Price: 99}
@@ -233,10 +235,10 @@ func TestGridCountsBoundaryTickRoundTrips(t *testing.T) {
 }
 
 func TestGridCalculationRejectsUnprofitableLevel(t *testing.T) {
-	var spec = gridExecutorContext().Spec
+	var spec = gridExecutorContext(t).Spec
 	spec.MinExpectedPnL = decimal.NewFromInt(1)
 	var _, err = calculateGridLevels(
-		executorInfrastructure(""),
+		executorNuubot(t, ""),
 		spec,
 		market.BBO{TimestampMS: 3_000, Price: 100},
 		spec.CapitalUSDC,
@@ -248,21 +250,20 @@ func TestGridCalculationRejectsUnprofitableLevel(t *testing.T) {
 
 // Section 2 - Domain Helpers
 
-func gridExecutorContext() Context {
+func gridExecutorContext(t *testing.T) Context {
 	return Context{
-		Infrastructure:     executorInfrastructure(""),
-		Log:                logging.Create(&bytes.Buffer{}),
+		Nuubot:             executorNuubot(t, ""),
 		CycleNumber:        1,
 		ExecutorNumber:     1,
-		SignalTimestampMS:  2_000,
+		Signal:             executorTestSignal(t),
 		LatestBBO:          market.BBO{TimestampMS: 3_000, Price: 100},
 		StartingEquityUSDC: decimal.NewFromInt(100),
-		Spec: Spec{
+		Spec: botspec.ExecutorSpec{
 			ID:   "grid",
 			Role: "grid",
 			Kind: "grid",
 			Side: Long,
-			Resource: Resource{
+			Resource: botspec.Resource{
 				Venue:             "simulator",
 				Network:           "simnet",
 				PhysicalAccountID: "sim",
@@ -279,8 +280,19 @@ func gridExecutorContext() Context {
 	}
 }
 
-func executorInfrastructure(resultPath string) setup.Infrastructure {
-	return setup.Infrastructure{
+func executorNuubot(t *testing.T, resultPath string) *setup.Nuubot {
+	t.Helper()
+	var log = logging.Create(&bytes.Buffer{})
+	var activeClock, err = clock.Create(clock.Tick)
+	if err != nil {
+		t.Fatalf("create Executor test Clock: %v", err)
+	}
+	if err = activeClock.Init(log, 2_000); err != nil {
+		t.Fatalf("initialize Executor test Clock: %v", err)
+	}
+	return &setup.Nuubot{
+		Log:   log,
+		Clock: activeClock,
 		App: appconfig.App{
 			Hyperliquid: appconfig.Hyperliquid{MinOrderNotionalUSDC: 11},
 		},
