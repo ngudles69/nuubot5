@@ -122,6 +122,10 @@ Account-Venue-Simulator boundary hardcut. Recon2 is retired.
 - Observer suite report is `workspace/logs/nuubot5-stest-s6-b9-1-20260727T160925Z.json`.
 - Project diagnostics, stale destructive-Runner scan, formatting, and diff checks pass.
 - Renamed `executor.Context` to `executor.BotCycleContext`; local variables remain `ctx`.
+- Moved canonical Server design to `wiki/design/server.md`.
+- Documented current `nuubot-*` development commands and the target single `nuubot` binary.
+- Documented one Server process containing WebServer, API, BotManager, and SweepManager.
+- Documented isolated Runner and BtBot child processes launched from the same target binary.
 
 ### TODO
 

@@ -11,6 +11,7 @@ Nuubot5 source proves implementation. Reservation files prove names only.
 - [`design/packages`](design/packages/) contains exactly one page per Go package.
 - [`design/concepts`](design/concepts/) contains flows, programs, venues, types, and cross-package rules.
 - [`design/runner.md`](design/runner.md) owns the standalone live Runner design.
+- [`design/server.md`](design/server.md) owns the Server, unified binary, and child-process design.
 - [`design/startup.md`](design/startup.md) owns Runner startup and crash recovery across all live networks.
 - [`design/entities.md`](design/entities.md) shows backtest and live runtime ownership cardinality.
 - [`design/hyperliquid`](design/hyperliquid/) contains the internal Hyperliquid boundary details.
@@ -151,7 +152,7 @@ deferred.
 | Typed saved-Config and fail-closed Meta admission | [Setup](design/packages/setup.md) |
 | Stored TOML and active Account-symbol claims | [Datastore](design/packages/datastore.md) |
 | Standalone Runner, BtBot, and BtSweep execution | [Runner](design/runner.md) |
-| Thin Server API and Manager-to-process boundaries | [Server](design/concepts/server.md) |
+| Thin Server API and Manager-to-process boundaries | [Server](design/server.md) |
 | Implemented Sweep template validation and expansion | [BtSweep package](design/packages/btsweep.md) |
 | Reusable Sweep records and standalone execution | [SweepManager](design/concepts/sweep-manager.md) |
 | ControllerResult, BotCycleResult, and ExecutorResult hierarchy | [BotCycle](design/packages/botcycle.md) |
@@ -191,7 +192,7 @@ hardcut is implemented and proven.
 
 | [RunnerControl](design/concepts/runner-control.md) | Runner lifecycle commands. |
 | [Controller store](design/concepts/controller-store.md) | Candidate Controller persistence boundary. |
-| [Server](design/concepts/server.md) | Optional master application host and process supervision. |
+
 | [Shutdown](design/concepts/shutdown.md) | Ordered resource release. |
 | [Signal](design/concepts/signal.md) | Immutable strategy decision. |
 | [Simulator parity](design/concepts/simulator-parity.md) | Exchange behavior and response parity boundary. |
