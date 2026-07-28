@@ -15,11 +15,18 @@ Last updated: 2026-07-29
 - Grid result log is `workspace/logs/nuubot5-stest-s11-b15-1-20260728T162532Z.log`.
 - All three runs completed without profiling.
 
-## Active Commit
+## Commit Proof
 
-- Commit all current work except `workspace/backups/**`.
-- Push `main` to `origin/main`.
-- Verify focused Simulator proof, whitespace, staged scope, and matching local and remote hashes.
+- DONE: Committed Simulator audit preparation and test-run handoff as `0997cc2`.
+- DONE: Pushed `0997cc2` to `origin/main`.
+- DONE: Focused Simulator tests and whitespace checks passed.
+- `workspace/backups/**` remains untracked and excluded.
+
+## Active Fill Review
+
+- Review starts with `.audits/07-28-fill-changes.md`.
+- Read only the named file until the user identifies the first review topic.
+- Make no Fill source, test, audit, or wiki change before explicit confirmation.
 
 ## Focus
 
