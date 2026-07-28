@@ -286,9 +286,9 @@ Persistence or execution failures outside Account Recon remain immediately fatal
 - `internal/account/recon.go`: exact ten-step flow, selected work, publication, outcome, and explicit failure count.
 - `internal/botcycle/botcycle.go`: complete multi-Executor barrier, failure fact, and maximum consecutive count.
 - `internal/controller/controller.go`: first-two-pass skip and third-consecutive-failure Sweep error.
-- `internal/ledger/ledger.go`: sole-owned records, stable locators, and active and pending sets.
-- `internal/ledger/recon.go`: touched Fill, Order, and Trade updates with index maintenance.
-- `internal/ledger/store.go`: existing `none` behavior, `max` load, validation, and changed-row writes.
+- `internal/account/ledger/ledger.go`: sole-owned records, stable locators, and active and pending sets.
+- `internal/account/ledger/recon.go`: touched Fill, Order, and Trade updates with index maintenance.
+- `internal/account/ledger/store.go`: existing `none` behavior, `max` load, validation, and changed-row writes.
 - `internal/simulator/simulator.go`: canonical private Venue truth and fresh official JSON responses.
 - `internal/hyperliquid/protocol.go`: strict mutation and information response decoding.
 - Focused tests beside these owners prove indexes, pending work, delayed fees, persistence, failures, parity, and performance.

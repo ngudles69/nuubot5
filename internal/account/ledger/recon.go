@@ -5,8 +5,8 @@ import (
 
 	"github.com/shopspring/decimal"
 
-	"nuubot/internal/order"
-	"nuubot/internal/trade"
+	"nuubot/internal/account/order"
+	"nuubot/internal/account/trade"
 )
 
 // ReconAttempt owns one unpublished canonical Ledger update.

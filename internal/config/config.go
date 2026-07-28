@@ -82,6 +82,13 @@ func LoadApp(path string) (App, error) {
 	if cfg.Network.Default != "mainnet" && cfg.Network.Default != "testnet" {
 		return cfg, fmt.Errorf("network.default must be mainnet or testnet")
 	}
+	// validate process policy
+	if cfg.Process.PollSeconds == 0 {
+		return cfg, fmt.Errorf("process.poll_seconds must be positive")
+	}
+	if cfg.Process.UnresponsiveSeconds <= cfg.Process.PollSeconds {
+		return cfg, fmt.Errorf("process.unresponsive_seconds must exceed poll_seconds")
+	}
 	// validate runtime policies
 	if err = validateRuntime("live", cfg.Live); err != nil {
 		return cfg, err

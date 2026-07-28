@@ -1,55 +1,77 @@
 # ProcessStore
 
-Status: Approved — unimplemented.
-Covers: No implemented source.
-Purpose: Persist supervised process identity, command reservation, and health
-evidence.
+Status: Implemented as the central `internal/control` Store.
+Covers: `internal/control/*.go`, `internal/backtest/*.go`, `internal/live/*.go`
+Purpose: Persist command reservation, acknowledgement, process identity, lifecycle, and health evidence.
 
-## Canonical Sources
+## Ownership
 
-- Nuubot3: `D:/rust/nuubot3/nuubot/server/process.py`
-- Nuubot3 store evidence: `D:/rust/nuubot3/nuubot/runtime/store.py`
+The central operational database owns:
 
-## Scope
+```text
+control_command
+process_state
+bot.status
+sweep.status
+```
 
-ProcessStore owns durable coordination records used by Server and RunnerControl.
+Per-Bot execution databases contain no command or process-supervision rows.
 
-## Owner and Children
+## Commands
 
-Server owns ProcessStore.
+Commands target one Bot or Sweep ID.
 
-ProcessStore owns no operating-system process and no Runner.
+```text
+requested → claimed → acknowledged
+```
 
-## Responsibilities
+Acknowledged outcomes are:
 
-- Reserve one start or control action atomically.
-- Record process identity and generation.
-- Record health observations and command completion.
-- Mark observed process state.
-- Reject stale generations and duplicate actions.
+```text
+processed
+skipped
+rejected
+```
 
-## Does Not
+The newest pending command wins. Older pending commands for the same target generation are acknowledged as skipped.
 
-- Spawn, terminate, or signal processes.
-- Probe operating-system liveness.
-- Implement restart policy.
-- Store Controller domain state.
-- Define database schema in this page.
+A command queued while no process is active uses generation zero and may be claimed by the next generation.
 
-## Invariants
+## Process Identity
 
-- Process identity includes enough evidence to reject PID reuse.
-- One generation owns one active command.
-- Command completion matches its reservation.
+One exact process identity contains:
 
-## Required Proof
+```text
+target kind
+target ID
+generation
+PID
+process token
+```
 
-- Concurrent starts reserve one winner.
-- Stale generations cannot complete current commands.
-- PID reuse fails identity checks.
+Atomic registration rejects duplicate active generations.
 
-## Open Decisions
+A stale generation cannot claim or acknowledge current commands.
 
-- Server reconnection to independently started processes.
-- Automatic restart and recovery policy.
-- Standalone process status publication while Server is stopped.
+Process lifecycle updates atomically update both `process_state` and the canonical Bot or Sweep status.
+
+## Polling
+
+Backtest and Live poll from the Controller callback using wall-time `process.poll_seconds`.
+
+Backtest replay time never controls command polling.
+
+No transaction remains open during Controller, Recon, Stop, or process waits.
+
+## Current Actions
+
+`stop` is processed by Backtest and Live.
+
+`start`, `pause`, and `resume` remain manager or future lifecycle work. A Run acknowledges unsupported actions as rejected.
+
+## Proof
+
+- Concurrent registrations produce one winner.
+- Superseded requests become skipped.
+- Stale acknowledgement fails.
+- Observer claims and rejects an unsupported queued command, then completes normally.

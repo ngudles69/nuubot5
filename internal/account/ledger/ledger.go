@@ -7,9 +7,9 @@ import (
 
 	"github.com/shopspring/decimal"
 
-	"nuubot/internal/fill"
-	"nuubot/internal/order"
-	"nuubot/internal/trade"
+	"nuubot/internal/account/fill"
+	"nuubot/internal/account/order"
+	"nuubot/internal/account/trade"
 )
 
 const (

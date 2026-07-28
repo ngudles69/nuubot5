@@ -45,28 +45,28 @@ internal/executor/observer.go                          NO
 
 internal/executor/trade.go                             NO
 
-internal/fill/doc.go                                   NO
-internal/fill/fill.go                                  NO
-internal/fill/fill_test.go                             NO
+internal/account/fill/doc.go                                   NO
+internal/account/fill/fill.go                                  NO
+internal/account/fill/fill_test.go                             NO
 internal/hyperliquid/client.go                         NO
 internal/hyperliquid/client_test.go                    NO
 internal/hyperliquid/meta.go                           NO
 internal/hyperliquid/meta_test.go                      NO
 internal/hyperliquid/state.go                          NO
-internal/ledger/doc.go                                 NO
-internal/ledger/ledger.go                              NO
-internal/ledger/ledger_test.go                         NO
-internal/ledger/publish.go                             NO
-internal/ledger/store.go                               NO
+internal/account/ledger/doc.go                                 NO
+internal/account/ledger/ledger.go                              NO
+internal/account/ledger/ledger_test.go                         NO
+internal/account/ledger/publish.go                             NO
+internal/account/ledger/store.go                               NO
 internal/market/market.go                              NO
 internal/meta/doc.go                                   NO
 internal/meta/meta.go                                  NO
 internal/meta/meta_test.go                             NO
 internal/ohlcv/ohlcv.go                                NO
 internal/ohlcv/ohlcv_test.go                           NO
-internal/order/doc.go                                  NO
-internal/order/order.go                                NO
-internal/order/order_test.go                           NO
+internal/account/order/doc.go                                  NO
+internal/account/order/order.go                                NO
+internal/account/order/order_test.go                           NO
 internal/parity/info/clearinghouse.go                  NO
 internal/parity/info/clearinghouse_test.go             NO
 internal/parity/info/info.go                           NO
@@ -99,7 +99,7 @@ internal/toolkit/clock/timer.go                        NO
 internal/toolkit/clock/wallclock.go                    NO
 internal/toolkit/logging/logging.go                    NO
 internal/toolkit/logging/logging_test.go               NO
-internal/trade/doc.go                                  NO
-internal/trade/trade.go                                NO
-internal/trade/trade_test.go                           NO
+internal/account/trade/doc.go                                  NO
+internal/account/trade/trade.go                                NO
+internal/account/trade/trade_test.go                           NO
 ```

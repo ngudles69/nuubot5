@@ -98,6 +98,22 @@ Managers own child launch, PID tracking, cancellation, exit handling, and restar
 
 Server and Managers never own Controller, BotCycle, Executor, Account, Ledger, or trading policy.
 
+## Persistence
+
+The central `nuubot.db` stores Bot and Sweep configuration, commands, acknowledgements, process generations, lifecycle status, and health.
+
+Each globally unique Bot ID owns one execution database:
+
+```text
+workspace/db/bots/bot_<BotID>.db
+```
+
+Backtest replaces that database only after successful terminal publication.
+
+Live retains and reopens the same database across process recovery. Live never clears execution evidence.
+
+Command and supervision transactions remain short. They never span Controller, Recon, Stop, or operating-system process waits.
+
 ## Deployment
 
 Build the binary for the target operating system.

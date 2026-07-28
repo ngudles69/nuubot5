@@ -111,16 +111,17 @@ Nuubot admits only required, audited code. It does not import or preserve either
 | [backtest](design/packages/backtest.md) | Implemented | Execute one complete historical replay. |
 | [btsweep](design/packages/btsweep.md) | Partial | Validate and expand Sweep templates; persistence and execution remain deferred. |
 | [config](design/packages/config.md) | Implemented | Decode and validate immutable settings. |
+| [control](design/packages/control.md) | Implemented | Persist central commands, acknowledgements, and process generations. |
 | [controller](design/packages/controller.md) | Implemented | Own signals, risks, cycles, capital, and stop decisions. |
 | [datastore](design/packages/datastore.md) | Implemented | Load one stored BotConfig and replay input. |
 | [executor](design/packages/executor.md) | Implemented | Own execution policy boundaries. |
-| [fill](design/packages/fill.md) | Implemented | Preserve immutable execution facts. |
+| [fill](design/packages/account-fill.md) | Implemented | Preserve immutable execution facts. |
 | [fprof](design/packages/fprof.md) | Implemented | Generate and report exact A/B/C function profiles. |
 | [hyperliquid](design/packages/hyperliquid.md) | Implemented | Own Hyperliquid protocol transport and translations. |
-| [ledger](design/packages/ledger.md) | Implemented | Own trade, order, and fill evidence. |
+| [ledger](design/packages/account-ledger.md) | Implemented | Own trade, order, and fill evidence. |
 | [market](design/packages/market.md) | Implemented | Carry validated market events. |
 | [meta](design/packages/meta.md) | Implemented | Own mainnet perpetual instrument metadata. |
-| [order](design/packages/order.md) | Implemented | Own submitted order state and fills. |
+| [order](design/packages/account-order.md) | Implemented | Own submitted order state and fills. |
 | [ohlcv](design/packages/ohlcv.md) | Implemented | Load validated OHLCV ranges. |
 | [parity](design/packages/parity.md) | Implemented | Admit and run permanent parity probes. |
 | [parity/info](design/packages/info.md) | Implemented | Capture `/info` payloads and translations. |
@@ -131,7 +132,7 @@ Nuubot admits only required, audited code. It does not import or preserve either
 | [setup](design/packages/setup.md) | Implemented | Prepare one validated Nuubot context. |
 | [signaler](design/packages/signaler.md) | Implemented | Calculate and serve ordered Signal packages. |
 | [simulator](design/packages/simulator.md) | Implemented | Provide venue-shaped simulated execution. |
-| [trade](design/packages/trade.md) | Implemented | Own strategy-level orders and evidence. |
+| [trade](design/packages/account-trade.md) | Implemented | Own strategy-level orders and evidence. |
 | [toolkit/clock](design/packages/clock.md) | Implemented | Provide deterministic clock mechanics. |
 | [toolkit/logging](design/packages/logging.md) | Implemented | Write exact-format append-only file logs. |
 
@@ -139,8 +140,8 @@ Package pages state their implemented and pending boundaries.
 
 ## Approved Design
 
-Backtest hardcuts are implemented. Live and process-control contracts remain
-deferred.
+Backtest hardcuts and central process-control contracts are implemented. Live
+runtime behavior remains deferred.
 
 | Target | Owner |
 |---|---|

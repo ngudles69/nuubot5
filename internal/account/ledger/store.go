@@ -9,9 +9,9 @@ import (
 	"github.com/shopspring/decimal"
 	_ "modernc.org/sqlite"
 
-	"nuubot/internal/fill"
-	"nuubot/internal/order"
-	"nuubot/internal/trade"
+	"nuubot/internal/account/fill"
+	"nuubot/internal/account/order"
+	"nuubot/internal/account/trade"
 )
 
 type ledgerStore struct {

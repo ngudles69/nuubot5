@@ -8,13 +8,13 @@ import (
 	"github.com/shopspring/decimal"
 
 	"nuubot/internal/account"
+	"nuubot/internal/account/ledger"
+	"nuubot/internal/account/order"
+	"nuubot/internal/account/trade"
 	"nuubot/internal/botspec"
-	"nuubot/internal/ledger"
 	"nuubot/internal/market"
-	"nuubot/internal/order"
 	"nuubot/internal/setup"
 	"nuubot/internal/toolkit/logging"
-	"nuubot/internal/trade"
 )
 
 const gridDeploymentPct = 95

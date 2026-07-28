@@ -8,8 +8,8 @@ import (
 
 	"github.com/shopspring/decimal"
 
+	"nuubot/internal/account/order"
 	"nuubot/internal/hyperliquid"
-	"nuubot/internal/order"
 )
 
 type venueRecorder struct {

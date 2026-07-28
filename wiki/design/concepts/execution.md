@@ -1,7 +1,7 @@
 # Execution
 
 Status: Implemented for TradeExecutor and GridExecutor with Simulator.
-Covers: `internal/executor`, `internal/account`, `internal/ledger`, and domain packages
+Covers: `internal/executor`, `internal/account`, `internal/account/ledger`, and domain packages
 Purpose: Turn one Executor decision into validated domain evidence and Venue actions without breaking ownership.
 
 ## Scope

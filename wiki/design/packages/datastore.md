@@ -83,33 +83,33 @@ The canonical mutable layout is defined by
 ```text
 workspace/db/
 |-- nuubot.db
-`-- sweeps/
-    `-- sweep_<sweep_id>/
-        `-- bot_<bot_id>.db
+`-- bots/
+    `-- bot_<bot_id>.db
 ```
 
 Main datastore expectations:
 
 - `paths.database` names the shared database.
-- The shared database contains Sweep, Bot, and Meta tables.
-- Live tables may share one main datastore.
+- The shared database contains Sweep, Bot, Meta, command, acknowledgement, and process-supervision tables.
+- Execution evidence never enters the central control database.
 - Sweep definitions and Bot configuration remain centrally discoverable.
 - Sweep and Bot status updates stay small.
 - Result database paths are stored relative to `workspace/`.
 - Small terminal summaries may return to the main datastore.
 - High-volume Trade, Order, Fill, and replay rows do not enter it.
 
-Per-Bot Sweep result expectations:
+Per-Bot execution database expectations:
 
-- Each `(sweep_id, bot_id)` owns one SQLite result database.
+- Each globally unique `bot_id` owns one SQLite execution database.
 - Each worker writes only its owned result database.
 - Workers never share a result database writer.
 - Workers retain detailed Sweep state in memory during execution.
 - One successful run exports its result database after completion.
 - Final export uses one transaction and an atomic temporary-file rename.
 - Failed runs retain no recovery checkpoint and are rerun.
-- Completed result databases become read-only evidence.
-- Sweep aggregation reads completed databases after Bot termination.
+- Completed Backtest databases become read-only evidence.
+- Live reopens its durable database during recovery without clearing evidence.
+- Sweep aggregation reads completed Backtest databases after Bot termination.
 
 TradeExecutor result tables are defined by
 [Trading Schema](../concepts/trading-schema.md).

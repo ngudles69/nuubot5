@@ -7,11 +7,11 @@ import (
 	"github.com/shopspring/decimal"
 
 	"nuubot/internal/account"
+	"nuubot/internal/account/ledger"
 	"nuubot/internal/bot"
 	"nuubot/internal/botcycle"
 	"nuubot/internal/controller"
 	"nuubot/internal/executor"
-	"nuubot/internal/ledger"
 	"nuubot/internal/telemetry"
 )
 

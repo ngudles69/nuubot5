@@ -5,9 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
+	"nuubot/internal/control"
 	"nuubot/internal/controller"
 	"nuubot/internal/datastore"
 	"nuubot/internal/hyperliquid"
@@ -27,6 +29,9 @@ type Run struct {
 	info                    *hyperliquid.Info
 	webSocket               *hyperliquid.WebSocket
 	controller              controller.Controller
+	control                 control.Store
+	process                 control.Process
+	lastCommandPoll         time.Time
 	telemetryStore          telemetry.Store
 	telemetry               []telemetry.Sample
 	telemetryIntervalMS     uint64
@@ -133,7 +138,33 @@ func (r *Run) Init(
 		}
 	}
 
-	// Step 14: log init completed
+	// Step 14: register Live process
+	err = r.control.Init(nuubot.ControlPath)
+	if err != nil {
+		r.telemetryStore.Stop()
+		return fmt.Errorf("initialize control Store: %w", err)
+	}
+	var registeredAt = uint64(time.Now().UnixMilli())
+	var staleBeforeMS uint64
+	var unresponsiveMS = nuubot.App.Process.UnresponsiveSeconds * 1000
+	if registeredAt > unresponsiveMS {
+		staleBeforeMS = registeredAt - unresponsiveMS
+	}
+	r.process, err = r.control.RegisterProcess(
+		control.Bot,
+		botID,
+		os.Getpid(),
+		fmt.Sprintf("%d-%d", os.Getpid(), time.Now().UnixNano()),
+		registeredAt,
+		staleBeforeMS,
+	)
+	if err != nil {
+		r.control.Stop()
+		r.telemetryStore.Stop()
+		return fmt.Errorf("register Live process: %w", err)
+	}
+
+	// Step 15: log init completed
 	log.Info(fmt.Sprintf(
 		"runner initialized bot_spec=%s symbol=%s",
 		nuubot.Bot.BotSpecID,
@@ -176,7 +207,21 @@ func (r *Run) Start() error {
 		return errors.Join(fmt.Errorf("start clock: %w", err), controllerErr, webSocketErr)
 	}
 
-	// Step 5: log start completed
+	// Step 5: publish Live running
+	err = r.control.UpdateProcess(
+		r.process,
+		control.ProcessRunning,
+		"healthy",
+		uint64(time.Now().UnixMilli()),
+	)
+	if err != nil {
+		r.clock.Stop()
+		var controllerErr = r.controller.Stop("start_error")
+		var webSocketErr = r.webSocket.Stop()
+		return errors.Join(fmt.Errorf("publish Live running: %w", err), controllerErr, webSocketErr)
+	}
+
+	// Step 6: log start completed
 	r.started = true
 	r.log.Info("runner started")
 	return nil
@@ -220,72 +265,106 @@ func (r *Run) Stop() error {
 		return nil
 	}
 
-	// Step 3: mark Run stopped
+	// Step 3: publish Live stopping
+	var controlStoppingErr = r.control.UpdateProcess(
+		r.process,
+		control.ProcessStopping,
+		"healthy",
+		uint64(time.Now().UnixMilli()),
+	)
+	if controlStoppingErr != nil {
+		controlStoppingErr = fmt.Errorf("publish Live stopping: %w", controlStoppingErr)
+	}
+
+	// Step 4: mark Run stopped
 	r.started = false
 	r.stopped = true
 
-	// Step 4: stop clock
+	// Step 5: stop clock
 	r.clock.Stop()
 
-	// Step 5: stop WebSocket endpoint
+	// Step 6: stop WebSocket endpoint
 	var webSocketErr = r.webSocket.Stop()
 	if webSocketErr != nil {
 		webSocketErr = fmt.Errorf("stop WebSocket endpoint: %w", webSocketErr)
 	}
 
-	// Step 6: stop Info endpoint
+	// Step 7: stop Info endpoint
 	r.info.Stop()
 
-	// Step 7: stop Controller
+	// Step 8: stop Controller
 	var controllerErr = r.controller.Stop("parent_stop")
 	if controllerErr != nil {
 		controllerErr = fmt.Errorf("stop Controller: %w", controllerErr)
 	}
 
-	// Step 8: stop MarketData
+	// Step 9: stop MarketData
 	var marketDataErr = r.marketData.Stop()
 	if marketDataErr != nil {
 		marketDataErr = fmt.Errorf("stop MarketData: %w", marketDataErr)
 	}
 
-	// Step 9: collect terminal telemetry
+	// Step 10: collect terminal telemetry
 	var telemetryErr = r.collectTelemetry(r.clock.NowMS(), true)
 	if telemetryErr != nil {
 		telemetryErr = fmt.Errorf("collect terminal telemetry: %w", telemetryErr)
 	}
 
-	// Step 10: stop telemetry persistence
+	// Step 11: stop telemetry persistence
 	var telemetryStopErr = r.telemetryStore.Stop()
 	if telemetryStopErr != nil {
 		telemetryStopErr = fmt.Errorf("stop telemetry persistence: %w", telemetryStopErr)
 	}
 
-	// Step 11: log stop results and stats
+	// Step 12: log stop results and stats
 	var result = "complete"
-	if webSocketErr != nil || controllerErr != nil || marketDataErr != nil ||
-		telemetryErr != nil || telemetryStopErr != nil {
+	if controlStoppingErr != nil || webSocketErr != nil || controllerErr != nil ||
+		marketDataErr != nil || telemetryErr != nil || telemetryStopErr != nil {
 		result = "failed"
 	}
 	r.log.Info(fmt.Sprintf("runner stopped result=%s", result))
 
-	// Step 12: return stop errors
+	// Step 13: select stop result
+	var stopErr error
 	if controllerErr != nil {
-		return controllerErr
-	}
-	if webSocketErr != nil {
-		return webSocketErr
-	}
-	if marketDataErr != nil {
-		return marketDataErr
-	}
-	if telemetryErr != nil {
-		return telemetryErr
-	}
-	if telemetryStopErr != nil {
-		return telemetryStopErr
+		stopErr = controllerErr
+	} else if webSocketErr != nil {
+		stopErr = webSocketErr
+	} else if marketDataErr != nil {
+		stopErr = marketDataErr
+	} else if telemetryErr != nil {
+		stopErr = telemetryErr
+	} else if telemetryStopErr != nil {
+		stopErr = telemetryStopErr
 	}
 
-	// Step 13: log stop completed
+	// Step 14: publish terminal process state
+	var processStatus = control.ProcessStopped
+	var processHealth = "stopped"
+	if stopErr != nil || controlStoppingErr != nil {
+		processStatus = control.ProcessError
+		processHealth = "error"
+	}
+	var controlStateErr = r.control.UpdateProcess(
+		r.process,
+		processStatus,
+		processHealth,
+		uint64(time.Now().UnixMilli()),
+	)
+	if controlStateErr != nil {
+		controlStateErr = fmt.Errorf("publish Live terminal state: %w", controlStateErr)
+	}
+	var controlStopErr = r.control.Stop()
+	if controlStopErr != nil {
+		controlStopErr = fmt.Errorf("stop control Store: %w", controlStopErr)
+	}
+
+	// Step 15: return stop errors
+	if stopErr != nil || controlStoppingErr != nil || controlStateErr != nil || controlStopErr != nil {
+		return errors.Join(stopErr, controlStoppingErr, controlStateErr, controlStopErr)
+	}
+
+	// Step 16: log stop completed
 	r.log.Info("runner stopped.")
 	return nil
 }
@@ -309,12 +388,53 @@ func (r *Run) controllerRun(_ uint64) error {
 		r.lastTelemetryMS = nowMS
 	}
 
-	// Step 3: remember stop request
+	// Step 3: process due control command
+	err = r.processCommand()
+	if err != nil {
+		return err
+	}
+
+	// Step 4: remember stop request
 	if stop {
 		r.stopOnce.Do(func() {
 			close(r.stopRequested)
 		})
 	}
+	return nil
+}
+
+func (r *Run) processCommand() error {
+	var now = time.Now()
+	if !r.lastCommandPoll.IsZero() && now.Sub(r.lastCommandPoll) < r.pollInterval {
+		return nil
+	}
+	var nowMS = uint64(now.UnixMilli())
+	var err = r.control.Heartbeat(r.process, nowMS)
+	if err != nil {
+		return fmt.Errorf("heartbeat Live process: %w", err)
+	}
+	var command control.Command
+	var found bool
+	command, found, err = r.control.ClaimLatest(r.process, nowMS)
+	if err != nil {
+		return fmt.Errorf("claim Live command: %w", err)
+	}
+	if found {
+		var outcome = control.Rejected
+		var detail = "command is unsupported by Live"
+		if command.Action == control.Stop {
+			r.stopOnce.Do(func() {
+				close(r.stopRequested)
+			})
+			outcome = control.Processed
+			detail = "stop requested"
+		}
+		err = r.control.Acknowledge(r.process, command.ID, outcome, detail, nowMS)
+		if err != nil {
+			return fmt.Errorf("acknowledge Live command: %w", err)
+		}
+	}
+	r.lastCommandPoll = now
 	return nil
 }
 

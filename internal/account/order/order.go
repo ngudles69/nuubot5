@@ -6,7 +6,7 @@ import (
 
 	"github.com/shopspring/decimal"
 
-	"nuubot/internal/fill"
+	"nuubot/internal/account/fill"
 )
 
 // Status identifies one canonical Order lifecycle state.

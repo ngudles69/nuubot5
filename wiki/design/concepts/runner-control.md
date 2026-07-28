@@ -1,7 +1,7 @@
 # RunnerControl
 
-Status: Approved — unimplemented.
-Covers: No implemented source.
+Status: Process launcher unimplemented; durable Run control implemented.
+Covers: `internal/control/*.go`, `internal/backtest/*.go`, `internal/live/*.go`.
 Purpose: Start, supervise, command, and stop standalone Runner processes.
 
 ## Canonical Sources

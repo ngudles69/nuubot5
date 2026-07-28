@@ -6,9 +6,9 @@ import (
 
 	"github.com/shopspring/decimal"
 
-	"nuubot/internal/fill"
-	"nuubot/internal/order"
-	"nuubot/internal/trade"
+	"nuubot/internal/account/fill"
+	"nuubot/internal/account/order"
+	"nuubot/internal/account/trade"
 )
 
 // Section 1 - Program Flow

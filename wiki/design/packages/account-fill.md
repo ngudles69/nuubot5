@@ -1,7 +1,7 @@
 # Fill Package
 
 Status: Implemented.
-Covers: `internal/fill/*.go`
+Covers: `internal/account/fill/*.go`
 Purpose: Preserve one actual Venue or Simulator execution as domain evidence.
 
 ## Canonical Sources

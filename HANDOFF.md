@@ -227,20 +227,31 @@ Account-Venue-Simulator boundary hardcut. Recon2 is retired.
 - Trade proof: `workspace/logs/nuubot5-stest-s9-b13-1-20260728T061043Z.log` and `.json`.
 - Grid proof: `workspace/logs/nuubot5-stest-s11-b15-1-20260728T061043Z.log` and `.json`.
 - Runner was not executed.
+- Reorganized Ledger, Trade, Order, and Fill as independent sibling packages under `internal/account`.
+- Added central durable Bot and Sweep commands with processed, skipped, rejected, and acknowledged outcomes.
+- Added central process generations, lifecycle status, heartbeat, health, and atomic Bot or Sweep status publication.
+- Added one isolated execution database per globally unique Bot ID under `workspace/db/bots`.
+- Backtest publishes through `.partial`; Live reopens durable evidence and never clears it.
+- Observer, Trade, and Grid passed after the Account and control-plane changes.
+- Trade and Grid passed concurrently without execution-database isolation failures.
+- Command claim, acknowledgement, rejection, central lifecycle publication, full tests, and full vet passed.
+- Final full Go tests and full Go vet pass with canonical `-tags noasm`.
+- Final shell syntax and Git whitespace checks pass.
+- Zed Go support is restored with native `gopls v0.23.0`; global Zed settings pin its binary and native Go environment.
+- Zed log proves `gopls.exe` starts for `D:\rust\nuubot5`; project diagnostics are clean with no later language-server error.
+- Global Zed settings were backed up at `C:\Users\PC\AppData\Roaming\Zed\settings.pre-gopls-20260728.json` before modification.
+- Windows user `PATH` now includes the native Go toolchain and `gopls` directories and no longer includes `D:\rust\nuutrader6`.
+- The original and updated Windows user `PATH` values are backed up at `workspace/backups/windows-user-path-20260728.txt`.
+- Central Bot and process rows for Bots 9, 13, and 15 are `stopped`; each process generation is positive.
+- Current Setup and `stest.sh` use only `workspace/db/bots/bot_<BotID>.db`; historical sweep database artifacts remain untouched.
+- Runner was compiled but not executed.
 
 ### TODO
 
-
 - Add Observer stop parameters for stop-loss, tick count, bar count, and elapsed-time limits.
 - Use bounded Observer runs such as 200 ticks for fast smoke tests and small logs.
-- Implement the central durable Bot and Sweep command queue with processed, skipped, rejected, and acknowledged outcomes.
-- Keep commands, lifecycle status, acknowledgements, and process supervision in the central operational database.
-- Give every Bot ID one execution database: immutable after backtest publication and durable across live Runner restarts.
 - Keep Controller, Recon, and Recon sweep timing user-configurable; tune fixed intervals from performance data before considering live self-tuning.
-
-
 - Tune Backtest telemetry interval, retention, and memory because terminal-only publication accumulates samples in process memory.
-
 - Revisit the recorded Grid function-profile hotspots during GridExecutor and Simulator hand-tuning.
 - Complete Live Run and test it first with bounded Observer before Trade or Grid.
 - Use the Live Observer smoke test to expose lifecycle and integration defects before trading execution.

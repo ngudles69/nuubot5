@@ -29,6 +29,7 @@ type Nuubot struct {
 	Info        *hyperliquid.Info
 	WebSocket   *hyperliquid.WebSocket
 	Meta        meta.Instrument
+	ControlPath string
 	ResultPath  string
 	RuntimePath string
 }
@@ -67,9 +68,10 @@ func Setup(
 	}
 
 	// Step 4: load Bot input
+	var controlPath = config.Rooted(root, app.Paths.Database)
 	var botInput datastore.Bot
 	botInput, err = datastore.LoadBot(
-		config.Rooted(root, app.Paths.Database),
+		controlPath,
 		sweepID,
 		botID,
 	)
@@ -131,16 +133,20 @@ func Setup(
 		root,
 		"workspace",
 		"db",
-		"sweeps",
-		fmt.Sprintf("sweep_%d", sweepID),
+		"bots",
 		fmt.Sprintf("bot_%d.db", botID),
 	)
+	err = os.MkdirAll(filepath.Dir(resultPath), 0o755)
+	if err != nil {
+		return nil, fmt.Errorf("prepare Bot execution directory: %w", err)
+	}
 	var nuubot = &Nuubot{
 		Log:         log,
 		App:         app,
 		Bot:         botInput,
 		BotSpec:     botSpec,
 		Meta:        instrument,
+		ControlPath: controlPath,
 		ResultPath:  resultPath,
 		RuntimePath: resultPath,
 	}

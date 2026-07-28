@@ -59,7 +59,8 @@ Do not modify a reference repository without explicit user authority.
 - Simulator-backed arithmetic GridExecutor.
 - Account, Ledger, Trade, Order, and Fill reconciliation.
 - Simulator venue-shaped execution.
-- Per-Bot result publication.
+- Per-Bot result publication into one isolated execution database per Bot ID.
+- Central durable Bot and Sweep commands, acknowledgements, process generations, lifecycle status, heartbeat, and health.
 - Exact A/B/C function profiling through temporary Go build overlays.
 - BalancedRisk stub.
 - Reader-exhaustion shutdown through BtBot.
@@ -74,7 +75,7 @@ Do not modify a reference repository without explicit user authority.
 - Server, API, web server, BotManager, and SweepManager.
 - Standalone BtSweep.
 - Live Venue execution, recovery, and CLOID handling.
-- ProcessStore and RunnerControl.
+- Remaining RunnerControl actions beyond the implemented process-owned `stop` command.
 - PocketBase-backed HTTP, API, authentication, administration, realtime, and
   SQLite persistence.
 - Multi-source replay and live BotSpec admission.

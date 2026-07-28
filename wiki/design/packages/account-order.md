@@ -1,7 +1,7 @@
 # Order Package
 
 Status: Implemented for request identity, Venue state, and Fill aggregation.
-Covers: `internal/order/*.go`
+Covers: `internal/account/order/*.go`
 Purpose: Represent one immutable submitted request and its changing Venue lifecycle.
 
 ## Canonical Sources

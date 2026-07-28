@@ -1,7 +1,7 @@
 # Trading Schema
 
 Status: Implemented.
-Covers: `internal/ledger/store.go`, `internal/simulator/store.go`, and `internal/resultpublisher`
+Covers: `internal/account/ledger/store.go`, `internal/simulator/store.go`, and `internal/resultpublisher`
 Purpose: Define per-Bot Account evidence and durable Simulator child state.
 
 ## Scope
@@ -9,7 +9,7 @@ Purpose: Define per-Bot Account evidence and durable Simulator child state.
 One `(sweep_id, bot_id)` worker owns:
 
 ```text
-workspace/db/sweeps/sweep_<sweep_id>/bot_<bot_id>.db
+workspace/db/bots/bot_<bot_id>.db
 ```
 
 The shared `workspace/db/nuubot.db` contains Sweeps, Bots, and mainnet Meta.

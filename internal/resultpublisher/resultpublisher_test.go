@@ -9,12 +9,12 @@ import (
 	_ "modernc.org/sqlite"
 
 	"nuubot/internal/account"
+	"nuubot/internal/account/ledger"
 	"nuubot/internal/bot"
 	"nuubot/internal/botcycle"
 	"nuubot/internal/botspec"
 	"nuubot/internal/controller"
 	"nuubot/internal/executor"
-	"nuubot/internal/ledger"
 	"nuubot/internal/report"
 	"nuubot/internal/setup"
 	"nuubot/internal/telemetry"

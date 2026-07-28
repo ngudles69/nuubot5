@@ -2,7 +2,7 @@
 
 Status: Implemented for standalone Simulator backtests.
 Covers: `internal/controller`, `internal/botcycle`, `internal/executor`,
-`internal/account`, `internal/ledger`, and `internal/simulator`
+`internal/account`, `internal/account/ledger`, and `internal/simulator`
 Purpose: Define the complete current trading ownership path.
 
 ```text

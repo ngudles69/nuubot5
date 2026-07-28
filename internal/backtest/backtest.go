@@ -2,11 +2,13 @@ package backtest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	stdruntime "runtime"
 	"time"
 
+	"nuubot/internal/control"
 	"nuubot/internal/controller"
 	"nuubot/internal/datastore"
 	"nuubot/internal/market"
@@ -61,6 +63,10 @@ type Run struct {
 	marketData          *market.MarketData
 	marketKeys          []market.Key
 	controller          controller.Controller
+	control             control.Store
+	process             control.Process
+	commandPollInterval time.Duration
+	lastCommandPoll     time.Time
 	symbol              string
 	resultPath          string
 	stats               stats
@@ -109,6 +115,7 @@ func (r *Run) Init(
 	var replayInput = nuubot.Bot.Replay
 	r.symbol = replayInput.Symbol
 	r.resultPath = nuubot.ResultPath
+	r.commandPollInterval = time.Duration(nuubot.App.Process.PollSeconds) * time.Second
 
 	// Step 6: set replay range
 	var start = replayInput.ReplayStart
@@ -178,7 +185,31 @@ func (r *Run) Init(
 		expectedLastMS:  endMS,
 	}
 
-	// Step 15: log init completed
+	// Step 15: register Backtest process
+	err = r.control.Init(nuubot.ControlPath)
+	if err != nil {
+		return fmt.Errorf("initialize control Store: %w", err)
+	}
+	var registeredAt = uint64(time.Now().UnixMilli())
+	var staleBeforeMS uint64
+	var unresponsiveMS = nuubot.App.Process.UnresponsiveSeconds * 1000
+	if registeredAt > unresponsiveMS {
+		staleBeforeMS = registeredAt - unresponsiveMS
+	}
+	r.process, err = r.control.RegisterProcess(
+		control.Bot,
+		botID,
+		os.Getpid(),
+		fmt.Sprintf("%d-%d", os.Getpid(), time.Now().UnixNano()),
+		registeredAt,
+		staleBeforeMS,
+	)
+	if err != nil {
+		r.control.Stop()
+		return fmt.Errorf("register Backtest process: %w", err)
+	}
+
+	// Step 16: log init completed
 	log.Info(fmt.Sprintf(
 		"btbot initialized bot_spec=%s symbol=%s",
 		nuubot.Bot.BotSpecID,
@@ -206,7 +237,20 @@ func (r *Run) Start() error {
 		return fmt.Errorf("start Controller: %w", err)
 	}
 
-	// Step 3: log start completed
+	// Step 3: publish Backtest running
+	err = r.control.UpdateProcess(
+		r.process,
+		control.ProcessRunning,
+		"healthy",
+		uint64(time.Now().UnixMilli()),
+	)
+	if err != nil {
+		var controllerErr = r.controller.Stop("start_error")
+		r.clock.Stop()
+		return errors.Join(fmt.Errorf("publish Backtest running: %w", err), controllerErr)
+	}
+
+	// Step 4: log start completed
 	r.started = true
 	r.log.Info("btbot started")
 	return nil
@@ -283,32 +327,43 @@ func (r *Run) Stop() error {
 		return nil
 	}
 
-	// Step 3: mark Run stopped
+	// Step 3: publish Backtest stopping
+	var controlStoppingErr = r.control.UpdateProcess(
+		r.process,
+		control.ProcessStopping,
+		"healthy",
+		uint64(time.Now().UnixMilli()),
+	)
+	if controlStoppingErr != nil {
+		controlStoppingErr = fmt.Errorf("publish Backtest stopping: %w", controlStoppingErr)
+	}
+
+	// Step 4: mark Run stopped
 	r.started = false
 	r.stopped = true
 
-	// Step 4: stop clock
+	// Step 5: stop clock
 	r.clock.Stop()
 
-	// Step 5: stop replay reader
+	// Step 6: stop replay reader
 	var readerErr = r.reader.Stop()
 	if readerErr != nil {
 		readerErr = fmt.Errorf("stop replay reader: %w", readerErr)
 	}
 
-	// Step 6: stop Controller
+	// Step 7: stop Controller
 	var controllerErr = r.controller.Stop("parent_stop")
 	if controllerErr != nil {
 		controllerErr = fmt.Errorf("stop Controller: %w", controllerErr)
 	}
 
-	// Step 7: stop MarketData
+	// Step 8: stop MarketData
 	var marketDataErr = r.marketData.Stop()
 	if marketDataErr != nil {
 		marketDataErr = fmt.Errorf("stop MarketData: %w", marketDataErr)
 	}
 
-	// Step 8: prepare completed result
+	// Step 9: prepare completed result
 	var publishErr error
 	if readerErr == nil && controllerErr == nil && marketDataErr == nil &&
 		r.stats.replayCompleted {
@@ -337,10 +392,10 @@ func (r *Run) Stop() error {
 			},
 		}
 
-		// Step 9: build terminal report
+		// Step 10: build terminal report
 		r.report, publishErr = report.Build(input)
 
-		// Step 10: publish completed result
+		// Step 11: publish completed result
 		if publishErr == nil {
 			publishErr = resultpublisher.Publish(r.resultPath, input, r.report)
 		}
@@ -351,10 +406,10 @@ func (r *Run) Stop() error {
 		}
 	}
 
-	// Step 11: log stop results and stats
+	// Step 12: log stop results and stats
 	var result = "failed"
-	if readerErr == nil && controllerErr == nil && marketDataErr == nil &&
-		publishErr == nil && r.stats.replayCompleted {
+	if controlStoppingErr == nil && readerErr == nil && controllerErr == nil &&
+		marketDataErr == nil && publishErr == nil && r.stats.replayCompleted {
 		result = "complete"
 	}
 	r.log.Info(fmt.Sprintf(
@@ -379,24 +434,47 @@ func (r *Run) Stop() error {
 		result,
 	))
 
-	// Step 12: return stop errors
+	// Step 13: select stop result
+	var stopErr error
 	if controllerErr != nil {
-		return controllerErr
-	}
-	if readerErr != nil {
-		return readerErr
-	}
-	if marketDataErr != nil {
-		return marketDataErr
-	}
-	if publishErr != nil {
-		return publishErr
-	}
-	if !r.stats.replayCompleted {
-		return fmt.Errorf("btbot replay did not complete")
+		stopErr = controllerErr
+	} else if readerErr != nil {
+		stopErr = readerErr
+	} else if marketDataErr != nil {
+		stopErr = marketDataErr
+	} else if publishErr != nil {
+		stopErr = publishErr
+	} else if !r.stats.replayCompleted {
+		stopErr = fmt.Errorf("btbot replay did not complete")
 	}
 
-	// Step 13: log stop completed
+	// Step 14: publish terminal process state
+	var processStatus = control.ProcessStopped
+	var processHealth = "stopped"
+	if stopErr != nil || controlStoppingErr != nil {
+		processStatus = control.ProcessError
+		processHealth = "error"
+	}
+	var controlStateErr = r.control.UpdateProcess(
+		r.process,
+		processStatus,
+		processHealth,
+		uint64(time.Now().UnixMilli()),
+	)
+	if controlStateErr != nil {
+		controlStateErr = fmt.Errorf("publish Backtest terminal state: %w", controlStateErr)
+	}
+	var controlStopErr = r.control.Stop()
+	if controlStopErr != nil {
+		controlStopErr = fmt.Errorf("stop control Store: %w", controlStopErr)
+	}
+
+	// Step 15: return stop errors
+	if stopErr != nil || controlStoppingErr != nil || controlStateErr != nil || controlStopErr != nil {
+		return errors.Join(stopErr, controlStoppingErr, controlStateErr, controlStopErr)
+	}
+
+	// Step 16: log stop completed
 	r.log.Info("btbot stopped.")
 	return nil
 }
@@ -432,21 +510,63 @@ func clearData(path string) error {
 }
 
 func (r *Run) controllerRun(_ uint64) error {
-	// run Controller - triggered by Timer
+	// Step 1: run Controller - triggered by Timer
 	r.stats.runsTriggered++
 	var stop, err = r.controller.Run()
 	if err != nil {
 		return fmt.Errorf("run Controller: %w", err)
 	}
+
+	// Step 2: collect due telemetry
 	var nowMS = r.clock.NowMS()
 	if r.lastTelemetryMS == 0 || nowMS-r.lastTelemetryMS >= r.telemetryIntervalMS {
 		r.collectTelemetry(nowMS, false)
 		r.lastTelemetryMS = nowMS
 	}
-	// remember stop request
+
+	// Step 3: process due control command
+	err = r.processCommand()
+	if err != nil {
+		return err
+	}
+
+	// Step 4: remember stop request
 	if stop {
 		r.stopRequested = true
 	}
+	return nil
+}
+
+func (r *Run) processCommand() error {
+	var now = time.Now()
+	if !r.lastCommandPoll.IsZero() && now.Sub(r.lastCommandPoll) < r.commandPollInterval {
+		return nil
+	}
+	var nowMS = uint64(now.UnixMilli())
+	var err = r.control.Heartbeat(r.process, nowMS)
+	if err != nil {
+		return fmt.Errorf("heartbeat Backtest process: %w", err)
+	}
+	var command control.Command
+	var found bool
+	command, found, err = r.control.ClaimLatest(r.process, nowMS)
+	if err != nil {
+		return fmt.Errorf("claim Backtest command: %w", err)
+	}
+	if found {
+		var outcome = control.Rejected
+		var detail = "command is unsupported by Backtest"
+		if command.Action == control.Stop {
+			r.stopRequested = true
+			outcome = control.Processed
+			detail = "stop requested"
+		}
+		err = r.control.Acknowledge(r.process, command.ID, outcome, detail, nowMS)
+		if err != nil {
+			return fmt.Errorf("acknowledge Backtest command: %w", err)
+		}
+	}
+	r.lastCommandPoll = now
 	return nil
 }
 

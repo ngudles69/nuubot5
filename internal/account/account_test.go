@@ -10,14 +10,14 @@ import (
 	"github.com/shopspring/decimal"
 	_ "modernc.org/sqlite"
 
+	"nuubot/internal/account/ledger"
+	"nuubot/internal/account/order"
+	"nuubot/internal/account/trade"
 	appconfig "nuubot/internal/config"
-	"nuubot/internal/ledger"
 	"nuubot/internal/market"
 	"nuubot/internal/meta"
-	"nuubot/internal/order"
 	"nuubot/internal/setup"
 	"nuubot/internal/toolkit/logging"
-	"nuubot/internal/trade"
 )
 
 // Section 1 - Program Flow

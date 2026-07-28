@@ -7,15 +7,15 @@ import (
 
 	"github.com/shopspring/decimal"
 
+	"nuubot/internal/account/fill"
+	"nuubot/internal/account/ledger"
+	"nuubot/internal/account/order"
+	"nuubot/internal/account/trade"
 	"nuubot/internal/cloid"
-	"nuubot/internal/fill"
 	"nuubot/internal/hyperliquid"
-	"nuubot/internal/ledger"
 	"nuubot/internal/market"
-	"nuubot/internal/order"
 	"nuubot/internal/setup"
 	"nuubot/internal/toolkit/logging"
-	"nuubot/internal/trade"
 )
 
 var networkCodes = map[string]uint8{

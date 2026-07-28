@@ -37,9 +37,8 @@ workspace/
 |   `-- credentials.toml
 |-- db/
 |   |-- nuubot.db
-|   `-- sweeps/
-|       `-- sweep_<sweep_id>/
-|           `-- bot_<bot_id>.db
+|   `-- bots/
+|       `-- bot_<bot_id>.db
 |-- logs/
 |-- perf/
 |   `-- profiles/
@@ -52,8 +51,8 @@ workspace/
 |---|---|---|
 | `workspace/config/config.toml` | Shared non-secret application configuration. | Tracked |
 | `workspace/config/credentials.toml` | Local credentials and secrets. | Ignored |
-| `workspace/db/nuubot.db` | Shared Sweep, Bot, Meta, and future main tables. | Ignored |
-| `workspace/db/sweeps/` | Per-Bot Sweep result SQLite databases. | Ignored |
+| `workspace/db/nuubot.db` | Central Config, Meta, commands, acknowledgements, process generations, status, and health. | Ignored |
+| `workspace/db/bots/` | One isolated execution SQLite database per globally unique Bot ID. | Ignored |
 | `workspace/logs/` | Controller, Server, Bot, and test-run logs. | Ignored |
 | `workspace/perf/profiles/` | Opt-in command performance diagnostics. Never user or account profiles. | Ignored |
 | `workspace/data/` | Market and other runtime data files. | Ignored |
@@ -70,16 +69,12 @@ enter source, shared configuration, wiki pages, logs, tests, or prompts.
 
 The configured shared datastore is `workspace/db/nuubot.db`.
 
-It holds Sweep definitions, Bot configuration, mainnet Meta, and later small
-shared records.
+It holds Sweep definitions, Bot configuration, mainnet Meta, commands, acknowledgements, process generations, lifecycle status, and health.
 
-Live operation may use one shared database because its expected write pressure
-is bounded.
-
-Each Sweep Bot writes detailed results to:
+Every globally unique Bot ID owns one execution database:
 
 ```text
-workspace/db/sweeps/sweep_<sweep_id>/bot_<bot_id>.db
+workspace/db/bots/bot_<bot_id>.db
 ```
 
 Each result database has one writer. It contains high-volume Trade, Order, Fill,
@@ -88,8 +83,7 @@ and detailed replay evidence for that Bot.
 Workers must not write detailed results into one shared Sweep database. A
 coordinator may serialize small catalog and terminal-summary updates.
 
-Completed result databases become read-only evidence. Sweep aggregation reads
-them after their owning Bots finish.
+Completed Backtest databases become read-only evidence. Live reopens its database across process recovery without clearing historical evidence.
 
 Sweep workers keep detailed Ledger and Simulator state in memory while running.
 

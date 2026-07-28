@@ -88,6 +88,31 @@ func TestLoadAppRejectsSweepAtReconCadence(t *testing.T) {
 	}
 }
 
+func TestLoadAppRejectsZeroProcessPoll(t *testing.T) {
+	var path = writeAppConfig(t, func(contents string) string {
+		return strings.Replace(contents, "poll_seconds = 10", "poll_seconds = 0", 1)
+	})
+	var _, err = LoadApp(path)
+	if err == nil || !strings.Contains(err.Error(), "process.poll_seconds") {
+		t.Fatalf("error = %v, want process poll rejection", err)
+	}
+}
+
+func TestLoadAppRejectsUnresponsiveAtPollCadence(t *testing.T) {
+	var path = writeAppConfig(t, func(contents string) string {
+		return strings.Replace(
+			contents,
+			"unresponsive_seconds = 30",
+			"unresponsive_seconds = 10",
+			1,
+		)
+	})
+	var _, err = LoadApp(path)
+	if err == nil || !strings.Contains(err.Error(), "process.unresponsive_seconds") {
+		t.Fatalf("error = %v, want unresponsive cadence rejection", err)
+	}
+}
+
 func TestLoadAppRejectsLiveWithoutWriteOnCollect(t *testing.T) {
 	var path = writeAppConfig(t, func(contents string) string {
 		return strings.Replace(

@@ -438,7 +438,7 @@ suite_failed=0
 while IFS='|' read -r sweep_id bot_id order_value stored_spec; do
     result_log="$log_dir/nuubot5-stest-s${sweep_id}-b${bot_id}-${runs}-${stamp}.log"
     suite_json="${result_log%.log}.json"
-    result_db="$repo_root/workspace/db/sweeps/sweep_${sweep_id}/bot_${bot_id}.db"
+    result_db="$repo_root/workspace/db/bots/bot_${bot_id}.db"
     bot_log="$log_dir/bot_${sweep_id}_${bot_id}.log"
     profile_dir="$repo_root/workspace/perf/profiles/stest-s${sweep_id}-b${bot_id}-${stamp}"
     attempt_records=""
@@ -502,6 +502,28 @@ while IFS='|' read -r sweep_id bot_id order_value stored_spec; do
                     'SELECT bot_spec_id FROM backtest_result;'
             )"
             [[ "$reported_spec" == "$stored_spec" ]] || valid=0
+            central_bot_status="$(
+                sqlite3 "$source_db" \
+                    "SELECT status FROM bot WHERE bot_id=$bot_id;"
+            )"
+            central_process_status="$(
+                sqlite3 "$source_db" "
+                    SELECT status FROM process_state
+                    WHERE target_kind='bot' AND target_id=$bot_id;
+                "
+            )"
+            central_generation="$(
+                sqlite3 "$source_db" "
+                    SELECT generation FROM process_state
+                    WHERE target_kind='bot' AND target_id=$bot_id;
+                "
+            )"
+            validation_check "$result_db" central_bot_status equal stopped \
+                "$central_bot_status" || valid=0
+            validation_check "$result_db" central_process_status equal stopped \
+                "$central_process_status" || valid=0
+            validation_check "$result_db" central_process_generation greater 0 \
+                "$central_generation" || valid=0
         fi
 
         if [[ $valid -eq 1 ]]; then

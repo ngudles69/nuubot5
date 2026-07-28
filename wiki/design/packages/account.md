@@ -1,7 +1,7 @@
 # Account Package
 
 Status: Implemented for Simulator-backed Accounts.
-Covers: `internal/account/*.go`
+Covers: `internal/account/*.go` and `internal/account/{ledger,trade,order,fill}`
 Purpose: Give one Executor a trading boundary backed by one Venue and one local Ledger.
 
 ## Canonical Sources
@@ -14,11 +14,13 @@ Purpose: Give one Executor a trading boundary backed by one Venue and one local 
 
 TradeExecutor or GridExecutor owns one Account.
 
-Account owns one selected Venue and one Ledger.
+Account composes one selected Venue and one Ledger for current execution.
+
+Ledger, Trade, Order, and Fill remain independent sibling packages inside the Account domain. Directory layout does not freeze future ownership.
 
 The current BtBot implementation selects Simulator only.
 
-Account hides Venue selection and response translation from Executor.
+Account is the Executor-facing menu. It hides Venue selection, response translation, and accounting coordination from Executor.
 
 Executor supplies `order_level`.
 
@@ -29,6 +31,14 @@ These values stay inside Account and Ledger.
 Account sends Venue only official operation fields.
 
 Persisted `order_pos` remains request position inside one batch.
+
+## Account Menu
+
+Executors call Account operations such as `Reconcile`, `PlaceOrders`, `CancelOrders`, snapshots, positions, and focused accounting views.
+
+Account decides whether each operation uses Venue, Ledger, or both.
+
+Higher layers do not construct or mutate Ledger, Trade, Order, or Fill objects directly.
 
 ## Construction
 

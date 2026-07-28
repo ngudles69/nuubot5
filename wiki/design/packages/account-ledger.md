@@ -1,7 +1,7 @@
 # Ledger Package
 
 Status: Implemented for memory, maximum persistence, reload, and summary results.
-Covers: `internal/ledger/*.go`
+Covers: `internal/account/ledger/*.go`
 Purpose: Hold one Account's coherent local Trades, Orders, Fills, and reconciliation cursor.
 
 ## Canonical Sources

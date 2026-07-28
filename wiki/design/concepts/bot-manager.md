@@ -1,7 +1,7 @@
 # BotManager
 
-Status: Approved — unimplemented.
-Covers: No implemented source.
+Status: Manager unimplemented; central command and process Store implemented.
+Covers: `internal/control/*.go` for durable coordination.
 Purpose: Own operator-facing Bot configuration and lifecycle commands.
 
 ## Canonical Sources
