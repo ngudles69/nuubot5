@@ -4,8 +4,9 @@ Last updated: 2026-07-28
 
 ## Focus
 
-Performance Chunks 1-5 are implemented. Chunk 4B became the approved
-Account-Venue-Simulator boundary hardcut. Recon2 is retired.
+Active design audit: make Account, flat Ledger/Trade/Order/Fill records, and Simulator faster, internally consistent, free of dead code, and still runnable.
+
+Production implementation has not started. Another session owns the Ledger-stack redesign. This session owns Account and Simulator audit alignment and adversarial readiness proof.
 
 ## Active User Code Review
 
@@ -245,9 +246,39 @@ Account-Venue-Simulator boundary hardcut. Recon2 is retired.
 - Central Bot and process rows for Bots 9, 13, and 15 are `stopped`; each process generation is positive.
 - Current Setup and `stest.sh` use only `workspace/db/bots/bot_<BotID>.db`; historical sweep database artifacts remain untouched.
 - Runner was compiled but not executed.
+- Committed and pushed Account package grouping, central control, and per-Bot execution databases as `5f16e26`.
+- Created clean sibling worktree `D:\rust\nuubot5-server` on branch `nuubot5-server` for Server and GUI work.
+- Created `.audits/07-28-account.md` with approved Account menu, lifecycle organization, caller cleanup, and CLOID ownership decisions.
+- Account keeps CLOID creation; Executor supplies Order intent and `OrderLevel`; `cloid` performs mechanical encoding only.
+- Account owns dirty state. Ledger reports pending evidence only. No public `IsDirty` exists without a confirmed caller.
+- Account audit removes no-op `Result.Clone`, redundant `copySpec`, dead wrappers, and test-only `Order` and `Fill` wrappers.
+- Same-package Account tests may inspect Account-owned Ledger records directly; test-only access does not justify production APIs.
+- Read the complete `.audits/07-28-ledger-stack.md` target through line 1305.
+- Ledger target uses one canonical Ledger and one flat record per Trade, Order, and Fill with ID indexes and no nested duplicate graph.
+- Ledger audit records three earlier adversarial rounds ending PASS, but root Account/Ledger reconciliation remains unfinished.
+- Created `.audits/07-28-simulator.md` with all 42 functions, callers, dispositions, target internals, impacts, sequence, and proof.
+- DONE: Created concise entity-specific change files for Account, Ledger, Trade, Order, and Fill.
+- Root review removed stale raw-payload history, Ledger-owned Recon redesign, `CountOrders`, Account `Start`, repair logic, and duplicate local/database IDs.
+- Completed the Simulator upstream/downstream trace across Account, Ledger, Hyperliquid, MarketData, Clock, Backtest, Live, BotSpec, and results.
+- Simulator remains Account-owned. One Bot loop owns serialized calls.
+- Temporary rule: `Simulator.Persist(mode)` writes dirty rows for both `none` and `max`.
+- Future architecture TODO: restore true memory-only `none` after Simulator state survives Account and Executor cycle replacement.
+- That future change must define account-state lifetime, cycle handoff, final publication, recovery, and shared-account ownership together.
+- User requires agent status confirmation every 15 minutes during active delegated work.
+- No production Account, Ledger-stack, or Simulator implementation has started in this audit task.
 
 ### TODO
 
+- DONE: Reconciled Account and Ledger ownership decisions through the topic review.
+- DONE: Completed the Simulator audit and holistic implementation blueprint.
+- ACTIVE ROOT: Verify the Simulator audit and deliver the implementation-readiness summary.
+- FUTURE ARCHITECTURE: Make `persist_mode=none` truly memory-only without losing Simulator state between Account and Executor cycles.
+- QUEUED: Run one adversarial Account/Ledger review, fix accepted blockers, and repeat once only when blockers changed contracts.
+- QUEUED: Run three independent adversarial reviews across Account, Ledger-stack, and Simulator audits; one must prove implementation readiness and complete caller impact.
+- QUEUED: Fix accepted blockers and repeat final adversarial review up to two more rounds only when contracts changed.
+- QUEUED: Deliver an implementation-readiness summary before production coding.
+- Keep `.audits/**` uncommitted while the audits remain active.
+- Re-read current Account-stack source and callers before implementation because another session may change them.
 - Add Observer stop parameters for stop-loss, tick count, bar count, and elapsed-time limits.
 - Use bounded Observer runs such as 200 ticks for fast smoke tests and small logs.
 - Keep Controller, Recon, and Recon sweep timing user-configurable; tune fixed intervals from performance data before considering live self-tuning.
@@ -255,6 +286,134 @@ Account-Venue-Simulator boundary hardcut. Recon2 is retired.
 - Revisit the recorded Grid function-profile hotspots during GridExecutor and Simulator hand-tuning.
 - Complete Live Run and test it first with bounded Observer before Trade or Grid.
 - Use the Live Observer smoke test to expose lifecycle and integration defects before trading execution.
+
+### ACTIVE AUDIT EXECUTION CONTRACT
+
+#### Overall Intent
+
+- Rework Account, Ledger, Trade, Order, Fill, and Simulator as one coherent execution stack.
+- Preserve accepted trading behavior, finance, recovery, persistence, system proof, and Exchange-shaped Simulator behavior.
+- Improve runtime speed, memory shape, ownership clarity, and code consistency.
+- Remove dead code, duplicate representations, clone chains, nested duplicate records, and test-only production APIs.
+- A small local edit must be assessed by its complete cross-package and runtime impact.
+
+#### Working Files
+
+- `.audits/07-28-account.md` owns Account menu, lifecycle organization, Order preparation, CLOID ownership, callers, and removal decisions.
+- `.audits/07-28-ledger-stack.md` owns flat Ledger, Trade, Order, Fill, persistence, recovery, reconciliation, schema, and domain proof.
+- `.audits/07-28-simulator.md` owns Simulator lifecycle, API, state, matching, persistence, MarketData, parity, performance, callers, and proof.
+- Production source, tests, and canonical wiki remain unchanged during audit work.
+- Keep every active `.audits/**` file uncommitted.
+
+#### Review Method
+
+Every root and agent review must use this order:
+
+1. State the complete application intent.
+2. State the reviewed component's exact responsibility.
+3. State each proposed change's intent.
+4. Trace the current implementation and direct callers.
+5. Assess complete ownership, behavior, data, persistence, recovery, and performance impact.
+6. Identify every required caller, schema, result, test, and documentation change.
+7. Reject local simplifications that break another execution path.
+8. Mark findings as blocker, non-blocker, invalid, or already resolved.
+
+Every proposed function decision must include:
+
+- current one-line behavior;
+- exact production and test callers;
+- `KEEP`, `REMOVE`, `MODIFY`, `MOVE`, or `RENAME`;
+- target signature and owner when changed;
+- affected callers and replacement path;
+- backtest and Live impact;
+- required proof.
+
+#### Phase 1 - Root Account and Ledger Alignment
+
+- Read both audits completely before editing either.
+- Re-read current Account-stack source and direct callers because another session may change them.
+- Reconcile ownership language. Ledger allocates local Trade and Order IDs; Account orchestrates and creates CLOIDs.
+- Define exact canonical Trade, Order, Fill, Ledger, Account input, output, and result types.
+- Remove every unresolved phrase such as `if practical`, `if required`, or `implementation-time confirmation`.
+- Define exact Account lifecycle. Do not add `Start` unless concrete owned background work requires it.
+- Define exact Account observation APIs and immutable return shapes.
+- Define exact terminal publication of all Backtest Trade, Order, and Fill records under `persist_mode=none`.
+- Define exact Live recovery, archival reads, raw evidence, schema version, and failure atomicity.
+- Define exact ResultPublisher, report, Executor, Grid, Trade, tests, schema, and wiki caller changes.
+- Edit only the two audit files during alignment.
+
+#### Phase 2 - Simulator Audit
+
+- DONE: Read `simulator.go`, direct callers, tests, design, profiles, persistence, Account integration, and Nuutrader6 references.
+- DONE: Listed all 42 functions with one-line behavior, exact callers, disposition, target, impact, sequence, and proof.
+- DONE: Covered MarketData, matching, exchange parity, state, persistence, recovery, logging, lifecycle, Clock, and performance.
+- DONE: Added the holistic upstream/downstream implementation blueprint.
+- No production, test, wiki, Account-audit, or Ledger-audit change was made.
+
+#### Phase 3 - Account and Ledger Adversarial Review
+
+- After Phase 1, spawn one independent adversarial agent to review both complete audits.
+- The agent starts from application intent and assesses actual proposed changes, not isolated wording.
+- The agent checks implementation readiness, ownership, caller completeness, data correctness, recovery, persistence, performance, and proof.
+- The agent may report blockers only. Root assesses each finding and edits the audits for accepted blockers.
+- Reject invalid findings with exact source or audit evidence.
+- Run at most two Account/Ledger adversarial rounds total.
+- Run round two only when accepted round-one fixes changed behavior, ownership, contracts, or unresolved judgment.
+- Phase 3 passes only with no unresolved blocker.
+
+#### Phase 4 - Three Independent Full-Stack Reviews
+
+- Start only after all three audits exist and Phase 3 passes.
+- Spawn three independent agents concurrently. Every agent reads and reviews all three audits.
+- Agent A emphasizes ownership, lifecycle, correctness, failure, reconciliation, and recovery.
+- Agent B emphasizes performance, allocations, indexes, matching complexity, persistence volume, memory retention, and Simulator hot paths.
+- Agent C proves implementation readiness, complete callers, schema, publication, tests, sequencing, and whether changes break other programs.
+- Agents remain read-only and return findings to root. They do not concurrently edit shared audit files.
+- Root assesses every finding, fixes accepted blockers, and records rejected findings with evidence.
+- Repeat the three-agent round at most two more times.
+- Repeat only when accepted fixes changed behavior, ownership, contracts, or unresolved judgment.
+- Stop repeating after one clean round or after the maximum three full-stack rounds.
+
+#### Blocker Standard
+
+A blocker is any unresolved issue that can:
+
+- prevent direct implementation;
+- create ambiguous ownership or duplicate mutable state;
+- change accepted trading behavior or finance;
+- lose, merge, or misroute Trade, Order, Fill, or raw Exchange evidence;
+- break Backtest, Live, recovery, persistence, ResultPublisher, report, Executor, Grid, or Simulator;
+- violate Exchange parity or CLOID, OID, TID identity rules;
+- publish memory before required durable commit;
+- advance an unproven reconciliation cursor;
+- reintroduce nested searches or material performance regressions;
+- leave required proof impossible or undefined.
+
+Style preference without behavioral, ownership, implementation, or proof impact is not a blocker.
+
+#### Agent Continuity
+
+- Confirm every delegated worker after 30 seconds when polling is available.
+- Report every active worker at least every 15 minutes as `AGENT N - task - Alive and working`.
+- Report cancellation, overload, silence, failure, or missing output immediately.
+- Replace failed workers when servers permit. Root continues independent work during agent outages.
+- Never claim an agent is active without confirmed evidence.
+
+#### Completion Contract
+
+The audit task completes only when:
+
+- all three audit files exist;
+- every function has an exact disposition and replacement path;
+- every affected caller, schema, result, test, and wiki owner is listed;
+- Backtest and Live behavior is explicit without scattered mode branches;
+- persistence, recovery, archival, raw evidence, identity, and cursor rules are exact;
+- implementation steps are ordered and dependency-safe;
+- proof commands and accepted semantic invariants are exact;
+- adversarial review limits are satisfied;
+- no unresolved blocker or implementation choice remains;
+- root gives one concise implementation-readiness summary;
+- production implementation remains unstarted until the user requests it.
 
 ### PENDING USER APPROVAL
 

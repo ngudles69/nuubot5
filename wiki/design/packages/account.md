@@ -22,9 +22,11 @@ The current BtBot implementation selects Simulator only.
 
 Account is the Executor-facing menu. It hides Venue selection, response translation, and accounting coordination from Executor.
 
-Executor supplies `order_level`.
+Executor supplies Order intent and `order_level`.
 
-Account supplies Trade, batch, purpose, and remaining CLOID identity.
+Account supplies Trade, batch, purpose, and remaining CLOID identity. Account creates the CLOID when local Order intent becomes a Venue request.
+
+Executor does not construct CLOIDs. The `cloid` package performs mechanical encoding only.
 
 These values stay inside Account and Ledger.
 
