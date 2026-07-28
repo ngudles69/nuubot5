@@ -48,11 +48,14 @@ The root MUST update all three lists whenever work starts, completes, fails, blo
 
 The root MUST keep each item in exactly one list.
 
-The root MUST record the active task in `HANDOFF.md` immediately.
+The root MUST record the active task in the applicable worktree handoff
+immediately.
 
-The root MUST update `HANDOFF.md` when proof, blockers, task state, or the next action changes.
+The root MUST update the applicable worktree handoff when proof, blockers, task
+state, or the next action changes.
 
-`HANDOFF.md` is live restart state. It is not only a closeout report.
+The applicable worktree handoff is live restart state. It is not only a
+closeout report.
 
 ## Continuous Orchestration
 
@@ -209,9 +212,13 @@ The root MUST ask only for decisions that local evidence cannot answer safely.
 
 `wiki/**` MUST own durable design and mandatory contracts.
 
-`AGENTS.md` MUST own startup, authority, orchestration, and key decisions.
+`AGENTS.md` MUST own shared startup, authority, orchestration, and key
+decisions.
 
-`HANDOFF.md` MUST own current state, proof, blockers, and next action.
+The applicable worktree AGENTS file MUST own worktree-specific instructions.
+
+The applicable worktree handoff MUST own current state, proof, blockers, and
+next action.
 
 Secrets MUST NOT enter source, wiki, handoff, logs, tests, or prompts.
 

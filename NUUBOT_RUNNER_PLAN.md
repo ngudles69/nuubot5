@@ -66,7 +66,7 @@ Any unexplained difference stops the target.
 
 ### Nuubot5 Canonical Sources
 
-- `HANDOFF.md`
+- `HANDOFF-MAIN.md`
 - `wiki/PROJECT.md`
 - `wiki/USER.md`
 - `wiki/SOUL.md`

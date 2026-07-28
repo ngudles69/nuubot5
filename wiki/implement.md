@@ -143,7 +143,7 @@ Do not add deferred features.
 
 Update owning design pages when implementation proves a new fact.
 
-Maintain current work and proof in `HANDOFF.md`.
+Maintain current work and proof in the applicable worktree handoff.
 
 ## Step 6 — Prove
 

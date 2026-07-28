@@ -235,12 +235,15 @@ Ubuntu 24 is the intended VPS target. Linux runtime behavior remains unproven.
 
 ## Documentation Ownership
 
-- `AGENTS.md` owns startup, authority, prose, and project-wide decisions.
+- `AGENTS.md` owns shared startup, authority, prose, and project-wide decisions.
+- `AGENTS-MAIN.md` and `AGENTS-SERVER.md` own worktree-specific instructions.
 - `PROJECT.md` owns purpose, scope, status, proof, and reference order.
 - [ARCHITECTURE.md](ARCHITECTURE.md) owns layers, ownership, flows, concurrency, and persistence boundaries.
 - [DESIGN.md](DESIGN.md) owns the high-level object catalog.
 - [`design/**`](design/) owns detailed object and process contracts.
 - [`logic/**`](logic/) remains legacy detail until separately migrated.
-- `HANDOFF.md` owns restart state, active work, proof, and next action.
+- `HANDOFF.md` routes to the applicable worktree handoff.
+- `HANDOFF-MAIN.md` and `HANDOFF-SERVER.md` own separate restart state, active
+  work, proof, and next action.
 
 When source and wiki conflict, stop and report the conflict.

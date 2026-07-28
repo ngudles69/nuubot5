@@ -1,22 +1,33 @@
-# Nuubot5 Project Instructions
+# Nuubot5 Shared Instructions
+
+## Read Order
+
+1. Read this file completely.
+2. Identify the exact worktree directory.
+3. In `nuubot5`, read `AGENTS-MAIN.md`.
+4. In `nuubot5-server`, read `AGENTS-SERVER.md`.
+5. Obey all instructions in this file and the applicable worktree file.
+
+If instructions conflict, stop the affected work and raise the conflict with
+the user immediately.
+
+Ignore `TMUX.md` instructions for now.
 
 ## Startup
 
 At the start of every root session:
 
 1. Read `HANDOFF.md`.
-2. Read `wiki/PROJECT.md`.
-3. Read `wiki/USER.md`. This contract is prescriptive, not a suggestion.
-4. Read `wiki/SOUL.md`. This contract is prescriptive, not a suggestion.
-5. Read `wiki/ARCHITECTURE.md`.
-6. Read `wiki/DESIGN.md`.
-7. If `TMUX` is set, read `TMUX.md` and follow its startup contract.
+2. Read the applicable worktree handoff named by the applicable worktree
+   instructions.
+3. Read `wiki/PROJECT.md`.
+4. Read `wiki/USER.md`. This contract is prescriptive, not a suggestion.
+5. Read `wiki/SOUL.md`. This contract is prescriptive, not a suggestion.
+6. Read `wiki/ARCHITECTURE.md`.
+7. Read `wiki/DESIGN.md`.
 
 Read-only startup commands do not require confirmation. Do not invent work when
 the user has not requested any.
-
-The `TMUX.md` workspace bootstrap is approved startup work. It does not require
-separate pre-action confirmation.
 
 Report current state and next action in a `READY.` response.
 
@@ -60,7 +71,8 @@ Before coding:
 - Read the owning wiki page and trace the real flow before editing.
 - Make one coherent scoped change.
 - Follow `wiki/coding/STYLE.md` and `wiki/coding/RULES.md`.
-- Keep durable design in `wiki/**` and current restart state in `HANDOFF.md`.
+- Keep durable design in `wiki/**` and current restart state in the applicable
+  worktree handoff.
 - Update the owning `wiki/design/**` page when implementation proves a new design fact.
 - Never commit or push without explicit user authority.
 - Report confirmed facts separately from inference.
@@ -81,8 +93,8 @@ Before coding:
 - Stopping is permitted only when every `TODO` is `DONE`, genuinely blocked, or moved to `PENDING USER APPROVAL`.
 - The root MUST NOT serialize independent work without a stated reason.
 - The root MUST delegate execution unless the user requests direct work or the task is genuinely trivial; the root remains accountable for scope and proof.
-- `HANDOFF.md` MUST record the active task immediately.
-- `HANDOFF.md` MUST update proof when work completes. It is not only a closeout report.
+- The applicable worktree handoff MUST record the active task immediately.
+- The applicable worktree handoff MUST update proof when work completes. It is not only a closeout report.
 - Verification MUST be proportional to change risk.
 - Deterministic mechanical fixes MUST close with direct proof, without another reviewer.
 - Re-audit MUST occur only when behavior, ownership, contracts, or unresolved judgment changed.

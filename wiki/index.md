@@ -1,15 +1,17 @@
 # Nuubot5 Wiki
 
-This wiki is durable project truth. `HANDOFF.md` owns current restart state.
+This wiki is durable project truth. `HANDOFF.md` routes to the applicable
+worktree restart state.
 
 ## Required at Startup
 
-1. [Restart Handoff](../HANDOFF.md)
-2. [Project](PROJECT.md)
-3. [User Contract](USER.md) — prescriptive
-4. [Chief-of-Staff Contract](SOUL.md) — prescriptive
-5. [Architecture](ARCHITECTURE.md)
-6. [Design](DESIGN.md)
+1. [Handoff Router](../HANDOFF.md)
+2. Read the applicable worktree handoff selected by the router.
+3. [Project](PROJECT.md)
+4. [User Contract](USER.md) — prescriptive
+5. [Chief-of-Staff Contract](SOUL.md) — prescriptive
+6. [Architecture](ARCHITECTURE.md)
+7. [Design](DESIGN.md)
 
 ## Required Before Coding
 
