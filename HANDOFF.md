@@ -1,6 +1,25 @@
 # Handoff
 
-Last updated: 2026-07-28
+Last updated: 2026-07-29
+
+## Active Test Run
+
+- DONE: Observer Bot 9 passed 1 of 1 through `./stest.sh -bot 9`.
+- Observer suite total was 9,388 ms; BtBot average was 8,945 ms; replay was 5,406 ms.
+- Observer result log is `workspace/logs/nuubot5-stest-s6-b9-1-20260728T162443Z.log`.
+- DONE: Trade Bot 13 passed 1 of 1 through `./stest.sh -bot 13`.
+- Trade suite total was 23,919 ms; BtBot average was 19,904 ms; replay was 16,407 ms.
+- Trade result log is `workspace/logs/nuubot5-stest-s9-b13-1-20260728T162501Z.log`.
+- DONE: Grid Bot 15 passed 1 of 1 through `./stest.sh -bot 15`.
+- Grid suite total was 73,784 ms; BtBot average was 68,756 ms; replay was 64,846 ms.
+- Grid result log is `workspace/logs/nuubot5-stest-s11-b15-1-20260728T162532Z.log`.
+- All three runs completed without profiling.
+
+## Active Commit
+
+- Commit all current work except `workspace/backups/**`.
+- Push `main` to `origin/main`.
+- Verify focused Simulator proof, whitespace, staged scope, and matching local and remote hashes.
 
 ## Focus
 
@@ -259,6 +278,12 @@ Production implementation has not started. Another session owns the Ledger-stack
 - Created `.audits/07-28-simulator.md` with all 42 functions, callers, dispositions, target internals, impacts, sequence, and proof.
 - DONE: Created concise entity-specific change files for Account, Ledger, Trade, Order, and Fill.
 - Root review removed stale raw-payload history, Ledger-owned Recon redesign, `CountOrders`, Account `Start`, repair logic, and duplicate local/database IDs.
+- ACTIVE REVIEW: Renamed the Simulator change document to `.audits/07-28-simulator-changes-pending-review.md`.
+- Simulator Topic 1 remains pending review. `SetFillFeeAvailableForTest` was deleted from `simulator.go` and awaits review.
+- Every other Simulator function has a production caller and is not dead.
+- Earlier proposed removals confused used code with future behavior changes. Those decisions are withdrawn pending topic-by-topic review.
+- Simulator persistence and all other committed behavior remain unchanged.
+- Production-only proof: `go build -tags noasm ./internal/simulator` passes after the test-only API deletion.
 - Completed the Simulator upstream/downstream trace across Account, Ledger, Hyperliquid, MarketData, Clock, Backtest, Live, BotSpec, and results.
 - Simulator remains Account-owned. One Bot loop owns serialized calls.
 - Temporary rule: `Simulator.Persist(mode)` writes dirty rows for both `none` and `max`.

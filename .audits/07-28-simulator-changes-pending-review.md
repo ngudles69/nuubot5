@@ -1,34 +1,44 @@
-# Simulator Changes
+# Simulator Changes - Pending Review
+
+Status: **PENDING REVIEW**
+
+Topics 1 through 17 remain pending review.
 
 ## Result
 
 ```text
-Delete: 12 dead functions
-Add:    BBO-driven in-memory Exchange behavior
-Change: Simulator state, validation, matching, time, and exact responses
-Keep:   MarketData subscription and Hyperliquid-shaped API
+Applied pending review: SetFillFeeAvailableForTest deletion
+Current assessment:     No other dead Simulator function
+Pending review:         Every topic and proposed behavior change
 ```
 
-## 1. Delete Dead Code
+## 1. Dead Code - Pending Review
 
 No whole production file is deleted.
 
-- `(*Simulator).SetFillFeeAvailableForTest`
-- `(*Simulator).matchAdded`
-- `(*Simulator).sortedActiveOrders`
-- `(*Simulator).position`
-- `(*Simulator).persist`
-- `(*Simulator).storedState`
-- `(*Simulator).stage`
-- `(*Simulator).commit`
-- `(*Simulator).restore`
-- `restoreOrder`
-- `restoreFill`
-- `orderPrice`
+Current assessment, pending user review:
+
+- `(*Simulator).SetFillFeeAvailableForTest` - tests were its only caller.
+
+Every other previously proposed deletion has callers:
+
+- `(*Simulator).matchAdded` - called by `PlaceOrders`.
+- `(*Simulator).sortedActiveOrders` - called by `OpenOrders`, `match`, and `cancelChildren`.
+- `(*Simulator).position` - called by `restore`.
+- `(*Simulator).persist` - called by `PlaceOrders`, `CancelOrders`, `Stop`, and `onBBO`.
+- `(*Simulator).storedState` - called by `Init` and `persist`.
+- `(*Simulator).stage` - called by `PlaceOrders`, `CancelOrders`, and `onBBO`.
+- `(*Simulator).commit` - called by `PlaceOrders`, `CancelOrders`, and `onBBO`.
+- `(*Simulator).restore` - called by `Init`.
+- `restoreOrder` - called by `restore`.
+- `restoreFill` - called by `restore`.
+- `orderPrice` - called by response generation, Order construction, Fill creation, and recovery.
 
 Delete or rewrite tests that require `SetFillFeeAvailableForTest`.
 
 **KEY DECISION:** Tests never add or control production behavior.
+
+**KEY DECISION:** Used code is not dead. Removing used code requires an approved behavior change and replacement path.
 
 ## 2. Prepare Records for Future Persistence
 
@@ -357,7 +367,7 @@ full tests with -tags noasm
 full vet with -tags noasm
 ```
 
-## 17. Unchanged Functions
+## 17. Function Review Status
 
 Keep:
 
@@ -387,19 +397,12 @@ Modify:
 - `(*Simulator).match`
 - `(*Simulator).fill`
 
-Delete:
+Deleted after caller proof:
 
 - `(*Simulator).SetFillFeeAvailableForTest`
-- `(*Simulator).matchAdded`
-- `(*Simulator).sortedActiveOrders`
-- `(*Simulator).position`
-- `(*Simulator).persist`
-- `(*Simulator).storedState`
-- `(*Simulator).stage`
-- `(*Simulator).commit`
-- `(*Simulator).restore`
-- `restoreOrder`
-- `restoreFill`
-- `orderPrice`
+
+Every other function is currently used.
+
+The proposed Keep, Modify, or removal decisions in Topics 2 through 16 require individual review before implementation.
 
 No other production file changes.

@@ -710,17 +710,6 @@ func (s *Simulator) AccountState(account string) ([]byte, error) {
 	})
 }
 
-// SetFillFeeAvailableForTest controls delayed-fee evidence in focused tests.
-func (s *Simulator) SetFillFeeAvailableForTest(venueTID uint64, available bool) error {
-	for index := range s.fills {
-		if s.fills[index].venueTID == venueTID {
-			s.fills[index].hasFee = available
-			return nil
-		}
-	}
-	return fmt.Errorf("set simulator Fill fee availability: unknown Venue TID %d", venueTID)
-}
-
 // Section 2.3 - Validation and Construction
 
 func (s *Simulator) validateAccount(account string) error {
