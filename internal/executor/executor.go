@@ -157,11 +157,11 @@ func Create(ctx BotCycleContext) (Executor, error) {
 	var selected Executor
 	switch ctx.Spec.Kind {
 	case "observer":
-		selected = &observer{status: ctx.Status}
+		selected = &observer{}
 	case "trade":
-		selected = &tradeExecutor{status: ctx.Status}
+		selected = &tradeExecutor{}
 	case "grid":
-		selected = &gridExecutor{status: ctx.Status}
+		selected = &gridExecutor{}
 	default:
 		return nil, fmt.Errorf("unknown executor: %s", ctx.Spec.Kind)
 	}

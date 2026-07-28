@@ -159,7 +159,7 @@ Design and source MUST change together when ownership or sequence changes.
 
 A missing, extra, renamed, reordered, or falsely implemented step fails review.
 
-`internal/btbot/btbot.go` is the canonical example for numbered `Init`, `Start`,
+`internal/backtest/backtest.go` is the canonical example for numbered `Init`, `Start`,
 `Loop`, and `Stop` flow.
 
 ### Code Reorganization
@@ -840,7 +840,7 @@ import (
 	"os"
 	"time"
 
-	"nuubot/internal/btbot"
+	"nuubot/internal/backtest"
 	"nuubot/internal/toolkit/logging"
 )
 

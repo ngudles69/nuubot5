@@ -13,12 +13,22 @@ Purpose: Load process-wide AppConfig and local credentials.
 - Hyperliquid shared policy;
 - process timeouts;
 - workspace paths; and
-- BtBot cadence.
+- separate Live and Backtest runtime policies.
 
 AppConfig contains no BotSpec, Signaler, Risk, Executor, capital, or order
 settings.
 
 Unknown AppConfig fields fail.
+
+Each runtime policy defines Controller, Recon, Recon sweep, and telemetry cadence plus telemetry write-on-collect policy.
+
+Controller and telemetry cadence must be positive. Recon cadence must exceed Controller cadence. Recon sweep cadence must exceed Recon cadence.
+
+The loader validates both profiles. Backtest `Run` selects `App.Backtest` once. Live `Run` selects `App.Live` once.
+
+Live requires telemetry write-on-collect. Backtest requires terminal-only telemetry publication.
+
+Lower components read only selected `nuubot.Runtime`. They never branch on Live versus Backtest.
 
 ## BotConfig Boundary
 

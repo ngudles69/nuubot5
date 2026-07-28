@@ -10,11 +10,12 @@ Nuubot5 source proves implementation. Reservation files prove names only.
 
 - [`design/packages`](design/packages/) contains exactly one page per Go package.
 - [`design/concepts`](design/concepts/) contains flows, programs, venues, types, and cross-package rules.
-- [`design/runner.md`](design/runner.md) owns the standalone live Runner design.
+- [`design/live.md`](design/live.md) owns the standalone Live Run design.
 - [`design/server.md`](design/server.md) owns the Server, unified binary, and child-process design.
 - [`design/startup.md`](design/startup.md) owns Runner startup and crash recovery across all live networks.
 - [`design/marketdata.md`](design/marketdata.md) owns permanent BBO ingestion, buffering, and subscription decisions.
 - [`design/entities.md`](design/entities.md) shows backtest and live runtime ownership cardinality.
+- [`design/fprof.md`](design/fprof.md) owns deterministic function profiling and A/B/C overhead semantics.
 - [`design/hyperliquid`](design/hyperliquid/) contains the internal Hyperliquid boundary details.
 - `internal/toolkit` groups reusable packages. It is not a Go package.
 
@@ -107,13 +108,14 @@ Nuubot admits only required, audited code. It does not import or preserve either
 | [bot](design/packages/bot.md) | Implemented | Define immutable Bot identity. |
 | [botcycle](design/packages/botcycle.md) | Implemented | Coordinate Executors for one configured entry Signal. |
 | [botspec](design/packages/botspec.md) | Implemented | Validate and shape exact BotConfig into typed BotSpec. |
-| [btbot](design/packages/btbot.md) | Implemented | Execute one complete historical replay. |
+| [backtest](design/packages/backtest.md) | Implemented | Execute one complete historical replay. |
 | [btsweep](design/packages/btsweep.md) | Partial | Validate and expand Sweep templates; persistence and execution remain deferred. |
 | [config](design/packages/config.md) | Implemented | Decode and validate immutable settings. |
 | [controller](design/packages/controller.md) | Implemented | Own signals, risks, cycles, capital, and stop decisions. |
 | [datastore](design/packages/datastore.md) | Implemented | Load one stored BotConfig and replay input. |
 | [executor](design/packages/executor.md) | Implemented | Own execution policy boundaries. |
 | [fill](design/packages/fill.md) | Implemented | Preserve immutable execution facts. |
+| [fprof](design/packages/fprof.md) | Implemented | Generate and report exact A/B/C function profiles. |
 | [hyperliquid](design/packages/hyperliquid.md) | Implemented | Own Hyperliquid protocol transport and translations. |
 | [ledger](design/packages/ledger.md) | Implemented | Own trade, order, and fill evidence. |
 | [market](design/packages/market.md) | Implemented | Carry validated market events. |
@@ -125,8 +127,8 @@ Nuubot admits only required, audited code. It does not import or preserve either
 | [replay](design/packages/replay.md) | Implemented | Stream validated historical market data. |
 | [resultpublisher](design/packages/resultpublisher.md) | Implemented | Publish terminal per-Bot SQLite evidence. |
 | [risk](design/packages/risk.md) | Implemented | Assess configured risk policy. |
-| [runner](design/packages/runner.md) | Scaffold | Own one standalone live Bot lifecycle. |
-| [setup](design/packages/setup.md) | Implemented | Prepare one validated BtBot context. |
+| [live](design/packages/live.md) | Scaffold | Own one standalone live Bot lifecycle and telemetry persistence. |
+| [setup](design/packages/setup.md) | Implemented | Prepare one validated Nuubot context. |
 | [signaler](design/packages/signaler.md) | Implemented | Calculate and serve ordered Signal packages. |
 | [simulator](design/packages/simulator.md) | Implemented | Provide venue-shaped simulated execution. |
 | [trade](design/packages/trade.md) | Implemented | Own strategy-level orders and evidence. |
@@ -152,7 +154,7 @@ deferred.
 | AppConfig, BotConfig, ReplayInput, and Credentials split | [Config](design/packages/config.md) |
 | Typed saved-Config and fail-closed Meta admission | [Setup](design/packages/setup.md) |
 | Stored TOML and active Account-symbol claims | [Datastore](design/packages/datastore.md) |
-| Standalone Runner, BtBot, and BtSweep execution | [Runner](design/runner.md) |
+| Standalone Runner, BtBot, and BtSweep execution | [Runner](design/live.md) |
 | Thin Server API and Manager-to-process boundaries | [Server](design/server.md) |
 | Implemented Sweep template validation and expansion | [BtSweep package](design/packages/btsweep.md) |
 | Reusable Sweep records and standalone execution | [SweepManager](design/concepts/sweep-manager.md) |
@@ -178,6 +180,7 @@ hardcut is implemented and proven.
 | [Filesystem](design/concepts/filesystem.md) | Mutable workspace layout and deployment mount. |
 | [Hyperliquid](design/hyperliquid.md) | Internal Hyperliquid protocol boundary. |
 | [Hyperliquid parity probe](design/hyperliquid/parity.md) | Permanent testnet and Simulator API-drift harness. |
+| [Function Profiler](design/fprof.md) | Exact function calls, instrumented timing, and A/B/C overhead. |
 | [MarketData](design/marketdata.md) | Shared BBO ingestion, latest buffers, and optional subscriptions. |
 | [Live events](design/concepts/live-events.md) | Live event routing. |
 | [Macross signaler](design/concepts/macross-signaler.md) | EMA crossover implementation. |

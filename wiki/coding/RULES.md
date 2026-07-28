@@ -140,7 +140,7 @@ Each action MUST start with a verb and then name its target.
 
 Lifecycle completion logs MUST use `log <operation> completed` intent comments.
 
-`internal/btbot/btbot.go` is the canonical numbered-flow example.
+`internal/backtest/backtest.go` is the canonical numbered-flow example.
 
 Design and source MUST change together when ownership or sequence changes.
 

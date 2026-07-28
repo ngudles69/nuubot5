@@ -4,7 +4,7 @@ Status: Superseded.
 
 Current contract:
 
-- [BtBot](../design/packages/btbot.md)
+- [BtBot](../design/packages/backtest.md)
 - [Replay](../design/concepts/replay.md)
 - [Controller](../design/packages/controller.md)
 

@@ -30,15 +30,30 @@ func TestLoadIsIdempotent(t *testing.T) {
 			first.Hyperliquid.MinOrderNotionalUSDC,
 		)
 	}
+	var expectedBacktest = Runtime{
+		ControllerIntervalMS:    1000,
+		ReconIntervalMS:         10000,
+		ReconSweepIntervalMS:    60000,
+		TelemetryIntervalMS:     10000,
+		TelemetryWriteOnCollect: false,
+	}
+	if first.Backtest != expectedBacktest {
+		t.Fatalf("unexpected Backtest Config: %+v", first.Backtest)
+	}
+	var expectedLive = expectedBacktest
+	expectedLive.TelemetryWriteOnCollect = true
+	if first.Live != expectedLive {
+		t.Fatalf("unexpected Live Config: %+v", first.Live)
+	}
 }
 
-func TestLoadAppRejectsOldBtRunnerKey(t *testing.T) {
+func TestLoadAppRejectsOldControllerKey(t *testing.T) {
 	var sourcePath = filepath.Join("..", "..", "workspace", "config", "config.toml")
 	var contents, err = os.ReadFile(sourcePath)
 	if err != nil {
 		t.Fatalf("read App Config: %v", err)
 	}
-	var oldConfig = strings.Replace(string(contents), "[btbot]", "[btrunner]", 1)
+	var oldConfig = strings.Replace(string(contents), "[live]", "[controller]", 1)
 	var path = filepath.Join(t.TempDir(), "config.toml")
 	if err = os.WriteFile(path, []byte(oldConfig), 0o600); err != nil {
 		t.Fatalf("write old App Config: %v", err)
@@ -46,10 +61,60 @@ func TestLoadAppRejectsOldBtRunnerKey(t *testing.T) {
 
 	var _, loadErr = LoadApp(path)
 	if loadErr == nil {
-		t.Fatal("old btrunner Config key was accepted")
+		t.Fatal("old Controller Config key was accepted")
 	}
-	if !strings.Contains(loadErr.Error(), "btrunner") {
+	if !strings.Contains(loadErr.Error(), "controller") {
 		t.Fatalf("error = %q, want old key", loadErr)
+	}
+}
+
+func TestLoadAppRejectsReconAtControllerCadence(t *testing.T) {
+	var path = writeAppConfig(t, func(contents string) string {
+		return strings.Replace(contents, "recon_interval_ms = 10000", "recon_interval_ms = 1000", 1)
+	})
+	var _, err = LoadApp(path)
+	if err == nil || !strings.Contains(err.Error(), "recon_interval_ms") {
+		t.Fatalf("error = %v, want Recon interval rejection", err)
+	}
+}
+
+func TestLoadAppRejectsSweepAtReconCadence(t *testing.T) {
+	var path = writeAppConfig(t, func(contents string) string {
+		return strings.Replace(contents, "recon_sweep_interval_ms = 60000", "recon_sweep_interval_ms = 10000", 1)
+	})
+	var _, err = LoadApp(path)
+	if err == nil || !strings.Contains(err.Error(), "recon_sweep_interval_ms") {
+		t.Fatalf("error = %v, want Recon sweep interval rejection", err)
+	}
+}
+
+func TestLoadAppRejectsLiveWithoutWriteOnCollect(t *testing.T) {
+	var path = writeAppConfig(t, func(contents string) string {
+		return strings.Replace(
+			contents,
+			"telemetry_write_on_collect = true",
+			"telemetry_write_on_collect = false",
+			1,
+		)
+	})
+	var _, err = LoadApp(path)
+	if err == nil || !strings.Contains(err.Error(), "live.telemetry_write_on_collect") {
+		t.Fatalf("error = %v, want Live telemetry policy rejection", err)
+	}
+}
+
+func TestLoadAppRejectsBacktestWriteOnCollect(t *testing.T) {
+	var path = writeAppConfig(t, func(contents string) string {
+		return strings.Replace(
+			contents,
+			"telemetry_write_on_collect = false",
+			"telemetry_write_on_collect = true",
+			1,
+		)
+	})
+	var _, err = LoadApp(path)
+	if err == nil || !strings.Contains(err.Error(), "backtest.telemetry_write_on_collect") {
+		t.Fatalf("error = %v, want Backtest telemetry policy rejection", err)
 	}
 }
 
@@ -94,6 +159,20 @@ func TestLoadCredentialsRejectsMalformedTOML(t *testing.T) {
 // Section 2 - Domain Helpers
 
 // Section 3 - Generic Helpers
+
+func writeAppConfig(t *testing.T, change func(string) string) string {
+	t.Helper()
+	var sourcePath = filepath.Join("..", "..", "workspace", "config", "config.toml")
+	var contents, err = os.ReadFile(sourcePath)
+	if err != nil {
+		t.Fatalf("read App Config: %v", err)
+	}
+	var path = filepath.Join(t.TempDir(), "config.toml")
+	if err = os.WriteFile(path, []byte(change(string(contents))), 0o600); err != nil {
+		t.Fatalf("write App Config: %v", err)
+	}
+	return path
+}
 
 func writeCredentials(t *testing.T, contents string) string {
 	t.Helper()

@@ -1,4 +1,4 @@
-package btbot
+package backtest
 
 import (
 	"context"
@@ -53,29 +53,31 @@ type Result struct {
 	Report     report.Run
 }
 
-// BtBot owns one bounded historical replay.
-type BtBot struct {
-	log           *logging.Logger
-	reader        replay.Reader
-	clock         clock.Clock
-	marketData    *market.MarketData
-	marketKeys    []market.Key
-	controller    controller.Controller
-	symbol        string
-	resultPath    string
-	stats         stats
-	telemetry     []telemetry.Sample
-	report        report.Run
-	stopRequested bool
-	published     bool
-	started       bool
-	stopped       bool
+// Run owns one bounded historical replay.
+type Run struct {
+	log                 *logging.Logger
+	reader              replay.Reader
+	clock               clock.Clock
+	marketData          *market.MarketData
+	marketKeys          []market.Key
+	controller          controller.Controller
+	symbol              string
+	resultPath          string
+	stats               stats
+	telemetry           []telemetry.Sample
+	telemetryIntervalMS uint64
+	lastTelemetryMS     uint64
+	report              report.Run
+	stopRequested       bool
+	published           bool
+	started             bool
+	stopped             bool
 }
 
 // Section 1 - Program Flow
 
 // Init prepares one bounded historical replay.
-func (r *BtBot) Init(
+func (r *Run) Init(
 	caller context.Context,
 	log *logging.Logger,
 	sweepID,
@@ -89,22 +91,26 @@ func (r *BtBot) Init(
 		return fmt.Errorf("prepare setup: %w", err)
 	}
 
-	// Step 2: reset Bot status for fresh replay
+	// Step 2: select Backtest runtime policy
+	nuubot.Runtime = nuubot.App.Backtest
+	r.telemetryIntervalMS = nuubot.Runtime.TelemetryIntervalMS
+
+	// Step 3: reset Bot status for fresh replay
 	nuubot.Bot.Status = datastore.BotConfigured
 
-	// Step 3: clear replay data
+	// Step 4: clear replay data
 	nuubot.RuntimePath = nuubot.ResultPath + ".partial"
 	err = clearData(nuubot.RuntimePath)
 	if err != nil {
 		return err
 	}
 
-	// Step 4: retain runtime inputs
+	// Step 5: retain runtime inputs
 	var replayInput = nuubot.Bot.Replay
 	r.symbol = replayInput.Symbol
 	r.resultPath = nuubot.ResultPath
 
-	// Step 5: set replay range
+	// Step 6: set replay range
 	var start = replayInput.ReplayStart
 	var end = replayInput.ReplayEnd
 	if replayInput.EndAt != nil && replayInput.EndAt.Before(end) {
@@ -117,7 +123,7 @@ func (r *BtBot) Init(
 	var endMS = uint64(end.UnixMilli())
 	var durationMS = endMS - startMS
 
-	// Step 6: initialize replay reader
+	// Step 7: initialize replay reader
 	err = r.reader.Init(
 		log,
 		replayInput.TicksPath,
@@ -128,51 +134,51 @@ func (r *BtBot) Init(
 		return fmt.Errorf("initialize replay reader: %w", err)
 	}
 
-	// Step 7: create clock
+	// Step 8: create clock
 	r.clock, err = clock.Create(clock.Tick)
 	if err != nil {
 		return fmt.Errorf("create clock: %w", err)
 	}
 
-	// Step 8: initialize clock
+	// Step 9: initialize clock
 	err = r.clock.Init(log, startMS)
 	if err != nil {
 		return fmt.Errorf("initialize clock: %w", err)
 	}
 
-	// Step 9: attach clock to Nuubot
+	// Step 10: attach clock to Nuubot
 	nuubot.Clock = r.clock
 
-	// Step 10: create and attach MarketData to Nuubot
+	// Step 11: create and attach MarketData to Nuubot
 	r.marketData = market.CreateMarketData()
 	r.marketKeys = marketKeys(nuubot)
 	nuubot.MarketData = r.marketData
 
-	// Step 11: initialize Controller
+	// Step 12: initialize Controller
 	err = r.controller.Init(nuubot)
 	if err != nil {
 		return fmt.Errorf("initialize Controller: %w", err)
 	}
 
-	// Step 12: register Controller timer
+	// Step 13: register Controller timer
 	err = r.clock.RegisterTimer(clock.Timer{
 		Name:       "controller",
-		IntervalMS: nuubot.App.BtBot.ControllerTimerIntervalMS,
+		IntervalMS: nuubot.Runtime.ControllerIntervalMS,
 	}, r.controllerRun)
 	if err != nil {
 		return fmt.Errorf("register Controller timer: %w", err)
 	}
 
-	// Step 13: initialize replay stats
+	// Step 14: initialize replay stats
 	r.stats = stats{
 		ticksExpected: durationMS / 1000,
-		runsExpected: (durationMS + nuubot.App.BtBot.ControllerTimerIntervalMS - 1) /
-			nuubot.App.BtBot.ControllerTimerIntervalMS,
+		runsExpected: (durationMS + nuubot.Runtime.ControllerIntervalMS - 1) /
+			nuubot.Runtime.ControllerIntervalMS,
 		expectedFirstMS: startMS + 1000,
 		expectedLastMS:  endMS,
 	}
 
-	// Step 14: log init completed
+	// Step 15: log init completed
 	log.Info(fmt.Sprintf(
 		"btbot initialized bot_spec=%s symbol=%s",
 		nuubot.Bot.BotSpecID,
@@ -182,7 +188,7 @@ func (r *BtBot) Init(
 }
 
 // Start starts the owned Clock and Controller.
-func (r *BtBot) Start() error {
+func (r *Run) Start() error {
 	if r.started || r.stopped {
 		return fmt.Errorf("btbot cannot start from current state")
 	}
@@ -207,7 +213,7 @@ func (r *BtBot) Start() error {
 }
 
 // Loop executes the complete bounded replay loop.
-func (r *BtBot) Loop() error {
+func (r *Run) Loop() error {
 	if !r.started || r.stopped {
 		return fmt.Errorf("btbot cannot loop from current state")
 	}
@@ -267,7 +273,7 @@ func (r *BtBot) Loop() error {
 }
 
 // Stop releases owned resources and reports final results.
-func (r *BtBot) Stop() error {
+func (r *Run) Stop() error {
 	// Step 1: log stop started
 	r.log.Info("btbot stop started")
 
@@ -277,7 +283,7 @@ func (r *BtBot) Stop() error {
 		return nil
 	}
 
-	// Step 3: mark BtBot stopped
+	// Step 3: mark Run stopped
 	r.started = false
 	r.stopped = true
 
@@ -419,20 +425,24 @@ func clearData(path string) error {
 	for _, current := range []string{path, path + "-wal", path + "-shm"} {
 		var err = os.Remove(current)
 		if err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("clear BtBot data %s: %w", current, err)
+			return fmt.Errorf("clear Run data %s: %w", current, err)
 		}
 	}
 	return nil
 }
 
-func (r *BtBot) controllerRun(_ uint64) error {
+func (r *Run) controllerRun(_ uint64) error {
 	// run Controller - triggered by Timer
 	r.stats.runsTriggered++
 	var stop, err = r.controller.Run()
 	if err != nil {
 		return fmt.Errorf("run Controller: %w", err)
 	}
-	r.collectTelemetry(r.clock.NowMS(), false)
+	var nowMS = r.clock.NowMS()
+	if r.lastTelemetryMS == 0 || nowMS-r.lastTelemetryMS >= r.telemetryIntervalMS {
+		r.collectTelemetry(nowMS, false)
+		r.lastTelemetryMS = nowMS
+	}
 	// remember stop request
 	if stop {
 		r.stopRequested = true
@@ -441,7 +451,7 @@ func (r *BtBot) controllerRun(_ uint64) error {
 }
 
 // Result returns one complete terminal backtest result.
-func (r *BtBot) Result() (Result, error) {
+func (r *Run) Result() (Result, error) {
 	if !r.stopped || !r.stats.replayCompleted {
 		return Result{}, fmt.Errorf("btbot result is unavailable")
 	}
@@ -463,7 +473,7 @@ func (r *BtBot) Result() (Result, error) {
 	}, nil
 }
 
-func (r *BtBot) collectTelemetry(nowMS uint64, terminal bool) {
+func (r *Run) collectTelemetry(nowMS uint64, terminal bool) {
 	var current = r.controller.Telemetry()
 	r.telemetry = append(r.telemetry, telemetry.Sample{
 		Sequence:            uint64(len(r.telemetry) + 1),
@@ -487,7 +497,7 @@ func (r *BtBot) collectTelemetry(nowMS uint64, terminal bool) {
 	})
 }
 
-func (r *BtBot) verify() error {
+func (r *Run) verify() error {
 	if r.stats.ticksServed != r.stats.ticksExpected ||
 		r.stats.runsTriggered != r.stats.runsExpected ||
 		r.stats.firstMS != r.stats.expectedFirstMS ||

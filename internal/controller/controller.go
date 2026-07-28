@@ -255,8 +255,10 @@ func (c *Controller) Run() (bool, error) {
 
 	// Step 3: reconcile active BotCycle
 	var snapshots []account.Snapshot
+	var reconExecuted bool
 	if c.cycle != nil {
 		var result, err = c.cycle.AcctRecon(false)
+		reconExecuted = result.Executed
 		if result.MaxConsecutiveFailures >= 3 {
 			if err != nil {
 				return false, fmt.Errorf(
@@ -321,8 +323,8 @@ func (c *Controller) Run() (bool, error) {
 		return false, nil
 	}
 
-	// Step 6: deliver accepted reconciliation
-	if c.cycle != nil {
+	// Step 6: deliver executed reconciliation
+	if c.cycle != nil && reconExecuted {
 		if err := c.cycle.OnRecon(); err != nil {
 			return false, fmt.Errorf("deliver BotCycle recon: %w", err)
 		}

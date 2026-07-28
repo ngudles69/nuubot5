@@ -175,6 +175,74 @@ func TestAccountRunsOneReconciledBracket(t *testing.T) {
 	}
 }
 
+func TestAccountSchedulesDirtyReconAndCleanSweep(t *testing.T) {
+	var cfg = accountTestConfig(2, "recon1")
+	cfg.Nuubot.Runtime = appconfig.Runtime{
+		ControllerIntervalMS: 1,
+		ReconIntervalMS:      10,
+		ReconSweepIntervalMS: 60,
+		TelemetryIntervalMS:  10,
+	}
+	var actual Account
+	var err = actual.Init(cfg)
+	if err != nil {
+		t.Fatalf("initialize Account: %v", err)
+	}
+	var initial, _ = market.CreateBBO(100, 100)
+	if err = ingestAccountBBO(&actual, initial); err != nil {
+		t.Fatalf("ingest initial BBO: %v", err)
+	}
+
+	var _, executed, _, reconErr = actual.Reconcile(100, false)
+	if reconErr != nil || !executed || actual.lastReconMS != 100 {
+		t.Fatalf(
+			"initial Recon executed=%t last_ms=%d error=%v",
+			executed,
+			actual.lastReconMS,
+			reconErr,
+		)
+	}
+
+	actual.dirty = true
+	_, executed, _, reconErr = actual.Reconcile(105, false)
+	if reconErr != nil || executed || actual.lastReconMS != 100 {
+		t.Fatalf(
+			"early dirty Recon executed=%t last_ms=%d error=%v",
+			executed,
+			actual.lastReconMS,
+			reconErr,
+		)
+	}
+	_, executed, _, reconErr = actual.Reconcile(110, false)
+	if reconErr != nil || !executed || actual.lastReconMS != 110 {
+		t.Fatalf(
+			"due dirty Recon executed=%t last_ms=%d error=%v",
+			executed,
+			actual.lastReconMS,
+			reconErr,
+		)
+	}
+
+	_, executed, _, reconErr = actual.Reconcile(169, false)
+	if reconErr != nil || executed || actual.lastReconMS != 110 {
+		t.Fatalf(
+			"early clean sweep executed=%t last_ms=%d error=%v",
+			executed,
+			actual.lastReconMS,
+			reconErr,
+		)
+	}
+	_, executed, _, reconErr = actual.Reconcile(170, false)
+	if reconErr != nil || !executed || actual.lastReconMS != 170 {
+		t.Fatalf(
+			"due clean sweep executed=%t last_ms=%d error=%v",
+			executed,
+			actual.lastReconMS,
+			reconErr,
+		)
+	}
+}
+
 func TestAccountReconFailurePublishesOnlyTelemetry(t *testing.T) {
 	var path = filepath.Join(t.TempDir(), "result.db")
 	var actual Account
@@ -982,6 +1050,12 @@ func accountNuubot(
 		Log: logging.Create(io.Discard),
 		App: appconfig.App{
 			Hyperliquid: appconfig.Hyperliquid{MinOrderNotionalUSDC: 11},
+		},
+		Runtime: appconfig.Runtime{
+			ControllerIntervalMS: 1,
+			ReconIntervalMS:      2,
+			ReconSweepIntervalMS: 1 << 63,
+			TelemetryIntervalMS:  10,
 		},
 		MarketData:  market.CreateMarketData(),
 		Meta:        instrument,

@@ -1,6 +1,6 @@
 # Handoff
 
-Last updated: 2026-07-27
+Last updated: 2026-07-28
 
 ## Focus
 
@@ -11,8 +11,8 @@ Account-Venue-Simulator boundary hardcut. Recon2 is retired.
 
 ### DONE
 
-- Renamed the local `admission` variable to `nuubotSetup` in `internal/btbot/btbot.go`.
-- Renamed the BtBot config key to `btbot.controller_timer_interval_ms` and the Go field to `ControllerTimerIntervalMS`.
+- Renamed the local `admission` variable to `nuubotSetup` in `internal/backtest/backtest.go`.
+- The former BtBot-specific Controller timer key was superseded by shared `[controller]` cadence configuration.
 - BotSpec now contains BotSpecID plus typed Controller, Signaler, Risk, and Executor specifications.
 - BotSpec decoding validates, applies defined defaults, and shapes exact BotConfig TOML.
 - BotSpec no longer carries App Config, Meta, replay inputs, ResultPath, Bot identity, runtime objects, or runtime state.
@@ -24,7 +24,7 @@ Account-Venue-Simulator boundary hardcut. Recon2 is retired.
 - Reordered BtBot `Init` into grouped dependency order.
 - Added complete `Step N:` intent comments to BtBot `Init`, `Start`, `Loop`, and `Stop`.
 - Added mandatory numbered multi-step flow rules to `wiki/coding/STYLE.md` and `wiki/coding/RULES.md`.
-- Named `internal/btbot/btbot.go` as the canonical numbered-flow example.
+- Named `internal/backtest/backtest.go` as the canonical numbered-flow example.
 - BtBot cleanup formatting, diagnostics, and scoped diff check pass.
 - Aligned Setup, BotSpec, Controller, BtBot, architecture, project, design, and BotSpec concept documentation.
 - Full Go tests and full vet pass after final source and documentation alignment.
@@ -34,7 +34,7 @@ Account-Venue-Simulator boundary hardcut. Recon2 is retired.
 - Final Observer result log is `workspace/logs/nuubot5-stest-s6-b9-1-20260727T114142Z.log`.
 - Final Observer suite report is `workspace/logs/nuubot5-stest-s6-b9-1-20260727T114142Z.json`.
 - Final Observer log proves `btbot stopped.` after successful results publication.
-- Manual code review of `internal/btbot/btbot.go` is complete.
+- Manual code review of `internal/backtest/backtest.go` is complete.
 - User approved the final BtBot flow, intent comments, loop state, Timer callback comment, and Stop logging.
 - User prohibited more agents during this review session.
 - Added behavior-preserving code-reorganization rules to `wiki/coding/STYLE.md`.
@@ -163,15 +163,87 @@ Account-Venue-Simulator boundary hardcut. Recon2 is retired.
 - Grid suite was 73,723 ms; BtBot was 68,877 ms; replay was 64,938 ms.
 - Grid result log is `workspace/logs/nuubot5-stest-s11-b15-1-20260727T175406Z.log`.
 - MarketData implementation and BtBot integration are complete; Runner WebSocket publication remains Runner work.
+- Executor `Create` centrally rejects terminal and unknown loaded status without advancing lifecycle state.
+- Observer, Trade, and Grid `OnInit` explicitly retain loaded status without flattening `Running`, `Paused`, or `Stopping`.
+- Every Executor `OnStart` logs first, then advances only `Configured` to `Starting`; recovered nonterminal status is preserved.
+- Every Executor `OnStop` logs first, then advances eligible nonterminal status to `Stopping`; terminal status is preserved.
+- Removed redundant terminal-status guards from Executor `OnStart`; `Create` owns loaded-status admission.
+- Focused Executor, BotCycle, Controller, and BtBot tests pass after lifecycle alignment.
+- The Observer integration run was user-stopped before execution and was not retried.
 - Final full Go tests and full vet pass with canonical `-tags noasm`.
 - Project diagnostics report no errors or warnings.
+- Added `cmd/nuubot-fprof` and dependency-free `internal/fprof/runtime` instrumentation.
+- Function profiling uses temporary AST-generated Go build overlays and changes no tracked application source.
+- A records the original runtime; B records exact calls; C records exact calls plus flat and cumulative timing.
+- Observer Bot 9 A/B/C behavior matched exactly across 7,948,800 ticks and 794,880 Controller runs.
+- Observer A was 6.294s, B was 8.733s, and C was 16.168s.
+- Function-profile overhead was B-A 2.439s, C-B 7.435s, and C-A 9.874s.
+- The proof instrumented 53 source files and 544 functions.
+- Text reports use `go-pretty/table`; numeric columns align right and text columns align left.
+- The function table starts with complete-profile flat and cumulative totals; aggregate calls and averages stay blank.
+- Observer function-profile proof is `workspace/perf/fprofiles/s6-b9-20260728T033218Z/report.txt` and `report.json`.
+- Trade Bot 13 A/B/C behavior matched; A was 15.758s, B was 19.174s, and C was 29.662s.
+- Trade total flat time was 28.917s, covering 97.49% of C elapsed time.
+- Trade function-profile proof is `workspace/perf/fprofiles/s9-b13-20260728T033505Z/report.txt` and `report.json`.
+- Grid Bot 15 A/B/C behavior matched; A was 64.066s, B was 77.719s, and C was 114.101s.
+- Grid total flat time was 113.329s, covering 99.32% of C elapsed time.
+- Grid hotspots were `decodeOne` 14.536s, `replaceTradeSummary` 10.433s, `Encode` 5.683s, `crosses` 4.767s, and `sortedActiveOrders` 4.516s.
+- Grid function-profile proof is `workspace/perf/fprofiles/s11-b15-20260728T034420Z/report.txt` and `report.json`.
+- Grid optimization is intentionally deferred until GridExecutor and Simulator hand-tuning.
+- Replaced shared `[controller]` with validated `[live]` and `[backtest]` runtime policies.
+- Both profiles configure Controller 1,000ms, Recon 10,000ms, Recon sweep 60,000ms, and telemetry 10,000ms.
+- Live sets telemetry write-on-collect true. Backtest sets it false.
+- Config rejects nonpositive Controller or telemetry cadence, Recon cadence not exceeding Controller, and sweep cadence not exceeding Recon.
+- Account stores `lastReconMS` beside `failureCount` and owns the accepted timed skip decision.
+- Initial and forced Recon execute immediately; dirty or pending state executes after 10 seconds; clean state executes after 60 seconds.
+- Only a successfully published Recon advances `lastReconMS`; skips and failures do not.
+- BotCycle reports whether any Account executed Recon; Controller delivers `OnRecon` only after executed Recon.
+- BtBot selects `App.Backtest`; Runner selects `App.Live`; lower components read only selected `nuubot.Runtime`.
+- BtBot checks telemetry independently from Controller cadence and retains 794,881 ten-second samples for terminal publication.
+- `stest.sh` derives tick, Controller-run, and telemetry invariants from result data instead of hardcoded cadence.
+- Validation failures now name the failed check, expected value, actual value, and result database.
+- Standalone Observer, Trade, and Grid each passed after runtime and validator changes.
+- Concurrent Observer, Trade, and Grid each passed without SQLite locking, path collision, or cross-Bot validation failure.
+- Trade now produces 190 cycles, 190 Trades, 617 Orders, and 380 Fills under one-second Controller cadence.
+- Grid remains 50 cycles, 1,982 Trades, 4,697 Orders, and 2,636 Fills.
+- Added `internal/runharness.Profile` for shared whole-Run profiling infrastructure.
+- Reduced both command mains to argument parsing, one package `Execute` call, and one terminal error path.
+- Added `backtest.Execute` and `live.Execute`; Runner was compiled but never executed.
+- Post-cleanup Observer passed in 9,112ms; replay was 5,390ms.
+- Post-cleanup Observer log is `workspace/logs/nuubot5-stest-s6-b9-1-20260728T055624Z.log`.
+- Post-cleanup Observer suite report is `workspace/logs/nuubot5-stest-s6-b9-1-20260728T055624Z.json`.
+- Full Go tests, full vet, shell syntax, diff checks, stale-reference scans, and project diagnostics pass with canonical `-tags noasm`.
+- Renamed `internal/btbot` to `internal/backtest` and its lifecycle owner to `backtest.Run`.
+- Renamed `internal/runner` to `internal/live` and its lifecycle owner to `live.Run`.
+- Command binaries now call `backtest.Execute` and `live.Execute`.
+- Config loads both profiles into `nuubot.App`; each Run selects one into `nuubot.Runtime` before child initialization.
+- Config requires Live telemetry write-on-collect and Backtest terminal-only telemetry publication.
+- Added `telemetry.Store` for typed per-Bot Live telemetry rows with resumed sequence and idempotent Stop.
+- Live checks telemetry cadence after successful Controller callbacks, writes due samples immediately, and writes one terminal sample during Stop.
+- Focused Config and Telemetry persistence tests pass.
+- Full Go tests, full vet, shell syntax, diff checks, stale Go-package scans, and project diagnostics pass after the package hardcut.
+- Concurrent Observer, Trade, and Grid each passed once after the package hardcut.
+- Observer proof: `workspace/logs/nuubot5-stest-s6-b9-1-20260728T061042Z.log` and `.json`.
+- Trade proof: `workspace/logs/nuubot5-stest-s9-b13-1-20260728T061043Z.log` and `.json`.
+- Grid proof: `workspace/logs/nuubot5-stest-s11-b15-1-20260728T061043Z.log` and `.json`.
+- Runner was not executed.
 
 ### TODO
 
+
 - Add Observer stop parameters for stop-loss, tick count, bar count, and elapsed-time limits.
 - Use bounded Observer runs such as 200 ticks for fast smoke tests and small logs.
-- Complete Runner and test it first with bounded Observer before Trade or Grid.
-- Use the Runner Observer smoke test to expose lifecycle and integration defects before trading execution.
+- Implement the central durable Bot and Sweep command queue with processed, skipped, rejected, and acknowledged outcomes.
+- Keep commands, lifecycle status, acknowledgements, and process supervision in the central operational database.
+- Give every Bot ID one execution database: immutable after backtest publication and durable across live Runner restarts.
+- Keep Controller, Recon, and Recon sweep timing user-configurable; tune fixed intervals from performance data before considering live self-tuning.
+
+
+- Tune Backtest telemetry interval, retention, and memory because terminal-only publication accumulates samples in process memory.
+
+- Revisit the recorded Grid function-profile hotspots during GridExecutor and Simulator hand-tuning.
+- Complete Live Run and test it first with bounded Observer before Trade or Grid.
+- Use the Live Observer smoke test to expose lifecycle and integration defects before trading execution.
 
 ### PENDING USER APPROVAL
 

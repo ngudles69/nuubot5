@@ -60,6 +60,7 @@ Do not modify a reference repository without explicit user authority.
 - Account, Ledger, Trade, Order, and Fill reconciliation.
 - Simulator venue-shaped execution.
 - Per-Bot result publication.
+- Exact A/B/C function profiling through temporary Go build overlays.
 - BalancedRisk stub.
 - Reader-exhaustion shutdown through BtBot.
 - Exact replay and semantic completion checks.
@@ -104,8 +105,8 @@ Correctness and fresh-process stability take priority over speed.
 
 ## Accepted Proof
 
-Sweep 6 Bot 9 replays 7,948,800 one-second ticks through 794,880 Controller
-passes.
+Sweep 6 Bot 9 replays 7,948,800 one-second ticks through 7,948,800 Controller
+passes and retains 794,881 telemetry samples at ten-second cadence.
 
 Each accepted run reports 2,207 Signal packages and 724 skipped StartCycle
 actions.
@@ -117,14 +118,14 @@ Account, Ledger, and Simulator.
 
 TradeBot produces:
 
-- 193 completed BotCycles;
-- 193 Trades;
-- 626 Orders;
-- 386 Fills;
+- 190 completed BotCycles;
+- 190 Trades;
+- 617 Orders;
+- 380 Fills;
 - 1,000 USDC capital;
-- -3.90459332761 USDC net PnL;
-- 996.09540667239 USDC ending equity; and
-- 4.200462813402 USDC maximum drawdown.
+- approximately -3.85 USDC net PnL;
+- approximately 996.15 USDC ending equity; and
+- approximately 4.21 USDC maximum drawdown.
 
 The result stores exact BotConfig TOML and hash.
 

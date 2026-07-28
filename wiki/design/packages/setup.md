@@ -32,6 +32,7 @@ Setup starts no goroutine or WebSocket.
 
 - Logger;
 - complete App Config;
+- one runtime policy selected by Backtest or Live `Run`;
 - stored Bot identity and exact BotConfig TOML;
 - ReplayInput;
 - typed BotSpec;
@@ -47,19 +48,21 @@ Nuubot contains shared infrastructure data.
 
 It contains shared infrastructure, not procedural application behavior or features.
 
-BtBot, Controller, BotCycle, Executors, and Accounts receive the same Nuubot pointer.
+Backtest, Live, Controller, BotCycle, Executors, and Accounts receive the same Nuubot pointer.
 
-Components do not copy App Config, BotSpec, Meta, Bot identity, ResultPath, or RuntimePath.
+Components do not copy App Config, selected Runtime, BotSpec, Meta, Bot identity, ResultPath, or RuntimePath.
+
+Backtest selects `App.Backtest`. Live selects `App.Live`. Lower components read selected `nuubot.Runtime` without execution-mode branches.
 
 A component may retain `nuubot.Log` as its local logger reference.
 
-BtBot or Runner creates and initializes its selected Clock, then attaches that
+Backtest or Live `Run` creates and initializes its selected Clock, then attaches that
 Clock to Nuubot before Controller initialization. Runtime code reads current
 time through `nuubot.Clock.NowMS()`.
 
-BtBot and Runner create shared MarketData and attach it before Controller initialization.
+Backtest and Live create shared MarketData and attach it before Controller initialization.
 
-Runner also creates shared Info and WebSocket objects and attaches them before Controller initialization.
+Live also creates shared Info and WebSocket objects and attaches them before Controller initialization.
 
 Setup still resolves replay paths, validates replay symbols, and loads Meta through the replay symbol.
 

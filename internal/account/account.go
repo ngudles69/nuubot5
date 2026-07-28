@@ -189,6 +189,7 @@ type Account struct {
 	stats          stats
 	generation     uint64
 	failureCount   uint64
+	lastReconMS    uint64
 	dirty          bool
 	started        bool
 	stopped        bool

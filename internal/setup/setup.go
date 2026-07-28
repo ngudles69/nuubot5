@@ -21,6 +21,7 @@ import (
 type Nuubot struct {
 	Log         *logging.Logger
 	App         config.App
+	Runtime     config.Runtime
 	Bot         datastore.Bot
 	BotSpec     botspec.Spec
 	Clock       clock.Clock

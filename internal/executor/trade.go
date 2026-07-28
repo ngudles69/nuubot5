@@ -57,10 +57,8 @@ func (e *tradeExecutor) OnInit(ctx BotCycleContext) error {
 		ctx.Spec.Side,
 	))
 
-	// Step 2: reject terminal TradeExecutor state
-	if e.status == Error || e.status == Stopped {
-		return fmt.Errorf("trade executor cannot initialize from terminal status %s", e.status)
-	}
+	// Step 2: retain resolved TradeExecutor status
+	e.status = ctx.Status
 
 	// Step 3: validate TradeExecutor config
 
@@ -200,9 +198,9 @@ func (e *tradeExecutor) OnStart() error {
 		e.side,
 	))
 
-	// Step 2: reject terminal TradeExecutor state
-	if e.status == Error || e.status == Stopped {
-		return fmt.Errorf("trade executor cannot start from terminal status %s", e.status)
+	// Step 2: advance TradeExecutor status
+	if e.status == Configured {
+		e.status = Starting
 	}
 
 	// Step 3: read latest BBO
@@ -211,7 +209,7 @@ func (e *tradeExecutor) OnStart() error {
 	}
 
 	// Step 4: continue loaded TradeExecutor state
-	if e.status == Configured || e.status == Starting {
+	if e.status == Starting {
 		e.status = Running
 	}
 
@@ -238,35 +236,33 @@ func (e *tradeExecutor) OnStop(reason string) error {
 		reason,
 	))
 
-	// Step 2: validate stop state
+	// Step 2: advance TradeExecutor status
 	if e.status == Stopped {
 		return nil
 	}
 	if e.status == Error {
 		return fmt.Errorf("stop trade executor: executor is in error state")
 	}
-
-	// Step 3: mark TradeExecutor stopping
 	e.status = Stopping
 	if e.exitReason == "" {
 		e.exitReason = reason
 	}
 
-	// Step 4: read current time and latest BBO
+	// Step 3: read current time and latest BBO
 	var nowMS = e.nuubot.Clock.NowMS()
 	var bbo, err = e.latestBBO()
 	if err != nil {
 		return e.stopError(err)
 	}
 
-	// Step 5: reconcile current Account truth
+	// Step 4: reconcile current Account truth
 	var snapshot account.Snapshot
 	snapshot, _, _, err = e.account.Reconcile(nowMS, true)
 	if err != nil {
 		return e.stopError(fmt.Errorf("stop trade executor: %w", err))
 	}
 
-	// Step 6: cancel active Orders
+	// Step 5: cancel active Orders
 	var active = e.account.ActiveOrders()
 	if len(active) > 0 {
 		var cloids = make([]string, len(active))
@@ -283,7 +279,7 @@ func (e *tradeExecutor) OnStop(reason string) error {
 		}
 	}
 
-	// Step 7: close open exposure
+	// Step 6: close open exposure
 	if !snapshot.PositionQuantity.IsZero() {
 		var side = order.Sell
 		if snapshot.PositionQuantity.IsNegative() {
@@ -306,7 +302,7 @@ func (e *tradeExecutor) OnStop(reason string) error {
 		}
 	}
 
-	// Step 8: reconcile final Venue truth
+	// Step 7: reconcile final Venue truth
 	snapshot, _, _, err = e.account.Reconcile(nowMS, true)
 	if err != nil {
 		return e.stopError(fmt.Errorf("stop trade executor: %w", err))
@@ -320,26 +316,26 @@ func (e *tradeExecutor) OnStop(reason string) error {
 		))
 	}
 
-	// Step 9: capture terminal Account result
+	// Step 8: capture terminal Account result
 	var result account.Result
 	result, err = e.account.Result()
 	if err != nil {
 		return e.stopError(fmt.Errorf("stop trade executor: %w", err))
 	}
 
-	// Step 10: stop Account
+	// Step 9: stop Account
 	err = e.account.Stop()
 	if err != nil {
 		e.status = Error
 		return fmt.Errorf("stop trade executor: %w", err)
 	}
 
-	// Step 11: cache terminal Account result
+	// Step 10: cache terminal Account result
 	e.accountResult = result.Clone()
 	e.hasResult = true
 	e.status = Stopped
 
-	// Step 12: log stop completed
+	// Step 11: log stop completed
 	e.log.Info(fmt.Sprintf(
 		"executor stopped cycle=%d executor=%d id=%s kind=trade side=%s trades=%d fills=%d stop_reason=%s",
 		e.cycleNumber,

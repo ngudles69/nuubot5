@@ -63,11 +63,8 @@ func (e *gridExecutor) OnInit(ctx BotCycleContext) error {
 		ctx.Spec.Side,
 	))
 
-	// Step 2: validate GridExecutor state
-	if e.status != Configured {
-		return fmt.Errorf("grid executor cannot initialize from current state")
-	}
-	e.status = Starting
+	// Step 2: retain resolved GridExecutor status
+	e.status = ctx.Status
 
 	// Step 3: validate GridExecutor config
 	var equity = ctx.StartingEquityUSDC
@@ -158,9 +155,9 @@ func (e *gridExecutor) OnStart() error {
 		e.side,
 	))
 
-	// Step 2: validate start state
-	if e.status != Starting {
-		return fmt.Errorf("grid executor cannot start from current state")
+	// Step 2: advance GridExecutor status
+	if e.status == Configured {
+		e.status = Starting
 	}
 
 	// Step 3: read latest BBO
@@ -191,8 +188,10 @@ func (e *gridExecutor) OnStart() error {
 		}
 	}
 
-	// Step 7: mark GridExecutor running
-	e.status = Running
+	// Step 7: continue loaded GridExecutor state
+	if e.status == Starting {
+		e.status = Running
+	}
 
 	// Step 8: log start completed
 	e.log.Info(fmt.Sprintf(
@@ -217,41 +216,39 @@ func (e *gridExecutor) OnStop(reason string) error {
 		reason,
 	))
 
-	// Step 2: validate stop state
+	// Step 2: advance GridExecutor status
 	if e.status == Stopped || (e.status == Error && e.hasResult) {
 		return nil
 	}
 	if e.status == Error {
 		return fmt.Errorf("stop grid executor: executor is in error state")
 	}
-
-	// Step 3: mark GridExecutor stopping
 	e.status = Stopping
 	if e.exitReason == "" {
 		e.exitReason = reason
 	}
 
-	// Step 4: stop MarketData subscription
+	// Step 3: stop MarketData subscription
 	if err := e.subscription.Stop(); err != nil {
 		return e.stopError(fmt.Errorf("stop grid executor: %w", err))
 	}
 	e.subscription = nil
 
-	// Step 5: read current time and latest BBO
+	// Step 4: read current time and latest BBO
 	var nowMS = e.nuubot.Clock.NowMS()
 	var bbo, err = e.latestBBO()
 	if err != nil {
 		return e.stopError(err)
 	}
 
-	// Step 6: reconcile current Account truth
+	// Step 5: reconcile current Account truth
 	var snapshot account.Snapshot
 	snapshot, _, _, err = e.account.Reconcile(nowMS, true)
 	if err != nil {
 		return e.stopError(fmt.Errorf("stop grid executor: %w", err))
 	}
 
-	// Step 7: cancel active Orders
+	// Step 6: cancel active Orders
 	var active = orderedCancellations(e.account.ActiveOrders())
 	if len(active) > 0 {
 		var cloids = make([]string, len(active))
@@ -269,7 +266,7 @@ func (e *gridExecutor) OnStop(reason string) error {
 		}
 	}
 
-	// Step 8: close open Trades
+	// Step 7: close open Trades
 	for _, owned := range e.account.OpenTrades() {
 		if owned.OpenQuantity.IsZero() {
 			continue
@@ -304,7 +301,7 @@ func (e *gridExecutor) OnStop(reason string) error {
 		e.closureOrders++
 	}
 
-	// Step 9: reconcile final Venue truth
+	// Step 8: reconcile final Venue truth
 	snapshot, _, _, err = e.account.Reconcile(nowMS, true)
 	if err != nil {
 		return e.stopError(fmt.Errorf("stop grid executor: %w", err))
@@ -322,7 +319,7 @@ func (e *gridExecutor) OnStop(reason string) error {
 		return e.stopError(fmt.Errorf("stop grid executor: %w", err))
 	}
 
-	// Step 10: capture terminal Account result
+	// Step 9: capture terminal Account result
 	var result account.Result
 	result, err = e.account.Result()
 	if err != nil {
@@ -330,19 +327,19 @@ func (e *gridExecutor) OnStop(reason string) error {
 	}
 	e.roundTrips = e.account.CountOrders(order.TakeProfit, order.Filled)
 
-	// Step 11: stop Account
+	// Step 10: stop Account
 	err = e.account.Stop()
 	if err != nil {
 		e.status = Error
 		return fmt.Errorf("stop grid executor: %w", err)
 	}
 
-	// Step 12: cache terminal Account result
+	// Step 11: cache terminal Account result
 	e.accountResult = result.Clone()
 	e.hasResult = true
 	e.status = Stopped
 
-	// Step 13: log stop completed
+	// Step 12: log stop completed
 	e.log.Info(fmt.Sprintf(
 		"executor stopped cycle=%d executor=%d id=%s kind=grid side=%s trades=%d orders=%d fills=%d cancellations=%d closure_orders=%d retries=%d round_trips=%d stop_reason=%s",
 		e.cycleNumber,

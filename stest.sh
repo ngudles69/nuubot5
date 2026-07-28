@@ -7,18 +7,67 @@ usage() {
     exit 2
 }
 
+validation_check() {
+    local result_db="$1"
+    local check="$2"
+    local mode="$3"
+    local expected="$4"
+    local actual="$5"
+    local passed=0
+    case "$mode" in
+        equal) [[ "$actual" == "$expected" ]] && passed=1 ;;
+        nonempty) [[ -n "$actual" ]] && passed=1 ;;
+        empty) [[ -z "$actual" ]] && passed=1 ;;
+        greater) [[ -n "$actual" && "$actual" -gt "$expected" ]] && passed=1 ;;
+        at_least) [[ -n "$actual" && "$actual" -ge "$expected" ]] && passed=1 ;;
+        absent) [[ ! -e "$actual" ]] && passed=1 ;;
+        true) [[ "$actual" == "1" ]] && passed=1 ;;
+        *) printf 'unknown validation mode: %s\n' "$mode" >&2; return 2 ;;
+    esac
+    if [[ $passed -eq 1 ]]; then
+        return 0
+    fi
+    printf 'validation failed check=%s expected=%s actual=%s result_db=%s\n' \
+        "$check" "$expected" "${actual:-missing}" "$result_db" >&2
+    return 1
+}
+
 validate_observer() {
     local output="$1"
-    local controller_line
+    local result_db="$2"
+    local completed ticks_expected ticks_served runs_expected runs_triggered
+    local telemetry_rows report_samples controller_line
+    local failed=0
+    IFS='|' read -r \
+        completed ticks_expected ticks_served runs_expected runs_triggered \
+        telemetry_rows report_samples <<< "$(
+            sqlite3 -separator '|' "$result_db" "
+                SELECT b.completed,b.ticks_expected,b.ticks_served,
+                       b.runs_expected,b.runs_triggered,
+                       (SELECT COUNT(*) FROM telemetry_sample),r.telemetry_samples
+                FROM backtest_result b CROSS JOIN run_report r;
+            "
+        )"
     controller_line="$(printf '%s\n' "$output" | grep '] controller stopped ' | tail -n 1)"
-    [[ "$controller_line" =~ ticks_accepted=7948800.*runs=794880.*signal_packages_read=2208.*start_actions_skipped=724.*cycles_started=63.*cycles_rejected=0.*cycles_closed=63.*stop_loss_exits=16.*stop_reason=parent_stop ]]
+
+    validation_check "$result_db" completed equal 1 "$completed" || failed=1
+    validation_check "$result_db" ticks_expected equal "$ticks_expected" "$ticks_served" || failed=1
+    validation_check "$result_db" runs_expected equal "$runs_expected" "$runs_triggered" || failed=1
+    validation_check "$result_db" telemetry_rows greater 0 "$telemetry_rows" || failed=1
+    validation_check "$result_db" report_samples equal "$telemetry_rows" "$report_samples" || failed=1
+    local semantic_result=0
+    if [[ "$controller_line" =~ ticks_accepted=7948800.*signal_packages_read=2208.*start_actions_skipped=724.*cycles_started=63.*cycles_rejected=0.*cycles_closed=63.*stop_loss_exits=16.*stop_reason=parent_stop ]]; then
+        semantic_result=1
+    fi
+    validation_check "$result_db" observer_result true 'accepted semantic result' "$semantic_result" || failed=1
+    return "$failed"
 }
 
 validate_trade() {
     local result_db="$1"
     local source_db_sql="$2"
     local integrity foreign_keys
-    local completed ticks controller_runs cycles trades orders fills
+    local completed ticks_expected ticks runs_expected controller_runs cycles trades orders fills
     local stop_order_count telemetry_rows report_samples
     local result_cycles result_executors db_states result_config_match
     local equity_carry result_equity_match false_equity_samples
@@ -27,10 +76,11 @@ validate_trade() {
     integrity="$(sqlite3 "$result_db" 'PRAGMA integrity_check;')"
     foreign_keys="$(sqlite3 "$result_db" 'PRAGMA foreign_key_check;')"
     IFS='|' read -r \
-        completed ticks controller_runs cycles trades orders fills \
+        completed ticks_expected ticks runs_expected controller_runs cycles trades orders fills \
         stop_order_count telemetry_rows report_samples <<< "$(
             sqlite3 -separator '|' "$result_db" "
-                SELECT b.completed,b.ticks_served,b.runs_triggered,
+                SELECT b.completed,b.ticks_expected,b.ticks_served,
+                       b.runs_expected,b.runs_triggered,
                        r.cycles_closed,r.trades,r.orders,r.fills,r.stop_orders,
                        (SELECT COUNT(*) FROM telemetry_sample),r.telemetry_samples
                 FROM backtest_result b CROSS JOIN run_report r;
@@ -109,19 +159,30 @@ validate_trade() {
     )"
     fi
 
-    [[ "$integrity" == "ok" && -z "$foreign_keys" &&
-       "$completed" == "1" && "$ticks" == "7948800" &&
-       "$controller_runs" == "794880" && -n "$cycles" && "$cycles" -gt 0 &&
-       "$trades" == "$cycles" && "$fills" == "$((cycles * 2))" &&
-       "$orders" == "$((cycles * 3 + stop_order_count))" &&
-       "$telemetry_rows" == "$((controller_runs + 1))" &&
-       "$report_samples" == "$telemetry_rows" &&
-       "$result_cycles" == "$cycles" && "$result_executors" == "$cycles" &&
-       "$db_states" == "$expected_states" && "$result_config_match" == "1" &&
-       "$equity_carry" == "1" && "$result_equity_match" == "1" &&
-       "$false_equity_samples" == "0" && "$declining_max_drawdown" == "0" &&
-       "$close_orders" == "0" && "$stop_orders" == "$stop_order_count" &&
-       ! -f "${result_db}.partial" ]]
+    local failed=0
+    validation_check "$result_db" integrity equal ok "$integrity" || failed=1
+    validation_check "$result_db" foreign_keys empty empty "$foreign_keys" || failed=1
+    validation_check "$result_db" completed equal 1 "$completed" || failed=1
+    validation_check "$result_db" ticks_expected equal "$ticks_expected" "$ticks" || failed=1
+    validation_check "$result_db" runs_expected equal "$runs_expected" "$controller_runs" || failed=1
+    validation_check "$result_db" cycles greater 0 "$cycles" || failed=1
+    validation_check "$result_db" trades equal "$cycles" "$trades" || failed=1
+    validation_check "$result_db" fills equal "$((cycles * 2))" "$fills" || failed=1
+    validation_check "$result_db" orders equal "$((cycles * 3 + stop_order_count))" "$orders" || failed=1
+    validation_check "$result_db" telemetry_rows greater 0 "$telemetry_rows" || failed=1
+    validation_check "$result_db" report_samples equal "$telemetry_rows" "$report_samples" || failed=1
+    validation_check "$result_db" result_cycles equal "$cycles" "$result_cycles" || failed=1
+    validation_check "$result_db" result_executors equal "$cycles" "$result_executors" || failed=1
+    validation_check "$result_db" simulator_states equal "$expected_states" "$db_states" || failed=1
+    validation_check "$result_db" result_config_match equal 1 "$result_config_match" || failed=1
+    validation_check "$result_db" equity_carry equal 1 "$equity_carry" || failed=1
+    validation_check "$result_db" result_equity_match equal 1 "$result_equity_match" || failed=1
+    validation_check "$result_db" false_equity_samples equal 0 "$false_equity_samples" || failed=1
+    validation_check "$result_db" declining_max_drawdown equal 0 "$declining_max_drawdown" || failed=1
+    validation_check "$result_db" close_orders equal 0 "$close_orders" || failed=1
+    validation_check "$result_db" stop_orders equal "$stop_order_count" "$stop_orders" || failed=1
+    validation_check "$result_db" partial_result absent absent "${result_db}.partial" || failed=1
+    return "$failed"
 }
 
 write_result_log() {
@@ -133,7 +194,7 @@ validate_grid() {
     local result_db="$1"
     local source_db_sql="$2"
     local integrity foreign_keys
-    local completed ticks controller_runs cycles trades orders fills
+    local completed ticks_expected ticks runs_expected controller_runs cycles trades orders fills
     local cancellations stop_order_count retries telemetry_rows report_samples
     local result_cycles result_executors result_levels result_boundaries
     local result_initial_levels active_orders nonflat_accounts
@@ -143,10 +204,11 @@ validate_grid() {
     integrity="$(sqlite3 "$result_db" 'PRAGMA integrity_check;')"
     foreign_keys="$(sqlite3 "$result_db" 'PRAGMA foreign_key_check;')"
     IFS='|' read -r \
-        completed ticks controller_runs cycles trades orders fills cancellations \
+        completed ticks_expected ticks runs_expected controller_runs cycles trades orders fills cancellations \
         stop_order_count retries telemetry_rows report_samples <<< "$(
             sqlite3 -separator '|' "$result_db" "
-                SELECT b.completed,b.ticks_served,b.runs_triggered,
+                SELECT b.completed,b.ticks_expected,b.ticks_served,
+                       b.runs_expected,b.runs_triggered,
                        r.cycles_closed,r.trades,r.orders,r.fills,r.cancellations,
                        r.stop_orders,r.retries,
                        (SELECT COUNT(*) FROM telemetry_sample),r.telemetry_samples
@@ -222,21 +284,31 @@ validate_grid() {
         "
     )"
 
-    [[ "$integrity" == "ok" && -z "$foreign_keys" &&
-       "$completed" == "1" && "$ticks" == "7948800" &&
-       "$controller_runs" == "794880" && -n "$cycles" && "$cycles" -gt 0 &&
-       "$trades" -ge "$((cycles * 28))" &&
-       "$orders" == "$((trades * 2 + stop_order_count))" &&
-       "$telemetry_rows" == "$((controller_runs + 1))" &&
-       "$report_samples" == "$telemetry_rows" &&
-       "$result_cycles" == "$cycles" && "$result_executors" == "$cycles" &&
-       "$result_levels" == "$((cycles * 30))" &&
-       "$result_boundaries" == "$((cycles * 2))" &&
-       "$result_initial_levels" == "$((cycles * 28))" &&
-       "$active_orders" == "0" && "$nonflat_accounts" == "0" &&
-       "$false_equity_samples" == "0" && "$declining_max_drawdown" == "0" &&
-       "$close_orders" == "0" && "$stop_orders" == "$stop_order_count" &&
-       "$result_config_match" == "1" && ! -f "${result_db}.partial" ]]
+    local failed=0
+    validation_check "$result_db" integrity equal ok "$integrity" || failed=1
+    validation_check "$result_db" foreign_keys empty empty "$foreign_keys" || failed=1
+    validation_check "$result_db" completed equal 1 "$completed" || failed=1
+    validation_check "$result_db" ticks_expected equal "$ticks_expected" "$ticks" || failed=1
+    validation_check "$result_db" runs_expected equal "$runs_expected" "$controller_runs" || failed=1
+    validation_check "$result_db" cycles greater 0 "$cycles" || failed=1
+    validation_check "$result_db" trades at_least "$((cycles * 28))" "$trades" || failed=1
+    validation_check "$result_db" orders equal "$((trades * 2 + stop_order_count))" "$orders" || failed=1
+    validation_check "$result_db" telemetry_rows greater 0 "$telemetry_rows" || failed=1
+    validation_check "$result_db" report_samples equal "$telemetry_rows" "$report_samples" || failed=1
+    validation_check "$result_db" result_cycles equal "$cycles" "$result_cycles" || failed=1
+    validation_check "$result_db" result_executors equal "$cycles" "$result_executors" || failed=1
+    validation_check "$result_db" result_levels equal "$((cycles * 30))" "$result_levels" || failed=1
+    validation_check "$result_db" result_boundaries equal "$((cycles * 2))" "$result_boundaries" || failed=1
+    validation_check "$result_db" result_initial_levels equal "$((cycles * 28))" "$result_initial_levels" || failed=1
+    validation_check "$result_db" active_orders equal 0 "$active_orders" || failed=1
+    validation_check "$result_db" nonflat_accounts equal 0 "$nonflat_accounts" || failed=1
+    validation_check "$result_db" false_equity_samples equal 0 "$false_equity_samples" || failed=1
+    validation_check "$result_db" declining_max_drawdown equal 0 "$declining_max_drawdown" || failed=1
+    validation_check "$result_db" close_orders equal 0 "$close_orders" || failed=1
+    validation_check "$result_db" stop_orders equal "$stop_order_count" "$stop_orders" || failed=1
+    validation_check "$result_db" result_config_match equal 1 "$result_config_match" || failed=1
+    validation_check "$result_db" partial_result absent absent "${result_db}.partial" || failed=1
+    return "$failed"
 }
 
 if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
@@ -435,7 +507,7 @@ while IFS='|' read -r sweep_id bot_id order_value stored_spec; do
         if [[ $valid -eq 1 ]]; then
             case "$stored_spec" in
                 macross_observer_bot)
-                    validate_observer "$output" || valid=0
+                    validate_observer "$output" "$result_db" || valid=0
                     ;;
                 macross_trade_bot)
                     validate_trade "$result_db" "$source_db_sql" || valid=0

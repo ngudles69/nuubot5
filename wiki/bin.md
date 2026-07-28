@@ -11,8 +11,8 @@ Command packages remain thin wrappers. Internal packages own application behavio
 ```text
 Executable          Scope       Internal owner      Status
 nuubot-bt-sweep     Backtest    internal/btsweep    Command placeholder; template admission implemented
-nuubot-bt-bot       Backtest    internal/btbot      Implemented
-nuubot-runner       Live        internal/runner     Non-runnable scaffold
+nuubot-bt-bot       Backtest    internal/backtest   Implemented
+nuubot-runner       Live        internal/live       Non-runnable scaffold
 ```
 
 ### `nuubot-bt-sweep`
@@ -45,7 +45,8 @@ Runs one stored Bot through one bounded historical replay.
 
 ```text
 cmd/nuubot-bt-bot
-`-- internal/btbot
+`-- internal/backtest.Execute
+    |-- internal/runharness.Profile
     |-- Replay Reader
     |-- TickClock
     `-- Controller
@@ -53,13 +54,17 @@ cmd/nuubot-bt-bot
 
 The current database boundary still supplies Sweep ID and Bot ID. The target Bot ID is globally unique; Sweep ID is optional grouping provenance.
 
-Performance profiling is enabled only through the explicit `-pp <prefix>` command option.
+The command only parses arguments, calls `backtest.Execute`, and reports one terminal error.
+
+Performance profiling is enabled only through `-pp <prefix>`. Shared whole-Run profiling mechanics live in `internal/runharness`.
 
 ### `nuubot-runner`
 
 Runs one standalone live, testnet, paper, or Simulator Bot.
 
-The command and `internal/runner` lifecycle scaffold are implemented.
+The command only parses arguments, calls `live.Execute`, and reports one terminal error.
+
+The command and `internal/live` lifecycle scaffold are implemented.
 
 The scaffold is not a working live runtime. WebSocket transport, live Setup, and live Signaler input remain unimplemented.
 
@@ -74,8 +79,13 @@ Executable          Purpose                                      Status
 nuubot-server       Optional application server and supervision  Placeholder
 nuubot-cli          Operator commands                             Placeholder
 nuubot-report       Render and aggregate backtest reports         Implemented
+nuubot-fprof        Exact A/B/C function profiling                Implemented
 parity-probe        Compare selected Venue responses              Implemented
 ```
+
+`nuubot-fprof -sweep ID -bot ID [-top N]` writes isolated profiles below `workspace/perf/fprofiles`.
+
+It uses temporary Go build overlays and never modifies tracked application source.
 
 The approved Server and CLI placeholder commands print `Under Construction.` until their implementation is authorized.
 

@@ -56,18 +56,15 @@ func (e *observer) OnInit(ctx BotCycleContext) error {
 		ctx.Spec.Side,
 	))
 
-	// Step 2: validate ObserverExecutor state
-	if e.status != Configured {
-		return fmt.Errorf("observer executor cannot initialize from current state")
-	}
+	// Step 2: retain resolved ObserverExecutor status
+	e.status = ctx.Status
 
-	// Step 3: bind ObserverExecutor inputs and mark starting
+	// Step 3: bind ObserverExecutor inputs
 	e.cycleNumber = ctx.CycleNumber
 	e.executorNumber = ctx.ExecutorNumber
 	e.signalMS = ctx.Signal.TimestampMS()
 	e.side = ctx.Spec.Side
 	e.stopLossPct, _ = ctx.Spec.StopLossPct.Float64()
-	e.status = Starting
 
 	// Step 4: validate ObserverExecutor config
 	if e.stopLossPct <= 0 || e.stopLossPct >= 1 {
@@ -104,9 +101,9 @@ func (e *observer) OnStart() error {
 		e.side,
 	))
 
-	// Step 2: validate ObserverExecutor state
-	if e.status != Starting {
-		return fmt.Errorf("observer executor cannot start from current state")
+	// Step 2: advance ObserverExecutor status
+	if e.status == Configured {
+		e.status = Starting
 	}
 
 	// Step 3: read latest BBO
@@ -124,8 +121,10 @@ func (e *observer) OnStart() error {
 		return fmt.Errorf("start observer executor: %w", err)
 	}
 
-	// Step 5: mark ObserverExecutor running
-	e.status = Running
+	// Step 5: continue loaded ObserverExecutor state
+	if e.status == Starting {
+		e.status = Running
+	}
 
 	// Step 6: log start completed
 	e.log.Info(fmt.Sprintf(
@@ -150,26 +149,24 @@ func (e *observer) OnStop(reason string) error {
 		reason,
 	))
 
-	// Step 2: stop MarketData subscription
+	// Step 2: advance ObserverExecutor status
+	if e.status == Stopped || e.status == Error {
+		return nil
+	}
+	e.status = Stopping
+
+	// Step 3: stop MarketData subscription
 	if err := e.subscription.Stop(); err != nil {
 		return fmt.Errorf("stop observer executor: %w", err)
 	}
 	e.subscription = nil
 
-	// Step 3: ignore terminal stop request
-	if e.status == Stopped || e.status == Error {
-		return nil
-	}
-
-	// Step 4: mark ObserverExecutor stopping
-	e.status = Stopping
-
-	// Step 5: preserve stop reason
+	// Step 4: preserve stop reason
 	if e.stats.reason == "" {
 		e.stats.reason = reason
 	}
 
-	// Step 6: preserve end time
+	// Step 5: preserve end time
 	if e.stats.endMS == 0 {
 		e.stats.endMS = e.stats.lastMS
 		if e.stats.endMS == 0 {
@@ -177,15 +174,15 @@ func (e *observer) OnStop(reason string) error {
 		}
 	}
 
-	// Step 7: mark ObserverExecutor stopped
+	// Step 6: mark ObserverExecutor stopped
 	e.status = Stopped
 
-	// Step 8: calculate duration
+	// Step 7: calculate duration
 	var durationMS uint64
 	if e.stats.endMS >= e.stats.startMS {
 		durationMS = e.stats.endMS - e.stats.startMS
 	}
-	// Step 9: log stop completed
+	// Step 8: log stop completed
 	e.log.Info(fmt.Sprintf(
 		"executor stopped cycle=%d executor=%d id=%s kind=observer side=%s signal_ts_ms=%d "+
 			"signal_price=%f stop_loss_pct=%f start_ts_ms=%d end_ts_ms=%d "+

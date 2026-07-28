@@ -25,5 +25,16 @@ restart_interval_seconds = 600
 shared_data = "D:/workspace/data"
 database = "workspace/db/nuubot.db"
 
-[btbot]
-controller_timer_interval_ms = 10000
+[live]
+controller_interval_ms = 1000
+recon_interval_ms = 10000
+recon_sweep_interval_ms = 60000
+telemetry_interval_ms = 10000
+telemetry_write_on_collect = true
+
+[backtest]
+controller_interval_ms = 1000
+recon_interval_ms = 10000
+recon_sweep_interval_ms = 60000
+telemetry_interval_ms = 10000
+telemetry_write_on_collect = false

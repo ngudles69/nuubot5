@@ -1,44 +1,39 @@
 package main
 
-import (
-	"os"
-	"path/filepath"
-	"testing"
-	"time"
-)
+import "testing"
 
 // Section 1 - Program Flow
 
-func TestParseInput(t *testing.T) {
-	var sweepID, botID, profilePrefix, err = parseInput([]string{"6", "9"})
+func TestParseArguments(t *testing.T) {
+	var options, err = parseArguments([]string{"6", "9"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sweepID != 6 {
-		t.Fatalf("actual sweep ID %d, expected 6", sweepID)
+	if options.SweepID != 6 {
+		t.Fatalf("actual Sweep ID %d, expected 6", options.SweepID)
 	}
-	if botID != 9 {
-		t.Fatalf("actual bot ID %d, expected 9", botID)
+	if options.BotID != 9 {
+		t.Fatalf("actual Bot ID %d, expected 9", options.BotID)
 	}
-	if profilePrefix != "" {
-		t.Fatalf("actual profile prefix %q, expected empty", profilePrefix)
+	if options.ProfilePrefix != "" {
+		t.Fatalf("actual profile prefix %q, expected empty", options.ProfilePrefix)
 	}
 }
 
-func TestParseInputAcceptsProfilePrefix(t *testing.T) {
-	var sweepID, botID, profilePrefix, err = parseInput([]string{"6", "9", "-pp", "profiles/run-001"})
+func TestParseArgumentsAcceptsProfilePrefix(t *testing.T) {
+	var options, err = parseArguments([]string{"6", "9", "-pp", "profiles/run-001"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sweepID != 6 || botID != 9 {
-		t.Fatalf("actual identity %d/%d, expected 6/9", sweepID, botID)
+	if options.SweepID != 6 || options.BotID != 9 {
+		t.Fatalf("actual identity %d/%d, expected 6/9", options.SweepID, options.BotID)
 	}
-	if profilePrefix != "profiles/run-001" {
-		t.Fatalf("actual profile prefix %q, expected profiles/run-001", profilePrefix)
+	if options.ProfilePrefix != "profiles/run-001" {
+		t.Fatalf("actual profile prefix %q, expected profiles/run-001", options.ProfilePrefix)
 	}
 }
 
-func TestParseInputRejectsInvalidInput(t *testing.T) {
+func TestParseArgumentsRejectsInvalidInput(t *testing.T) {
 	tests := [][]string{
 		nil,
 		{"0", "9"},
@@ -49,53 +44,9 @@ func TestParseInputRejectsInvalidInput(t *testing.T) {
 		{"6", "9", "-pp", "prefix", "extra"},
 	}
 	for _, args := range tests {
-		_, _, _, err := parseInput(args)
+		_, err := parseArguments(args)
 		if err == nil {
 			t.Fatalf("actual error nil for %v, expected error", args)
-		}
-	}
-}
-
-func TestPerformanceProfileLifecycle(t *testing.T) {
-	var prefix = filepath.Join(t.TempDir(), "run-001")
-	var profile = performanceProfile{prefix: prefix}
-	var err = profile.Start()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var values = make([]byte, 1024*1024)
-	for index := range values {
-		values[index] = byte(index)
-	}
-	time.Sleep(25 * time.Millisecond)
-
-	err = profile.Stop()
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = profile.Stop()
-	if err != nil {
-		t.Fatalf("second stop failed: %v", err)
-	}
-
-	var suffixes = []string{
-		".cpu.pprof",
-		".trace",
-		".heap.pprof",
-		".allocs.pprof",
-		".block.pprof",
-		".mutex.pprof",
-	}
-	for _, suffix := range suffixes {
-		var info os.FileInfo
-		info, err = os.Stat(prefix + suffix)
-		if err != nil {
-			t.Errorf("stat %s: %v", suffix, err)
-			continue
-		}
-		if info.Size() == 0 {
-			t.Errorf("profile %s is empty", suffix)
 		}
 	}
 }

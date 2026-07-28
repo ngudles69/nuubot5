@@ -159,18 +159,24 @@ See [Hyperliquid Parity Probe](design/hyperliquid/parity.md).
 
 ```text
 main
-  open Server logger
-  parse identities
+  parse arguments
+  call backtest.Execute
+  report one terminal error
+
+backtest.Execute
   open Bot logger
-  create BtBot
-  initialize
-  start
-  loop
-  stop
-  log one result
+  start optional whole-Run profile
+  initialize BtBot
+  start BtBot
+  loop BtBot
+  stop BtBot
+  write terminal report
+  stop optional whole-Run profile
+  log Run completed
 
 BtBot init
   prepare shared Nuubot harness
+  select Backtest runtime policy
   reset Bot status for fresh replay
   clear replay data
   retain replay and result inputs
@@ -194,7 +200,7 @@ BtBot loop
   verify replay completion
 ```
 
-Detailed behavior remains in [BtBot](design/packages/btbot.md) and [Replay](design/concepts/replay.md).
+Detailed behavior remains in [BtBot](design/packages/backtest.md) and [Replay](design/concepts/replay.md).
 
 ## Implemented Sweep Template Validation
 

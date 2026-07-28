@@ -25,7 +25,7 @@ internal/botcycle/botcycle.go                          NO
 internal/botspec/botspec_test.go                       NO
 internal/botspec/build.go                              NO
 internal/botspec/config.go                             NO
-internal/btbot/btbot.go                                NO
+internal/backtest/backtest.go                                NO
 internal/btsweep/btsweep.go                            NO
 internal/btsweep/btsweep_test.go                       NO
 internal/cloid/cloid.go                                NO

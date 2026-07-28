@@ -25,12 +25,11 @@ ownership level, root collection, and telemetry persistence.
 
 Telemetry must not scatter update calls through trading behavior.
 
-BtBot collects telemetry in memory and writes it during one terminal result
-publication.
+Backtest `Run` collects telemetry in memory and writes it during one terminal result publication.
 
-Runner will append live operational telemetry on its configurable heartbeat, which defaults to ten seconds.
+Live `Run` collects at selected Live telemetry cadence and writes each completed collection immediately.
 
-That heartbeat is the only live scheduler timer.
+Controller cadence and telemetry cadence remain independent.
 
 The website will call the API.
 
@@ -143,7 +142,7 @@ Periodic telemetry must not duplicate their complete trees.
 
 ## Collection Timing
 
-BtBot uses the existing registered Controller callback.
+Backtest and Live use their existing registered Controller callback.
 
 It does not register a second competing telemetry timer.
 
@@ -151,22 +150,23 @@ One successful callback runs:
 
 ```text
 Controller.Run(now_ms)
-collect BtBot.Telemetry(now_ms)
-append one sample
+if telemetry cadence is due
+  collect Run telemetry(now_ms)
+  append one sample
 ```
 
 Collection occurs after reconciliation, Risk, BotCycle, Signaler, and execution
 work complete successfully.
 
-Failed Controller work produces no successful BtBot sample.
+Failed Controller work produces no successful Run sample.
 
 Terminal failure remains explicit in process and result evidence.
 
-Future Runner behavior differs: every heartbeat appends one operational row, success or failure.
+Selected Live policy writes each completed collection immediately.
 
-BtBot timestamps samples with TickClock historical time.
+Backtest timestamps samples with TickClock historical time.
 
-Runner will timestamp samples with WallClock time.
+Live timestamps samples with WallClock time.
 
 Account telemetry carries the collection timestamp and its latest successful
 reconciliation observation timestamp.
@@ -211,15 +211,15 @@ Account, Trade, Order, Fill, or Grid Level trees in every sample.
 
 Those fields or child series are added only when required.
 
-## BtBot Persistence
+## Backtest Persistence
 
-BtBot retains compact samples in memory.
+Backtest retains compact samples in memory.
 
-BtBot performs no periodic telemetry file write.
+Backtest performs no periodic telemetry file write.
 
 Successful replay verification and Controller shutdown produce terminal Results.
 
-BtBot then:
+Backtest then:
 
 1. collects the final Controller Result;
 2. appends the final telemetry sample;
@@ -265,38 +265,21 @@ They exclude RunReport construction and terminal publication allocations.
 
 Exact fresh-process elapsed time still includes both operations.
 
-## Runner Persistence
+## Live Persistence
 
-Runner's lifecycle scaffold exists. Live telemetry remains unimplemented; this section defines approved future behavior.
+Live `Run` checks telemetry cadence after each successful Controller callback.
 
-Runner owns one configurable heartbeat, defaults it to ten seconds, and reads time once per heartbeat.
+A due collection appends one typed `telemetry_sample` row to the per-Bot execution database.
 
-Every heartbeat appends exactly one cheap JSON telemetry row, whether due work succeeds or fails.
+The Store resumes sequence from `MAX(sequence)` during Init. Stop writes one terminal sample before closing the Store.
 
-The row combines liveness with reconciliation outcome.
+Live Config requires `telemetry_write_on_collect = true`.
 
-Failed reconciliation writes operational telemetry but writes no domain state, Fill cursor, or successful generation.
+The current write is synchronous. A failed append returns through the Clock callback and fails the Live Run visibly.
 
-The hot path reads primitive counters and timestamps only. It performs no Trade,
-Order, Fill, Grid Level, or child-graph traversal.
-
-Balance and equity include separate freshness timestamps.
-
-Decision-critical Account state remains synchronous.
-
-Balance and equity cadence may become configurable only after proof that those values are observability-only.
-
-JSON fields may evolve additively.
-
-Indexed identity, heartbeat time, sequence, and schema-version columns remain stable.
-
-The current live display reads the latest indexed row.
-
-One Runner remains the only writer for its run database. Server and BotManager are readers.
+One Live Run remains the only writer for its execution database. Server and BotManager are readers.
 
 Historical retention and downsampling remain deferred.
-
-Live persistence must not block Controller decisions.
 
 ## API and Website
 
@@ -326,9 +309,9 @@ Telemetry does not duplicate the full historical tick dataset.
 
 ## Scale
 
-The current three-month baseline performs about 794,880 Controller passes.
+The current three-month baseline performs 7,948,800 Controller passes.
 
-One root sample per pass therefore produces about 794,880 samples.
+Ten-second Backtest telemetry cadence plus one terminal sample produces 794,881 samples.
 
 The initial sample must remain compact.
 

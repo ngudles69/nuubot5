@@ -48,7 +48,7 @@ Controller Run
   reconcile active BotCycle
   assess Risks
   apply Risk decisions
-  deliver accepted reconciliation
+  deliver executed reconciliation
   read current Signal
   record new Signal
   run active BotCycle with current Signal
@@ -80,6 +80,10 @@ onBBO
 ## Control Pass
 
 Reconciliation precedes Risk and Executor policy.
+
+Every Controller pass calls the BotCycle Recon barrier. Each Account independently executes or skips through its owned cadence rule.
+
+Controller delivers `OnRecon` only when at least one Account executed Recon. Conditional skips still return the latest trusted Snapshots for Risk assessment.
 
 A failed barrier with maximum consecutive count one or two ends that control pass.
 

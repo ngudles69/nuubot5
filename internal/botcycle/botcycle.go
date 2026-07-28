@@ -36,6 +36,7 @@ type Result struct {
 // ReconResult contains one complete Account reconciliation barrier result.
 type ReconResult struct {
 	Snapshots              []account.Snapshot
+	Executed               bool
 	Failed                 bool
 	MaxConsecutiveFailures uint64
 }
@@ -272,7 +273,10 @@ func (c *BotCycle) AcctRecon(forced bool) (ReconResult, error) {
 		if !supported {
 			continue
 		}
-		var snapshot, _, consecutiveFailures, err = reconciler.Reconcile(nowMS, forced)
+		var snapshot, executed, consecutiveFailures, err = reconciler.Reconcile(nowMS, forced)
+		if executed {
+			result.Executed = true
+		}
 		if consecutiveFailures > result.MaxConsecutiveFailures {
 			result.MaxConsecutiveFailures = consecutiveFailures
 		}

@@ -1,7 +1,7 @@
 # Shutdown
 
 Status: Implemented for BtBot and Simulator TradeBot.
-Covers: `internal/btbot`, `internal/controller`, `internal/botcycle`,
+Covers: `internal/backtest`, `internal/controller`, `internal/botcycle`,
 `internal/executor`, and `internal/account`
 Purpose: Stop admission, flatten trading state, and preserve terminal evidence.
 

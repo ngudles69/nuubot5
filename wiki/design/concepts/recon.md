@@ -106,19 +106,20 @@ Telemetry reports observed work; it does not alter domain results.
 ## Step 1 Prepare Attempt
 **What**
 Create one attempt outcome with `failed` as the default.
-Capture the trusted Snapshot, dirty fact, pending counts, forced request, Fill cursor, and current failure count.
-Skip only when all are true:
-- Account is clean.
-- No Order or Fill work is pending.
-- The request is not forced.
-- A trusted Snapshot exists.
-A valid skip returns that trusted Snapshot without creating a new generation.
+Capture the trusted Snapshot, dirty fact, pending counts, forced request, Fill cursor, current failure count, and elapsed time since successful Recon.
+Treat pending Order or Fill work as dirty for cadence selection.
+Execute immediately when no successful Recon exists or the request is forced.
+Before the Recon sweep interval, skip a clean Account.
+Before the normal Recon interval, skip a dirty Account.
+At the Recon sweep interval, execute the normal Recon pipeline regardless of dirty state.
+A valid skip returns the trusted Snapshot without creating a new generation or advancing `lastReconMS`.
 Otherwise, select active and pending stable IDs for this attempt.
 **Why**
 Fail-default handling prevents an early return from being reported as success.
 A strict skip gate prevents decisions from using unverified state.
 **Things to watch**
-Dirty alone does not define required work.
+Dirty selects the shorter Recon cadence; it does not bypass that cadence.
+Only a successfully published Recon advances `lastReconMS`.
 A prior failure or missing trusted Snapshot cannot produce a skip.
 
 ## Step 2 Download Current Order Evidence

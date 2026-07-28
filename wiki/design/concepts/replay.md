@@ -1,7 +1,7 @@
 # Replay
 
 Status: Implemented for one symbol-qualified historical stream.
-Covers: `internal/btbot`, `internal/replay`, `internal/controller`
+Covers: `internal/backtest`, `internal/replay`, `internal/controller`
 Purpose: Drive one exact historical market sequence through shared MarketData and TickClock.
 
 ## Flow

@@ -182,11 +182,19 @@ Exact status lookup is exception handling. Recon telemetry counts every attempte
 
 Ledger receives normalized concrete values.
 
-Normal reconciliation returns the latest snapshot without querying a clean Account.
+Account stores `lastReconMS` beside its consecutive failure count.
 
-Forced reconciliation queries Venue even when Account is clean.
+Normal reconciliation waits until dirty or pending work reaches `recon_interval_ms`.
 
-Failed reconciliation restores dirty state. It advances no cursor or success timestamp.
+A clean Account returns its latest Snapshot until `recon_sweep_interval_ms` passes without a successful executed Recon.
+
+The sweep age is a stale-state safety net for missed WebSocket or external change notifications. It executes the normal Recon pipeline.
+
+Forced reconciliation bypasses dirty and cadence checks.
+
+Only a successfully published Recon advances `lastReconMS`. A skip or failure does not.
+
+Failed reconciliation restores dirty state. It advances no cursor or successful Recon timestamp.
 
 ### Approved Live Target
 
@@ -231,11 +239,13 @@ Simulator invokes one narrow Account-owned change callback after matching or mar
 
 Account reads current mark price from Nuubot MarketData. It owns no BBO ingestion method or latest-BBO copy.
 
-Normal recon skips a clean Account.
+Normal Recon skips before its state-dependent cadence is due.
 
-Forced recon ignores the flag.
+Dirty or pending work uses `recon_interval_ms`. Clean state uses `recon_sweep_interval_ms`.
 
-Successful recon clears it. Failed recon restores it.
+Forced Recon ignores dirty and cadence checks.
+
+Successful Recon clears dirty state and advances `lastReconMS`. Failed Recon restores dirty state without advancing it.
 
 Venue and Ledger own no dirty flag.
 

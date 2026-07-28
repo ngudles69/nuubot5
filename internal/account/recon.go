@@ -268,10 +268,21 @@ func (a *Account) prepareRecon(nowMS uint64, forced bool) (*reconAttempt, bool, 
 	if !a.started || a.stopped || nowMS == 0 {
 		return attempt, false, fmt.Errorf("invalid state or timestamp")
 	}
+	if a.lastReconMS > nowMS {
+		return attempt, false, fmt.Errorf("recon clock moved backward")
+	}
 	attempt.pendingOrders, attempt.pendingFills = a.ledger.PendingCounts()
-	if !a.dirty && !a.ledger.HasPendingRecon() && !forced &&
-		a.lastSnapshot.ObservedMS != 0 {
-		return attempt, true, nil
+	var sinceMS = nowMS - a.lastReconMS
+	var dirty = a.dirty || a.ledger.HasPendingRecon()
+	var cadence = a.config.Nuubot.Runtime
+	if a.lastReconMS != 0 && !forced &&
+		sinceMS < cadence.ReconSweepIntervalMS {
+		if !dirty {
+			return attempt, true, nil
+		}
+		if sinceMS < cadence.ReconIntervalMS {
+			return attempt, true, nil
+		}
 	}
 	a.log.Info("account running Recon 1")
 	return attempt, false, nil
@@ -679,6 +690,7 @@ func (a *Account) finalizeRecon(
 		return a.lastSnapshot, false, nil
 	}
 	a.dirty = false
+	a.lastReconMS = attempt.nowMS
 	a.stats.reconciles++
 	telemetry.Outcome = ReconSucceeded
 	telemetry.Stage = "complete"

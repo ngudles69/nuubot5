@@ -15,7 +15,8 @@ type App struct {
 	Hyperliquid Hyperliquid `toml:"hyperliquid"`
 	Process     Process     `toml:"process"`
 	Paths       Paths       `toml:"paths"`
-	BtBot       BtBot       `toml:"btbot"`
+	Live        Runtime     `toml:"live"`
+	Backtest    Runtime     `toml:"backtest"`
 }
 
 // Server defines the shared server listener.
@@ -50,9 +51,13 @@ type Paths struct {
 	Database   string `toml:"database"`
 }
 
-// BtBot defines historical Bot execution cadence.
-type BtBot struct {
-	ControllerTimerIntervalMS uint64 `toml:"controller_timer_interval_ms"`
+// Runtime defines one execution model's Controller, Recon, and telemetry policy.
+type Runtime struct {
+	ControllerIntervalMS    uint64 `toml:"controller_interval_ms"`
+	ReconIntervalMS         uint64 `toml:"recon_interval_ms"`
+	ReconSweepIntervalMS    uint64 `toml:"recon_sweep_interval_ms"`
+	TelemetryIntervalMS     uint64 `toml:"telemetry_interval_ms"`
+	TelemetryWriteOnCollect bool   `toml:"telemetry_write_on_collect"`
 }
 
 // Section 1 - Program Flow
@@ -77,9 +82,18 @@ func LoadApp(path string) (App, error) {
 	if cfg.Network.Default != "mainnet" && cfg.Network.Default != "testnet" {
 		return cfg, fmt.Errorf("network.default must be mainnet or testnet")
 	}
-	// validate cadence
-	if cfg.BtBot.ControllerTimerIntervalMS == 0 {
-		return cfg, fmt.Errorf("btbot.controller_timer_interval_ms must be positive")
+	// validate runtime policies
+	if err = validateRuntime("live", cfg.Live); err != nil {
+		return cfg, err
+	}
+	if err = validateRuntime("backtest", cfg.Backtest); err != nil {
+		return cfg, err
+	}
+	if !cfg.Live.TelemetryWriteOnCollect {
+		return cfg, fmt.Errorf("live.telemetry_write_on_collect must be true")
+	}
+	if cfg.Backtest.TelemetryWriteOnCollect {
+		return cfg, fmt.Errorf("backtest.telemetry_write_on_collect must be false")
 	}
 	return cfg, nil
 }
@@ -87,6 +101,22 @@ func LoadApp(path string) (App, error) {
 // Section 2 - Domain Helpers
 
 // Section 3 - Generic Helpers
+
+func validateRuntime(name string, runtime Runtime) error {
+	if runtime.ControllerIntervalMS == 0 {
+		return fmt.Errorf("%s.controller_interval_ms must be positive", name)
+	}
+	if runtime.ReconIntervalMS <= runtime.ControllerIntervalMS {
+		return fmt.Errorf("%s.recon_interval_ms must exceed controller_interval_ms", name)
+	}
+	if runtime.ReconSweepIntervalMS <= runtime.ReconIntervalMS {
+		return fmt.Errorf("%s.recon_sweep_interval_ms must exceed recon_interval_ms", name)
+	}
+	if runtime.TelemetryIntervalMS == 0 {
+		return fmt.Errorf("%s.telemetry_interval_ms must be positive", name)
+	}
+	return nil
+}
 
 // Rooted resolves one configured path beneath root.
 func Rooted(root, path string) string {
