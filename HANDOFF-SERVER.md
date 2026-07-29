@@ -4,7 +4,7 @@ Last updated: 2026-07-29
 
 ## Focus
 
-Implement the first minimal embedded WebServer vertical slice.
+Synchronize the complete main and Server worktrees without mixing owned state.
 
 ## DONE
 
@@ -18,12 +18,6 @@ Implement the first minimal embedded WebServer vertical slice.
 - Independent routing and ownership review passed.
 - Legacy handoff comparison shows only two required owner-name changes.
 - `git diff --check` passed.
-- Nuubot3 report, Server ownership, lazy chart loading, BotCycle focus, and
-  Signaler storage requirements are consolidated in
-  `.audits/05-28-gui-prep.md`.
-- Server shell, managers, WebServer, embedded assets, chart baseline, warmup
-  evidence, lazy loading, and control boundaries are recorded in
-  `.audits/07-28-server.md`.
 - `nuubot-server` now runs the first embedded standard-library WebServer.
 - Home, health, embedded asset, missing-route, and cancellation tests pass.
 - Full `go test -tags noasm ./...` passed.
@@ -38,15 +32,29 @@ Implement the first minimal embedded WebServer vertical slice.
 - Rebuilt persistent executable printed the correct port and returned HTTP 200.
 - Full post-change `go test -tags noasm ./...` passed.
 - Final `git diff --check` passed.
+- Main Account, Ledger, Trade, Order, Fill, Executor, Simulator, Venue, test,
+  and wiki changes are merged without Server-side reinterpretation.
+- Every test deletion from main is preserved.
+- Main-owned `AGENTS-MAIN.md`, `HANDOFF-MAIN.md`, and
+  `NUUBOT_RUNNER_PLAN.md` match main exactly.
+- Server-owned `AGENTS-SERVER.md` remains unchanged.
+- Shared `AGENTS.md` combines main's current rules with approved Server rules.
+- Stale audit contents are purged; `.audits/.gitkeep` preserves the directory.
+- Combined Server packages pass focused tests and the canonical build succeeds.
+- Combined full tests remain red in Cloid, Simulator, and ResultPublisher.
+- The same three failures reproduce on unmerged main and predate this merge.
 
 ## TODO
 
-- None.
+- Commit the resolved local merge.
+- Fast-forward local main to the merge.
+- Verify both local branches and worktrees.
 
 ## PENDING USER APPROVAL
 
-- None.
+- Repair or remove main's remaining stale Cloid, Simulator, and
+  ResultPublisher tests before remote push.
 
 ## Next Action
 
-Wait for approval to add the next Server vertical slice.
+Commit the resolved merge, then fast-forward local main.

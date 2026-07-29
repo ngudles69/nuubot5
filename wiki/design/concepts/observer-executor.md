@@ -4,6 +4,20 @@ Status: Implemented.
 Covers: `internal/executor/observer.go`
 Purpose: Provide the complete starting template without placing trades.
 
+## Benchmark Role
+
+Observer is the full-replay throughput baseline.
+
+Its backtest consumes the complete historical dataset, including all 7.9 million BBO ticks in the current Bot 9 replay.
+
+Observer has no artificial BBO-count or loop-count exit.
+
+The benchmark excludes Account, Order, Fill, Trade, Venue execution, and conditional trading decisions.
+
+Its lightweight Signal, BotCycle, subscription, logging, and configured stop-loss lifecycle remain active.
+
+Replay completion stops the parent Controller and its active Observer.
+
 ## Ownership
 
 BotCycle owns ObserverExecutor through the Executor interface.

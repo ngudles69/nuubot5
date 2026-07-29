@@ -31,10 +31,11 @@ Recon shows start conditions, skip conditions, these exact comments, and one cle
 // Step 4 - Download Current Account State
 // Step 5 - Update Fill Records
 // Step 6 - Update Order Records
-// Step 7 - Update Trade Records
-// Step 8 - Update Account Snapshot
-// Step 9 - Persist and Publish
-// Step 10 - Finalize Recon Outcome and Return
+// Step 7 - Search Fills by Updated Order OIDs
+// Step 8 - Update Trade Records
+// Step 9 - Update Account Snapshot
+// Step 10 - Persist and Publish
+// Step 11 - Finalize Recon Outcome and Return
 ```
 
 Section 2 contains the detailed domain implementation.
@@ -124,14 +125,16 @@ A prior failure or missing trusted Snapshot cannot produce a skip.
 
 ## Step 2 Download Current Order Evidence
 **What**
-Call Venue once for fresh detached bulk Open Orders JSON.
-Decode and validate it through `internal/hyperliquid`.
-For each selected active local Order absent from that response, download its exact current status.
+Call Venue for fresh detached Open Orders and Order History JSON.
+Decode and validate both through `internal/hyperliquid`.
+Use Order History for selected active local Orders absent from Open Orders.
+For each selected active local Order absent from both responses, download its exact current status.
 Treat each exact status download as exception handling and count every attempted request in Recon telemetry.
 Validate all returned identities before record mutation.
 **Why**
 Open Orders cover current working evidence.
-Exact selected status checks resolve local active Orders no longer returned as open.
+Order History covers recent terminal evidence.
+Exact selected status checks resolve active local Orders absent from both bulk responses.
 **Things to watch**
 Absence invents nothing.
 It does not prove cancellation, rejection, fill, completion, or deletion.
@@ -197,7 +200,34 @@ Do not mark local completion until Fill identity, total quantity, and every Fill
 A Venue-filled acknowledgement can remain locally pending.
 Absence from open Orders never supplies a status.
 
-## Step 7 Update Trade Records
+## Step 7 Search Fills by Updated Order OIDs
+**What**
+Keep OID-only Fills unresolved during Step 5 when their Venue OID is not yet
+indexed.
+After Step 6, search those Fills against the updated Order OID index.
+Always record matched Order and Fill counts in Recon telemetry.
+Always emit one searchable log:
+
+```text
+Recon-OIDSearch found nothing
+Recon-OIDSearch found orders=2 fills=3
+```
+
+**Why**
+Order evidence may add a Venue OID after the first Fill pass.
+The second search proves whether sequencing deferred valid Fill ownership.
+
+**Things to watch**
+The search never copies CLOID from an Order into a Fill.
+Apply matched Fills immediately using the same Step 5 function.
+Reapply the same Step 6 function to distinct owning Orders only.
+Refresh only Trades touched by those Fill and Order updates.
+Multiple matched Fills for one Order reapply that Order once.
+After preserving all matched evidence, fail Recon because sequencing was abnormal.
+Any still-unmatched OID-only Fill also fails Recon.
+Never depend on a later Fill download to recover current evidence.
+
+## Step 8 Update Trade Records
 **What**
 Structurally update touched Trades only.
 After Fill and Order updates, recalculate their exposure, status, realized PnL, fees, quantities, prices, and timestamps from owned evidence.
@@ -213,7 +243,7 @@ Touched-only in-memory Trade updates remove repeated historical recalculation wh
 A fee-incomplete Trade remains pending until a later Recon finalizes it once.
 Trade identity and established execution facts remain immutable.
 
-## Step 8 Update Account Snapshot
+## Step 9 Update Account Snapshot
 **What**
 After all touched Trades validate, read the Ledger-owned cached Summary without traversing Trades.
 The cache contains exact stored Trade finance and evidence totals; it does not recalculate Trade PnL.
@@ -234,7 +264,7 @@ One immutable generation gives every consumer the same validated truth.
 Account drawdown and Controller Bot drawdown are separate values with separate owners.
 Preserve existing finance equations and decimal behavior exactly.
 
-## Step 9 Persist and Publish
+## Step 10 Persist and Publish
 **What**
 For `none`, perform no Ledger, Trade, Order, Fill, or Simulator database work.
 For `max`, write only changed `account_ledger`, Trade, Order, and Fill rows through existing storage.
@@ -251,7 +281,7 @@ Any persistence or publication error fails Recon and blocks decisions.
 A failed Recon makes Sweep exit unsuccessful.
 Persistence failure may leave directly mutated records and cached totals equally untrusted.
 
-## Step 10 Finalize Recon Outcome and Return
+## Step 11 Finalize Recon Outcome and Return
 **What**
 Account stores latest telemetry and owns failure count, dirty state, and last trusted Snapshot.
 On success:
@@ -287,7 +317,7 @@ Persistence or execution failures outside Account Recon remain immediately fatal
 - `internal/botcycle/botcycle.go`: complete multi-Executor barrier, failure fact, and maximum consecutive count.
 - `internal/controller/controller.go`: first-two-pass skip and third-consecutive-failure Sweep error.
 - `internal/account/ledger/ledger.go`: sole-owned records, stable locators, and active and pending sets.
-- `internal/account/ledger/recon.go`: touched Fill, Order, and Trade updates with index maintenance.
+- `internal/account/ledger/recon.go`: touched Fill, Order, OID-search, and Trade updates with index maintenance.
 - `internal/account/ledger/store.go`: existing `none` behavior, `max` load, validation, and changed-row writes.
 - `internal/simulator/simulator.go`: canonical private Venue truth and fresh official JSON responses.
 - `internal/hyperliquid/protocol.go`: strict mutation and information response decoding.
@@ -305,6 +335,7 @@ Compare exact Trades, Orders, Fills, statuses, quantities, timestamps, finance, 
 
 Focused proof covers locator correctness, dynamic growth, active and pending membership, selected-only updates, and Init rebuild validation.
 Delayed-fee proof advances the inclusive cursor, then enriches the same Venue TID exactly once through its bounded repair window.
+OID-search proof records zero matches normally and fails before publication when updated Order OIDs reveal deferred Fills.
 Persistence proof covers `none` with no database and `max` load plus changed-row writes.
 Failure proof covers each download, validation, and persistence boundary with one increment and no decision Snapshot.
 Grid proof requires exact domain and finance parity against the recorded control.

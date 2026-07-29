@@ -21,9 +21,13 @@ It validates path segments, refuses overwrite, and writes no credentials.
 
 This exception does not apply to Server, Runner, BtBot, Controller, or Simulator.
 
-`.audits/` contains tracked engineering review evidence.
+`.audits/` is reserved for current tracked engineering review evidence.
 
-Authorized development work may write reports there. Runtime programs must not.
+The directory is currently empty except for `.gitkeep` after an authorized
+stale-report purge. Removed reports remain recoverable from Git history.
+
+Authorized development work may write current reports there. Runtime programs
+must not.
 
 `workspace/` is the future Docker mount. The application image remains
 immutable. The exact container mount path is unresolved.

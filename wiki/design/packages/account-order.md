@@ -4,6 +4,14 @@ Status: Implemented for request identity, Venue state, and Fill aggregation.
 Covers: `internal/account/order/*.go`
 Purpose: Represent one immutable submitted request and its changing Venue lifecycle.
 
+`Level` is Executor-owned application metadata retained on every Order.
+
+Grid Orders use their owning Grid level. Non-grid Orders use level zero.
+
+All Orders within one Grid Trade retain the same Level.
+
+Venue reconciliation never changes Level.
+
 ## Canonical Sources
 
 - `D:/rust/nuubot3/nuubot/account/order.py`
@@ -45,14 +53,24 @@ submitted/open/partially_filled -> expired
 created/submitted/open/partially_filled -> error
 ```
 
-`canceled`, `rejected`, `expired`, and `error` are locally terminal.
-
 Venue `filled` remains reconciliation-pending and active until quantity and every Fill fee are complete.
+
+Detailed status always preserves the latest synchronized Exchange observation.
+
+A later Exchange snapshot may revise an earlier status.
+
+Any attached Fill without fee evidence keeps `IsClosed()` false.
+
+Zero fee is complete evidence. Missing fee is incomplete evidence.
+
+Filled Orders require full quantity and complete fee evidence.
+
+Other closed Exchange statuses still require complete fee evidence for every
+attached Fill.
 
 ## Immutable Fields
 
 - Ledger, Trade, cycle, and local Order identity.
-- Batch number and position.
 - CLOID.
 - Symbol, role, side, type, and time-in-force.
 - Requested quantity, requested price, and trigger price.
@@ -121,5 +139,5 @@ One Order row contains no Fill collection. Fills remain separate rows linked by 
 - Changed execution for one Venue TID fails.
 - Partial and complete Fill totals are correct.
 - Fee-incomplete and Fill-incomplete acknowledgements remain reconciliation-pending.
-- Locally terminal Orders remain terminal.
+- Later Exchange snapshots may revise earlier Order status.
 - Request fields never change during reconciliation.

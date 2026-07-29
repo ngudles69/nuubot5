@@ -180,6 +180,7 @@ ss/*
 !Cargo.lock
 
 # Local runtime state and generated research/backtest data
+workspace/backups/**
 workspace/cache/
 workspace/data/*
 !workspace/data/.gitkeep

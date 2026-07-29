@@ -1,6 +1,6 @@
 # Account Package
 
-Status: Implemented for Simulator-backed Accounts.
+Status: Implemented for simnet Venue-backed Accounts.
 Covers: `internal/account/*.go` and `internal/account/{ledger,trade,order,fill}`
 Purpose: Give one Executor a trading boundary backed by one Venue and one local Ledger.
 
@@ -14,23 +14,23 @@ Purpose: Give one Executor a trading boundary backed by one Venue and one local 
 
 TradeExecutor or GridExecutor owns one Account.
 
-Account composes one selected Venue and one Ledger for current execution.
+Account owns one concrete Venue and one Ledger.
 
 Ledger, Trade, Order, and Fill remain independent sibling packages inside the Account domain. Directory layout does not freeze future ownership.
 
-The current BtBot implementation selects Simulator only.
+The current BtBot configuration selects simnet Venue behavior.
 
 Account is the Executor-facing menu. It hides Venue selection, response translation, and accounting coordination from Executor.
 
-Executor supplies `order_level`.
+Executor supplies Order intent.
 
-Account supplies Trade, batch, purpose, and remaining CLOID identity.
+Account creates the CLOID from the canonical Ledger and Order keys.
+
+Executor does not construct CLOIDs. The `cloid` package performs mechanical encoding only.
 
 These values stay inside Account and Ledger.
 
 Account sends Venue only official operation fields.
-
-Persisted `order_pos` remains request position inside one batch.
 
 ## Account Menu
 
@@ -58,10 +58,9 @@ Account publishes neither child after partial initialization failure.
 |---|---|
 | Nuubot | Supply Logger, App Config, MarketData, Meta, ResultPath, and RuntimePath |
 | Cycle and Executor numbers | Create stable result identity |
-| Account config | Select network, name, capital, fees, and persistence |
+| Account config | Select network, name, capital, and fees |
 | Selected credentials | Initialize a future live or testnet Venue |
 | Current Clock | Preserve deterministic operation timestamps |
-| Store operations | Required only when `persist_mode = max` |
 
 Simulator initialization receives no private credential.
 
@@ -73,9 +72,8 @@ It also receives no Ledger, Trade, local Order, role, or purpose identity.
 Init
   bind Account inputs
   validate Account identity
-  validate persistence mode
-  initialize Ledger with persistence mode
-  initialize Venue with persistence mode
+  initialize Ledger
+  connect Venue
   initialize Account
 
 PlaceOrders
@@ -118,7 +116,7 @@ Result
   return immutable Account result
 
 Stop
-  stop Venue
+  disconnect Venue
   stop Ledger
   stop Account
 ```
@@ -174,9 +172,10 @@ HTTP mutation responses are acknowledgement evidence, not final lifecycle truth.
 Account queries Venue in this order:
 
 1. Open Orders.
-2. Exact status for selected active local Orders missing from the bulk response.
-3. Fills from the inclusive Ledger cursor.
-4. Transient account state.
+2. Order History.
+3. Exact status for selected active local Orders missing from both bulk responses.
+4. Fills from the inclusive Ledger cursor.
+5. Transient account state.
 
 Every query returns fresh detached official JSON.
 
@@ -188,7 +187,10 @@ Fill evidence normally resolves OID because official Fill rows may omit CLOID.
 
 If both CLOID and OID exist, they must identify the same local Order.
 
-Exact status lookup is exception handling. Recon telemetry counts every attempted lookup.
+Order History supplies recent terminal evidence.
+
+Exact status lookup remains exception handling. Recon telemetry counts every
+attempted lookup.
 
 Ledger receives normalized concrete values.
 
@@ -208,8 +210,9 @@ Failed reconciliation restores dirty state. It advances no cursor or successful 
 
 ### Approved Live Target
 
-Normal live reconciliation queries `openOrders`, paginated `userFillsByTime`, exact
-`orderStatus` for missing active Orders, then Account state.
+Normal live reconciliation queries `openOrders`, `historicalOrders`, paginated
+`userFillsByTime`, exact `orderStatus` for still-missing active Orders, then
+Account state.
 
 Exact `orderStatus` is not the normal Order download. Telemetry proves its observed frequency.
 
@@ -218,7 +221,7 @@ Hyperliquid Fill history has no symbol filter. Responses cap at 2,000 rows, and
 
 Account continues capped responses and deduplicates inclusive cursor boundaries by Venue TID.
 
-Routine reconciliation does not query `historicalOrders`. `openOrders` has no documented 2,000-row cap.
+`historicalOrders` returns the latest 2,000 Orders.
 
 Account and Ledger compare through stable identity indexes.
 
@@ -243,9 +246,13 @@ No cleanup default or escalation threshold is approved.
 
 Account solely owns its reconciliation-dirty flag.
 
-Initialization, user events, submissions, changed Simulator truth, and open-position marks make Account dirty.
+Initialization, user events, submissions, cancellations, failures, pending evidence, and open-position marks make Account dirty.
 
-Simulator invokes one narrow Account-owned change callback after matching or marked-position changes.
+MarketData-driven Simulator changes do not mark Account dirty.
+
+The clean 60-second reconciliation sweep discovers those changes.
+
+Simulator never calls Account.
 
 Account reads current mark price from Nuubot MarketData. It owns no BBO ingestion method or latest-BBO copy.
 
@@ -323,26 +330,7 @@ They reserve no fixed Trade, Order, Fill, or evidence-buffer capacity.
 
 ## Persistence
 
-Account receives store operations only for `max`.
-
-`none` opens no database during Account execution.
-
-Account receives `persist_mode` and passes policy to Ledger and Simulator.
-
-`none` performs no Ledger, Trade, Order, Fill, or Simulator database writes.
-
-`max` persists every accepted Ledger mutation and every Simulator state change.
-
-`max` proves independent Ledger and Simulator state reload.
-
-Full Bot resume requires Runner, replay, Controller, Signaler, and
-TradeExecutor cursor ownership.
-
-TradeExecutor rejects persisted Trades until that recovery path exists.
-
-Neither child detects Runner, Sweep, paper, or live mode.
-
-For `none`, ResultPublisher owns the final per-Bot SQLite path.
+Account and Ledger persistence are removed.
 
 Standalone live Runner persistence remains TBD.
 
@@ -356,7 +344,8 @@ See [Trading Schema](../concepts/trading-schema.md).
 
 Before child teardown, Account creates one immutable terminal result.
 
-`account.Result` contains identity, Venue kind, `persist_mode`, and `ledger.Result`.
+`account.Result` contains identity, Venue kind, Snapshot, Recon statistics, and
+`ledger.Result`.
 
 It contains no Simulator result, pointer, private record, counter, or persistence payload.
 
@@ -386,6 +375,6 @@ The terminal result travels upward without Account, Ledger, or Simulator pointer
 - Known Simulator failure terminalizes every created Order.
 - Missing created or submitted Simulator Orders repair to `error` during recon.
 - Failed recon changes no domain state or cursor.
-- Simulator BBO changes only mark dirty.
+- Simulator BBO changes remain private until reconciliation reads Venue truth.
 - Stop releases Venue before Ledger.
 - Credential values never appear in output.

@@ -11,8 +11,6 @@
 If instructions conflict, stop the affected work and raise the conflict with
 the user immediately.
 
-Ignore `TMUX.md` instructions for now.
-
 ## Startup
 
 At the start of every root session:
@@ -124,6 +122,8 @@ agent prompts.
 - Do not add unsolicited warnings, prohibitions, or design constraints unless verified evidence makes them material to the current decision.
 - When showing reports to the user, display generated fixed-width text inside a
   code block. Do not convert reports to Markdown tables or reformat them manually.
+- When displaying run results, read `wiki/design/concepts/comparison.md` and use
+  its comparison format when applicable.
 
 Code, commands, paths, logs, and exact quotations are exempt.
 
@@ -143,9 +143,9 @@ These decisions apply project-wide. Local convenience MUST NOT override them.
 - Use the Go standard library before external or custom code.
 - Use an approved pure-Go library before writing custom mechanical code.
 - Standard Go build tags, including canonical `noasm`, remain allowed.
-- Keep the explicitly approved `nuubot-server` and `nuubot-cli` command shells
-  as naming placeholders that print `Under Construction.` until their real
-  implementation is authorized.
+- Keep the explicitly approved `nuubot-cli` command shell as a naming
+  placeholder that prints `Under Construction.` until its real implementation
+  is authorized.
 - Keep explicitly approved package reservation files limited to one package
   comment and declaration until implementation is authorized.
 - The WebServer may print exactly one successful-start line and one

@@ -66,7 +66,7 @@ Any unexplained difference stops the target.
 
 ### Nuubot5 Canonical Sources
 
-- `HANDOFF-MAIN.md`
+- `HANDOFF.md`
 - `wiki/PROJECT.md`
 - `wiki/USER.md`
 - `wiki/SOUL.md`
@@ -551,7 +551,7 @@ Executor
   stop Account
 
 Account
-  stop Venue
+  disconnect Venue
   stop Ledger
 
 Runner

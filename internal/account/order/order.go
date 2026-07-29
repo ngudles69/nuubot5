@@ -5,8 +5,6 @@ import (
 	"fmt"
 
 	"github.com/shopspring/decimal"
-
-	"nuubot/internal/account/fill"
 )
 
 // Status identifies one canonical Order lifecycle state.
@@ -44,445 +42,190 @@ const (
 	ALO = "Alo"
 )
 
-// Input contains one admitted immutable Order request.
-type Input struct {
+// Update contains one trusted Order acknowledgement or Venue observation.
+type Update struct {
+	VenueOrderID uint64
+	VenueStatus  string
+	Status       Status
+	RejectReason string
+	UpdatedMS    uint64
+	RawJSON      string
+}
+
+// Order preserves one submitted request and its latest Venue state.
+type Order struct {
+	SweepID           uint64
+	BotID             uint64
+	Venue             string
+	Network           string
+	Account           string
 	LedgerID          uint64
 	TradeID           uint64
 	OrderID           uint64
-	Account           string
+	CLOID             string
+	VenueOrderID      uint64
+	VenueStatus       string
 	CycleNumber       int
 	Symbol            string
-	BatchNo           uint16
-	OrderPos          uint16
-	CLOID             string
+	Level             uint16
 	Role              string
 	Side              string
 	Type              string
 	TimeInForce       string
-	RequestedQuantity decimal.Decimal
-	RequestedPrice    *decimal.Decimal
+	SubmittedQuantity decimal.Decimal
+	SubmittedPrice    *decimal.Decimal
 	TriggerPrice      *decimal.Decimal
 	ReduceOnly        bool
-	TimestampMS       uint64
-}
-
-// VenueState contains one normalized Venue lifecycle observation.
-type VenueState struct {
-	VenueOrderID uint64
-	Status       Status
-	RejectReason string
-	TimestampMS  uint64
-	Raw          string
-}
-
-// Record contains one flat Order database value.
-type Record struct {
-	Input
-	VenueOrderID          uint64
-	Status                Status
-	Active                bool
-	ReconciliationPending bool
-	RejectReason          string
-	UpdatedMS             uint64
-	LastFillMS            uint64
-	FilledQuantity        decimal.Decimal
-	RemainingQuantity     decimal.Decimal
-	AverageFillPrice      decimal.Decimal
-	HasAveragePrice       bool
-	Fees                  decimal.Decimal
-	Raw                   string
-	FillCount             int
-}
-
-// ReconState is the flat Order value used by reconciliation decisions.
-type ReconState = Record
-
-// ActiveState contains the fields required to reconcile or cancel an active Order.
-type ActiveState struct {
-	OrderID      uint64
-	CLOID        string
-	Role         string
-	Status       Status
-	VenueOrderID uint64
-}
-
-// Summary contains allocation-free reconciliation counts.
-type Summary struct {
-	Active                bool
-	ReconciliationPending bool
-	Fills                 int
-	PendingFills          int
-}
-
-// Order preserves one immutable request and its advancing Venue evidence.
-type Order struct {
-	input                 Input
-	venueOrderID          uint64
-	status                Status
-	active                bool
-	reconciliationPending bool
-	rejectReason          string
-	updatedMS             uint64
-	lastFillMS            uint64
-	filledQuantity        decimal.Decimal
-	remainingQuantity     decimal.Decimal
-	averageFillPrice      decimal.Decimal
-	hasAveragePrice       bool
-	fees                  decimal.Decimal
-	raw                   string
-	fills                 map[uint64]*fill.Fill
-	comparisonState       uint64
+	SubmittedMS       uint64
+	Status            Status
+	RejectReason      string
+	UpdatedMS         uint64
+	FilledQuantity    decimal.Decimal
+	FilledNotional    decimal.Decimal
+	AverageFillPrice  decimal.Decimal
+	RemainingQuantity decimal.Decimal
+	Fees              decimal.Decimal
+	FillCount         int
+	PendingFeeCount   int
+	LastFillMS        uint64
+	RawJSON           string
 }
 
 // Section 1 - Program Flow
 
 // New creates one Order in created state.
-func New(input Input) (*Order, error) {
+func New(input Order) (*Order, error) {
 	// Step 1: validate Order request
-	var err = validateInput(input)
+	var err = input.Validate()
 	if err != nil {
 		return nil, err
 	}
 
-	// Step 2: initialize created state
-	var created = &Order{
-		input:             copyInput(input),
-		status:            Created,
-		active:            true,
-		remainingQuantity: input.RequestedQuantity,
-		fills:             make(map[uint64]*fill.Fill),
+	// Step 2: retain independently owned prices
+	if input.SubmittedPrice != nil {
+		var submittedPrice = *input.SubmittedPrice
+		input.SubmittedPrice = &submittedPrice
 	}
-	return created, nil
+	if input.TriggerPrice != nil {
+		var triggerPrice = *input.TriggerPrice
+		input.TriggerPrice = &triggerPrice
+	}
+
+	// Step 3: initialize created state
+	input.VenueOrderID = 0
+	input.VenueStatus = ""
+	input.Status = Created
+	input.RejectReason = ""
+	input.UpdatedMS = 0
+	input.FilledQuantity = decimal.Zero
+	input.FilledNotional = decimal.Zero
+	input.AverageFillPrice = decimal.Zero
+	input.RemainingQuantity = input.SubmittedQuantity
+	input.Fees = decimal.Zero
+	input.FillCount = 0
+	input.PendingFeeCount = 0
+	input.LastFillMS = 0
+	input.RawJSON = ""
+	return &input, nil
 }
 
-// RecordSubmit preserves one complete submission acknowledgement.
-func (o *Order) RecordSubmit(venueOrderID uint64, rejectReason string, raw string) error {
-	if o.status != Created && o.status != Submitted {
-		return fmt.Errorf("record order submit: order is already %s", o.status)
+// Update applies one trusted acknowledgement or Venue observation.
+func (o *Order) Update(update Update) (bool, error) {
+	// Step 1: validate Order update
+	if !validStatus(update.Status) || update.UpdatedMS == 0 {
+		return false, fmt.Errorf("update order: valid status and timestamp are required")
 	}
-	var changed = o.status != Submitted || o.rejectReason != rejectReason
-
-	// Step 1: preserve Venue identity
-	if venueOrderID != 0 {
-		if o.venueOrderID != 0 && o.venueOrderID != venueOrderID {
-			return fmt.Errorf("record order submit: changed venue order identity")
-		}
-		changed = changed || o.venueOrderID != venueOrderID
-		o.venueOrderID = venueOrderID
+	if o.VenueOrderID != 0 && update.VenueOrderID != 0 &&
+		o.VenueOrderID != update.VenueOrderID {
+		return false, fmt.Errorf("update order: changed venue order identity")
 	}
 
-	// Step 2: record acknowledgement
-	o.status = Submitted
-	o.rejectReason = rejectReason
-	if raw != "" {
-		changed = changed || o.raw != raw
-		o.raw = raw
+	// Step 2: detect changed Order evidence
+	var venueOrderID = o.VenueOrderID
+	if venueOrderID == 0 {
+		venueOrderID = update.VenueOrderID
 	}
-	if changed {
-		o.comparisonState++
+	var changed = o.VenueOrderID != venueOrderID ||
+		o.VenueStatus != update.VenueStatus ||
+		o.Status != update.Status ||
+		o.RejectReason != update.RejectReason ||
+		o.UpdatedMS != update.UpdatedMS ||
+		o.RawJSON != update.RawJSON
+	if !changed {
+		return false, nil
 	}
-	return nil
+
+	// Step 3: publish changed Order evidence
+	o.VenueOrderID = venueOrderID
+	o.VenueStatus = update.VenueStatus
+	o.Status = update.Status
+	o.RejectReason = update.RejectReason
+	o.UpdatedMS = update.UpdatedMS
+	o.RawJSON = update.RawJSON
+	return true, nil
 }
 
-// ApplyVenueState advances one Order from canonical Venue evidence.
-func (o *Order) ApplyVenueState(state VenueState) error {
-	// Step 1: reject invalid transition
-	if state.TimestampMS == 0 || !validStatus(state.Status) {
-		return fmt.Errorf("apply order state: invalid status or timestamp")
+// IsClosed reports whether Order execution and fee evidence is complete.
+func (o *Order) IsClosed() bool {
+	if o.PendingFeeCount > 0 {
+		return false
 	}
-	if state.TimestampMS < o.updatedMS {
-		return nil
-	}
-	if isTerminal(o.status) && state.Status != o.status {
-		return fmt.Errorf("apply order state: terminal order cannot become %s", state.Status)
-	}
-	if !transitionAllowed(o.status, state.Status) {
-		return fmt.Errorf("apply order state: invalid transition %s to %s", o.status, state.Status)
-	}
-	if (state.VenueOrderID == 0 || o.venueOrderID == state.VenueOrderID) &&
-		o.status == state.Status &&
-		o.rejectReason == state.RejectReason &&
-		o.updatedMS == state.TimestampMS &&
-		(state.Raw == "" || o.raw == state.Raw) {
-		return nil
-	}
-	var changed = o.status != state.Status ||
-		o.active != !isTerminal(state.Status) ||
-		o.reconciliationPending ||
-		o.rejectReason != state.RejectReason ||
-		o.updatedMS != state.TimestampMS
-
-	// Step 2: preserve Venue identity
-	if state.VenueOrderID != 0 {
-		if o.venueOrderID != 0 && o.venueOrderID != state.VenueOrderID {
-			return fmt.Errorf("apply order state: changed venue order identity")
-		}
-		changed = changed || o.venueOrderID != state.VenueOrderID
-		o.venueOrderID = state.VenueOrderID
-	}
-
-	// Step 3: advance lifecycle
-	o.status = state.Status
-	o.active = !isTerminal(state.Status)
-	o.reconciliationPending = false
-	o.rejectReason = state.RejectReason
-	o.updatedMS = state.TimestampMS
-
-	// Step 4: preserve raw evidence
-	if state.Raw != "" {
-		changed = changed || o.raw != state.Raw
-		o.raw = state.Raw
-	}
-	if changed {
-		o.comparisonState++
-	}
-	return nil
-}
-
-// ApplyFill admits one owned execution and refreshes Fill totals.
-func (o *Order) ApplyFill(input fill.Input) error {
-	// Step 1: validate Fill ownership
-	if input.LedgerID != o.input.LedgerID ||
-		input.TradeID != o.input.TradeID ||
-		input.OrderID != o.input.OrderID ||
-		input.Account != o.input.Account ||
-		input.CycleNumber != o.input.CycleNumber ||
-		input.Symbol != o.input.Symbol ||
-		input.CLOID != o.input.CLOID ||
-		input.Side != o.input.Side {
-		return fmt.Errorf("apply order fill: execution ownership mismatch")
-	}
-	if o.venueOrderID != 0 && input.VenueOrderID != o.venueOrderID {
-		return fmt.Errorf("apply order fill: venue order identity mismatch")
-	}
-
-	// Step 2: add or enrich Fill
-	var existing = o.fills[input.VenueTID]
-	var changed = existing == nil
-	if existing == nil {
-		var created *fill.Fill
-		var err error
-		created, err = fill.New(input)
-		if err != nil {
-			return fmt.Errorf("apply order fill: %w", err)
-		}
-		var total = o.filledQuantity.Add(input.Quantity)
-		if total.GreaterThan(o.input.RequestedQuantity) {
-			return fmt.Errorf("apply order fill: quantity exceeds request")
-		}
-		o.fills[input.VenueTID] = created
-	} else {
-		var previous = existing.State()
-		changed = (!previous.HasFee && input.Fee != nil) ||
-			(previous.Liquidity == "" && input.Liquidity != "") ||
-			(input.Raw != "" && previous.Raw != input.Raw)
-		var err = existing.Enrich(input)
-		if err != nil {
-			return fmt.Errorf("apply order fill: %w", err)
-		}
-	}
-
-	// Step 3: refresh Fill totals
-	o.refreshFills()
-	if changed {
-		o.comparisonState++
-	}
-	return nil
-}
-
-// RefreshRecon prevents Venue-filled evidence from becoming locally complete before its Fills and fees.
-func (o *Order) RefreshRecon() {
-	if o.status != Filled {
-		return
-	}
-	if len(o.fills) == 0 {
-		var changed = !o.active || !o.reconciliationPending
-		o.active = true
-		o.reconciliationPending = true
-		if changed {
-			o.comparisonState++
-		}
-		return
-	}
-	var status = o.status
-	var active = o.active
-	var pending = o.reconciliationPending
-	o.refreshFills()
-	if o.status != status || o.active != active || o.reconciliationPending != pending {
-		o.comparisonState++
+	switch o.Status {
+	case Canceled, Rejected, Expired, Error:
+		return true
+	case Filled:
+		return o.FilledQuantity.Equal(o.SubmittedQuantity)
+	default:
+		return false
 	}
 }
 
-// Record returns one flat Order database value.
-func (o *Order) Record() Record {
-	return o.ReconState()
-}
-
-// ReconState returns allocation-free Order identity and mutable state.
-func (o *Order) ReconState() ReconState {
-	return ReconState{
-		Input:                 copyInput(o.input),
-		VenueOrderID:          o.venueOrderID,
-		Status:                o.status,
-		Active:                o.active,
-		ReconciliationPending: o.reconciliationPending,
-		RejectReason:          o.rejectReason,
-		UpdatedMS:             o.updatedMS,
-		LastFillMS:            o.lastFillMS,
-		FilledQuantity:        o.filledQuantity,
-		RemainingQuantity:     o.remainingQuantity,
-		AverageFillPrice:      o.averageFillPrice,
-		HasAveragePrice:       o.hasAveragePrice,
-		Fees:                  o.fees,
-		Raw:                   o.raw,
-		FillCount:             len(o.fills),
+// Slippage returns absolute and percentage price slippage when both prices exist.
+func (o *Order) Slippage() (decimal.Decimal, decimal.Decimal, bool) {
+	if o.SubmittedPrice == nil || !o.SubmittedPrice.IsPositive() ||
+		o.FillCount == 0 || !o.AverageFillPrice.IsPositive() {
+		return decimal.Zero, decimal.Zero, false
 	}
-}
-
-// ComparisonState returns the allocation-free Order mutation revision.
-func (o *Order) ComparisonState() uint64 {
-	return o.comparisonState
-}
-
-// FillIdentity returns allocation-free ownership for one Order Fill.
-func (o *Order) FillIdentity() fill.Input {
-	return fill.Input{
-		LedgerID:     o.input.LedgerID,
-		TradeID:      o.input.TradeID,
-		OrderID:      o.input.OrderID,
-		Account:      o.input.Account,
-		CycleNumber:  o.input.CycleNumber,
-		Symbol:       o.input.Symbol,
-		CLOID:        o.input.CLOID,
-		VenueOrderID: o.venueOrderID,
-		Side:         o.input.Side,
+	var amount = o.AverageFillPrice.Sub(*o.SubmittedPrice)
+	if o.Side == Sell {
+		amount = o.SubmittedPrice.Sub(o.AverageFillPrice)
 	}
-}
-
-// ActiveState returns focused active Order evidence.
-func (o *Order) ActiveState() ActiveState {
-	return ActiveState{
-		OrderID:      o.input.OrderID,
-		CLOID:        o.input.CLOID,
-		Role:         o.input.Role,
-		Status:       o.status,
-		VenueOrderID: o.venueOrderID,
-	}
-}
-
-// Summary returns allocation-free reconciliation counts.
-func (o *Order) Summary() Summary {
-	var result = Summary{
-		Active:                o.active,
-		ReconciliationPending: o.reconciliationPending,
-		Fills:                 len(o.fills),
-	}
-	for _, execution := range o.fills {
-		if !execution.HasFee() {
-			result.PendingFills++
-		}
-	}
-	return result
-}
-
-// EachFill visits every owned Fill without allocating a collection.
-func (o *Order) EachFill(visit func(*fill.Fill) error) error {
-	for _, execution := range o.fills {
-		var err = visit(execution)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// Fill returns one owned Fill by Venue identity.
-func (o *Order) Fill(venueTID uint64) (*fill.Fill, bool) {
-	var execution, exists = o.fills[venueTID]
-	return execution, exists
-}
-
-// Clone returns one independently owned Order.
-func (o *Order) Clone() *Order {
-	var clone = *o
-	clone.input = copyInput(o.input)
-	clone.fills = make(map[uint64]*fill.Fill, len(o.fills))
-	for id, execution := range o.fills {
-		clone.fills[id] = execution.Clone()
-	}
-	return &clone
+	var percent = amount.Div(*o.SubmittedPrice).Mul(decimal.NewFromInt(100))
+	return amount, percent, true
 }
 
 // Section 2 - Domain Helpers
 
-// Section 2.1 - Fill Aggregation
+// Section 2.1 - Validation
 
-func (o *Order) refreshFills() {
-	var venueComplete = o.status == Filled
-	var quantity = decimal.Zero
-	var notional = decimal.Zero
-	var fees = decimal.Zero
-	var feesComplete = true
-	var lastMS uint64
-	for _, execution := range o.fills {
-		var current = execution.State()
-		quantity = quantity.Add(current.Quantity)
-		notional = notional.Add(current.Quantity.Mul(current.Price))
-		if current.HasFee {
-			fees = fees.Add(current.Fee)
-		} else {
-			feesComplete = false
-		}
-		if current.TimestampMS > lastMS {
-			lastMS = current.TimestampMS
-		}
+// Validate validates one complete submitted Order request.
+func (o Order) Validate() error {
+	if o.SweepID == 0 || o.BotID == 0 || o.LedgerID == 0 ||
+		o.TradeID == 0 || o.OrderID == 0 {
+		return fmt.Errorf("validate order: identity values must be positive")
 	}
-	o.filledQuantity = quantity
-	o.remainingQuantity = o.input.RequestedQuantity.Sub(quantity)
-	o.fees = fees
-	o.lastFillMS = lastMS
-	o.hasAveragePrice = quantity.IsPositive()
-	if o.hasAveragePrice {
-		o.averageFillPrice = notional.Div(quantity)
+	if o.Venue == "" || o.Network == "" || o.Account == "" ||
+		o.Symbol == "" || o.CLOID == "" {
+		return fmt.Errorf("validate order: text identity must not be empty")
 	}
-	if quantity.Equal(o.input.RequestedQuantity) && feesComplete {
-		o.status = Filled
-		o.active = false
-		o.reconciliationPending = false
-	} else if quantity.IsPositive() {
-		o.status = PartiallyFilled
-		o.active = true
-		o.reconciliationPending = !feesComplete || venueComplete
+	if o.CycleNumber <= 0 || o.SubmittedMS == 0 {
+		return fmt.Errorf("validate order: cycle and timestamp must be positive")
 	}
-}
-
-// Section 2.2 - Validation and Transitions
-
-func validateInput(input Input) error {
-	if input.LedgerID == 0 || input.TradeID == 0 || input.OrderID == 0 ||
-		input.Account == "" || input.CycleNumber <= 0 ||
-		input.Symbol == "" || input.CLOID == "" || input.TimestampMS == 0 {
-		return fmt.Errorf("create order: complete identity is required")
+	if !validRole(o.Role) || !validSide(o.Side) ||
+		!validType(o.Type) || !validTimeInForce(o.TimeInForce) {
+		return fmt.Errorf("validate order: invalid role, side, type, or time in force")
 	}
-	if input.BatchNo == 0 || input.BatchNo > 1000 ||
-		input.OrderPos == 0 || input.OrderPos > 1000 {
-		return fmt.Errorf("create order: batch and position must be from 1 to 1000")
+	if !o.SubmittedQuantity.IsPositive() {
+		return fmt.Errorf("validate order: submitted quantity must be positive")
 	}
-	if !validRole(input.Role) || !validSide(input.Side) ||
-		!validType(input.Type) || !validTimeInForce(input.TimeInForce) {
-		return fmt.Errorf("create order: invalid role, side, type, or time in force")
+	if o.SubmittedPrice != nil && !o.SubmittedPrice.IsPositive() {
+		return fmt.Errorf("validate order: submitted price must be positive")
 	}
-	if !input.RequestedQuantity.IsPositive() {
-		return fmt.Errorf("create order: requested quantity must be positive")
+	if o.TriggerPrice != nil && !o.TriggerPrice.IsPositive() {
+		return fmt.Errorf("validate order: trigger price must be positive")
 	}
-	if input.RequestedPrice != nil && !input.RequestedPrice.IsPositive() {
-		return fmt.Errorf("create order: requested price must be positive")
-	}
-	if input.TriggerPrice != nil && !input.TriggerPrice.IsPositive() {
-		return fmt.Errorf("create order: trigger price must be positive")
-	}
-	if input.Type == Trigger && input.TriggerPrice == nil {
-		return fmt.Errorf("create order: trigger order requires trigger price")
+	if o.Type == Trigger && o.TriggerPrice == nil {
+		return fmt.Errorf("validate order: trigger order requires trigger price")
 	}
 	return nil
 }
@@ -518,47 +261,4 @@ func validStatus(value Status) bool {
 	}
 }
 
-func isTerminal(value Status) bool {
-	switch value {
-	case Filled, Canceled, Rejected, Expired, Error:
-		return true
-	default:
-		return false
-	}
-}
-
-func transitionAllowed(from Status, to Status) bool {
-	if from == to {
-		return true
-	}
-	switch from {
-	case Created:
-		return to == Submitted || to == Open || to == PartiallyFilled ||
-			to == Filled || to == Rejected || to == Canceled || to == Error
-	case Submitted:
-		return to == Open || to == PartiallyFilled || to == Filled ||
-			to == Canceled || to == Rejected || to == Expired || to == Error
-	case Open:
-		return to == PartiallyFilled || to == Filled ||
-			to == Canceled || to == Expired || to == Error
-	case PartiallyFilled:
-		return to == Filled || to == Canceled || to == Expired || to == Error
-	default:
-		return false
-	}
-}
-
 // Section 3 - Generic Helpers
-
-func copyInput(input Input) Input {
-	var copied = input
-	if input.RequestedPrice != nil {
-		var value = *input.RequestedPrice
-		copied.RequestedPrice = &value
-	}
-	if input.TriggerPrice != nil {
-		var value = *input.TriggerPrice
-		copied.TriggerPrice = &value
-	}
-	return copied
-}

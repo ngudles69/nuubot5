@@ -69,7 +69,7 @@ internal/hyperliquid/
 
 Account uses Hyperliquid through the common Venue boundary.
 
-The current Simulator implements that boundary.
+Venue owns the current simnet Simulator.
 
 Account sends official action values and receives detached JSON.
 
@@ -79,7 +79,7 @@ Meta uses its own hardcoded-mainnet Info object for raw exchange metadata.
 
 Runner owns one shared Info object and one process-local shared WebSocket for its Bot.
 
-The future credentialed Exchange endpoint belongs to Account.
+The future credentialed Exchange endpoint belongs to Venue.
 
 ## In
 

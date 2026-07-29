@@ -27,10 +27,10 @@ const (
 type Config struct {
 	MarketData  *market.MarketData
 	MarketKey   market.Key
-	OnChange    func()
 	Account     string
 	Asset       int
 	Symbol      string
+	MaxLeverage uint32
 	Equity      decimal.Decimal
 	FeePct      decimal.Decimal
 	SlippagePct decimal.Decimal
@@ -50,21 +50,24 @@ type simOrder struct {
 	symbol            string
 	batchID           uint64
 	kind              string
-	isBuy             bool
-	price             decimal.Decimal
+	submitGrouping    string
+	submitIsBuy       bool
+	submitPrice       decimal.Decimal
 	comparisonKey     comparisonKey
-	quantity          decimal.Decimal
-	reduceOnly        bool
-	timeInForce       string
-	triggerPrice      decimal.Decimal
-	hasTriggerPrice   bool
+	submitQuantity    decimal.Decimal
+	submitReduceOnly  bool
+	submitTimeInForce string
+	submitTriggerPx   decimal.Decimal
+	hasSubmitTrigger  bool
+	submitTriggerMkt  bool
+	submitMS          uint64
+	statusMS          uint64
 	status            string
 	armed             bool
 	remainingQuantity decimal.Decimal
 	filledQuantity    decimal.Decimal
 	averageFillPrice  decimal.Decimal
 	fees              decimal.Decimal
-	timestampMS       uint64
 }
 
 type simFill struct {
@@ -100,7 +103,11 @@ type Simulator struct {
 	ordersByCLOID    map[string]*simOrder
 	activeOrders     map[uint64]*simOrder
 	fills            []simFill
+	dirtyOrders      map[uint64]*simOrder
+	dirtyFills       map[uint64]simFill
 	currentPosition  position
+	leverage         uint32
+	isCross          bool
 	store            *simulatorStore
 	subscription     *market.Subscription
 	lastPrice        decimal.Decimal
@@ -124,6 +131,15 @@ type exchangeResponseBody struct {
 
 type exchangeResponseData struct {
 	Statuses []any `json:"statuses"`
+}
+
+type defaultResponse struct {
+	Status   string              `json:"status"`
+	Response defaultResponseBody `json:"response"`
+}
+
+type defaultResponseBody struct {
+	Type string `json:"type"`
 }
 
 type restingStatus struct {
@@ -242,27 +258,30 @@ type fundingResponse struct {
 	SinceOpen   string `json:"sinceOpen"`
 }
 
-// Section 1 - Program Flow
+// Section 1 — Venue Interface and Lifecycle
 
-// Init prepares one Simulator.
-func (s *Simulator) Init(cfg Config) error {
+// Section 1.1 — Lifecycle
+
+// Connect connects one Simulator to its owned resources.
+func (s *Simulator) Connect(cfg Config) error {
 	// Step 1: validate Simulator config
 	if s.started || s.stopped {
-		return fmt.Errorf("initialize simulator: invalid lifecycle state")
+		return fmt.Errorf("connect simulator: invalid lifecycle state")
 	}
-	if cfg.MarketData == nil || cfg.OnChange == nil ||
+	if cfg.MarketData == nil ||
 		cfg.MarketKey != (market.Key{Venue: "simulator", Network: "simnet", Symbol: cfg.Symbol}) ||
-		cfg.Account == "" || cfg.Asset < 0 || cfg.Symbol == "" {
-		return fmt.Errorf("initialize simulator: complete official identity is required")
+		cfg.Account == "" || cfg.Asset < 0 || cfg.Symbol == "" ||
+		cfg.MaxLeverage == 0 {
+		return fmt.Errorf("connect simulator: complete official identity is required")
 	}
 	if !cfg.Equity.IsPositive() || cfg.FeePct.IsNegative() || cfg.SlippagePct.IsNegative() {
-		return fmt.Errorf("initialize simulator: invalid equity, fee, or slippage")
+		return fmt.Errorf("connect simulator: invalid equity, fee, or slippage")
 	}
 	if cfg.PersistMode != "none" && cfg.PersistMode != "max" {
-		return fmt.Errorf("initialize simulator: invalid persistence mode %q", cfg.PersistMode)
+		return fmt.Errorf("connect simulator: invalid persistence mode %q", cfg.PersistMode)
 	}
 	if cfg.PersistMode == "max" && cfg.Path == "" {
-		return fmt.Errorf("initialize simulator: max persistence requires path")
+		return fmt.Errorf("connect simulator: max persistence requires path")
 	}
 
 	// Step 2: initialize Simulator state
@@ -272,6 +291,10 @@ func (s *Simulator) Init(cfg Config) error {
 	s.nextBatchID = 1
 	s.ordersByCLOID = make(map[string]*simOrder)
 	s.activeOrders = make(map[uint64]*simOrder)
+	s.dirtyOrders = make(map[uint64]*simOrder)
+	s.dirtyFills = make(map[uint64]simFill)
+	s.leverage = min(uint32(5), cfg.MaxLeverage)
+	s.isCross = true
 
 	// Step 3: restore durable Simulator state when configured
 	if cfg.PersistMode == "max" {
@@ -288,9 +311,9 @@ func (s *Simulator) Init(cfg Config) error {
 			return err
 		}
 		if found {
-			err = s.restore(stored)
+			err = s.load(stored)
 		} else {
-			err = s.store.save(cfg, s.storedState())
+			err = s.store.save(cfg, s.saveState(true))
 		}
 		if err != nil {
 			s.store.close()
@@ -310,7 +333,7 @@ func (s *Simulator) Init(cfg Config) error {
 			s.store.close()
 			s.store = nil
 		}
-		return fmt.Errorf("initialize simulator: %w", err)
+		return fmt.Errorf("connect simulator: %w", err)
 	}
 
 	// Step 6: read latest BBO
@@ -323,11 +346,55 @@ func (s *Simulator) Init(cfg Config) error {
 				s.store.close()
 				s.store = nil
 			}
-			return fmt.Errorf("initialize simulator: %w", err)
+			return fmt.Errorf("connect simulator: %w", err)
 		}
 	}
 	return nil
 }
+
+// Disconnect disconnects Simulator-owned resources.
+func (s *Simulator) Disconnect() error {
+	// Step 1: ignore repeated stop
+	if s.stopped {
+		return nil
+	}
+
+	// Step 2: stop MarketData subscription
+	if err := s.subscription.Stop(); err != nil {
+		return err
+	}
+	s.subscription = nil
+
+	// Step 3: persist Simulator state
+	if s.config.PersistMode == "none" && s.config.Path != "" {
+		var err error
+		s.store, err = openSimulatorStore(s.config.Path)
+		if err != nil {
+			return err
+		}
+		if err = s.store.save(s.config, s.saveState(true)); err != nil {
+			return err
+		}
+	}
+	if err := s.save(); err != nil {
+		return err
+	}
+
+	// Step 4: close Simulator store
+	if s.store != nil {
+		if err := s.store.close(); err != nil {
+			return err
+		}
+		s.store = nil
+	}
+
+	// Step 5: mark Simulator stopped
+	s.started = false
+	s.stopped = true
+	return nil
+}
+
+// Section 1.2 — Venue Calls - Incoming
 
 // PlaceOrders admits one official Hyperliquid order action.
 func (s *Simulator) PlaceOrders(
@@ -347,7 +414,7 @@ func (s *Simulator) PlaceOrders(
 	// Step 1: validate official Order action
 	var seen = make(map[string]struct{}, len(action.Orders))
 	for _, request := range action.Orders {
-		if err := s.validateRequest(request); err != nil {
+		if err := s.matchingValidateRequest(request); err != nil {
 			return nil, err
 		}
 		if _, exists := seen[request.CLOID]; exists ||
@@ -358,7 +425,7 @@ func (s *Simulator) PlaceOrders(
 	}
 
 	// Step 2: stage Order mutation
-	var staged = s.stage()
+	var staged = s.saveStage()
 	staged.observedMS = max(staged.observedMS, timestampMS)
 	var batchID = staged.nextBatchID
 	staged.nextBatchID++
@@ -370,7 +437,12 @@ func (s *Simulator) PlaceOrders(
 	}
 	var added = make([]*simOrder, 0, len(action.Orders))
 	for _, request := range action.Orders {
-		var row, err = staged.newOrder(request, batchID, timestampMS)
+		var row, err = staged.matchingCreateOrder(
+			request,
+			batchID,
+			action.Grouping,
+			timestampMS,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -381,19 +453,20 @@ func (s *Simulator) PlaceOrders(
 		staged.orders = append(staged.orders, row)
 		staged.ordersByCLOID[row.cloid] = row
 		staged.activeOrders[row.venueOrderID] = row
+		staged.dirtyOrders[row.venueOrderID] = row
 		added = append(added, row)
 	}
 
 	// Step 3: match marketable Orders
 	if staged.hasBBO {
-		staged.matchAdded(added, staged.lastTimestampMS)
+		staged.matchingSubmittedOrders(added, staged.lastTimestampMS)
 	}
 
 	// Step 4: persist and publish Order mutation
-	if err := staged.persist(); err != nil {
+	if err := staged.save(); err != nil {
 		return nil, err
 	}
-	s.commit(staged)
+	s.saveCommit(staged)
 
 	// Step 5: return official Order response
 	var statuses = make([]any, 0, len(added))
@@ -450,21 +523,21 @@ func (s *Simulator) CancelOrders(
 	}
 
 	// Step 2: stage cancel mutation
-	var staged = s.stage()
+	var staged = s.saveStage()
 	staged.observedMS = max(staged.observedMS, timestampMS)
 	for _, cancel := range action.Cancels {
 		var row = staged.ordersByCLOID[cancel.CLOID]
-		staged.cancel(row, timestampMS)
+		staged.matchingCancelOrder(row, timestampMS)
 		if row.kind == kindLimit {
-			staged.cancelChildren(row.batchID, timestampMS)
+			staged.matchingCancelChildren(row.batchID, timestampMS)
 		}
 	}
 
 	// Step 3: persist and publish cancel mutation
-	if err := staged.persist(); err != nil {
+	if err := staged.save(); err != nil {
 		return nil, err
 	}
-	s.commit(staged)
+	s.saveCommit(staged)
 
 	// Step 4: return official cancel response
 	var statuses = make([]any, len(action.Cancels))
@@ -480,118 +553,82 @@ func (s *Simulator) CancelOrders(
 	})
 }
 
-// Stop stops Simulator admission.
-func (s *Simulator) Stop() error {
-	// Step 1: ignore repeated stop
-	if s.stopped {
-		return nil
-	}
-
-	// Step 2: stop MarketData subscription
-	if err := s.subscription.Stop(); err != nil {
-		return err
-	}
-	s.subscription = nil
-
-	// Step 3: persist Simulator state
-	if err := s.persist(); err != nil {
-		return err
-	}
-
-	// Step 4: close Simulator store
-	if s.store != nil {
-		if err := s.store.close(); err != nil {
-			return err
-		}
-		s.store = nil
-	}
-
-	// Step 5: mark Simulator stopped
-	s.started = false
-	s.stopped = true
-	return nil
-}
-
-// Section 2 - Domain Helpers
-
-// Section 2.1 - Market Data
-
-func (s *Simulator) onBBO() error {
-	var bbo, found = s.config.MarketData.LatestBBO(s.config.MarketKey)
-	if !found {
-		return fmt.Errorf("ingest simulator BBO: latest BBO is unavailable")
-	}
+// SetLeverage applies one official Hyperliquid leverage action.
+func (s *Simulator) SetLeverage(
+	action hyperliquid.UpdateLeverageAction,
+	timestampMS uint64,
+) ([]byte, error) {
 	if !s.started || s.stopped {
-		return fmt.Errorf("ingest simulator BBO: invalid lifecycle state")
+		return nil, fmt.Errorf("set simulator leverage: invalid lifecycle state")
 	}
-	if bbo.TimestampMS == 0 || bbo.Price <= 0 ||
-		(s.hasBBO && bbo.TimestampMS < s.lastTimestampMS) {
-		return fmt.Errorf("ingest simulator BBO: invalid timestamp or price")
-	}
-
-	// Step 1: normalize BBO
-	var price = decimal.NewFromFloat(bbo.Price)
-	var priceKey = newComparisonKey(price)
-
-	// Step 2: warm initial BBO state
-	if !s.hasBBO {
-		s.lastPrice = price
-		s.lastPriceKey = priceKey
-		s.lastTimestampMS = bbo.TimestampMS
-		s.observedMS = max(s.observedMS, bbo.TimestampMS)
-		s.hasBBO = true
-		return nil
+	if action.Type != "updateLeverage" || action.Asset != s.config.Asset ||
+		action.Leverage == 0 || action.Leverage > s.config.MaxLeverage ||
+		timestampMS == 0 {
+		return nil, fmt.Errorf("set simulator leverage: invalid action")
 	}
 
-	// Step 3: stage BBO matching
-	var staged = s.stage()
-	var changed = staged.match(priceKey, bbo.TimestampMS)
-	staged.lastPrice = price
-	staged.lastPriceKey = priceKey
-	staged.lastTimestampMS = bbo.TimestampMS
-	staged.observedMS = max(staged.observedMS, bbo.TimestampMS)
-
-	// Step 4: persist changed Venue truth
-	if changed {
-		if err := staged.persist(); err != nil {
-			return err
-		}
-	}
-
-	// Step 5: publish BBO outcome
-	s.commit(staged)
-	if changed || !s.currentPosition.size.IsZero() {
-		s.config.OnChange()
-	}
-	return nil
-}
-
-// Section 2.2 - Official Queries
-
-// OpenOrders returns fresh detached official Hyperliquid JSON.
-func (s *Simulator) OpenOrders(account string) ([]byte, error) {
-	if err := s.validateAccount(account); err != nil {
+	var staged = s.saveStage()
+	staged.leverage = action.Leverage
+	staged.isCross = action.IsCross
+	staged.observedMS = max(staged.observedMS, timestampMS)
+	if err := staged.save(); err != nil {
 		return nil, err
 	}
-	var active = s.sortedActiveOrders()
+	s.saveCommit(staged)
+
+	return hyperliquid.Encode(defaultResponse{
+		Status:   "ok",
+		Response: defaultResponseBody{Type: "default"},
+	})
+}
+
+// Section 1.3 — Venue Calls - Outgoing
+
+// GetOpenOrders returns fresh detached official Hyperliquid JSON.
+func (s *Simulator) GetOpenOrders(account string) ([]byte, error) {
+	if err := s.venueValidateAccount(account); err != nil {
+		return nil, err
+	}
+	var active = s.matchingActiveOrders()
 	var rows = make([]openOrderResponse, 0, len(active))
 	for _, row := range active {
 		rows = append(rows, openOrderResponse{
 			Symbol:      row.symbol,
-			LimitPrice:  orderPrice(row).String(),
+			LimitPrice:  matchingOrderPrice(row).String(),
 			OID:         row.venueOrderID,
-			Side:        sideCode(row.isBuy),
+			Side:        venueSideCode(row.submitIsBuy),
 			Size:        row.remainingQuantity.String(),
-			TimestampMS: row.timestampMS,
+			TimestampMS: row.submitMS,
 			CLOID:       row.cloid,
 		})
 	}
 	return hyperliquid.Encode(rows)
 }
 
-// Fills returns fresh detached official Hyperliquid JSON for one inclusive range.
-func (s *Simulator) Fills(account string, startMS uint64, endMS uint64) ([]byte, error) {
-	if err := s.validateAccount(account); err != nil {
+// GetOrderHistory returns fresh detached official Hyperliquid JSON.
+func (s *Simulator) GetOrderHistory(account string) ([]byte, error) {
+	if err := s.venueValidateAccount(account); err != nil {
+		return nil, err
+	}
+	var start = max(0, len(s.orders)-2000)
+	var rows = make([]orderStatusResponseBody, 0, len(s.orders)-start)
+	for _, row := range s.orders[start:] {
+		rows = append(rows, orderStatusResponseBody{
+			Order:           venueOrderResponse(row),
+			Status:          row.status,
+			StatusTimestamp: row.statusMS,
+		})
+	}
+	return hyperliquid.Encode(rows)
+}
+
+// GetFillHistory returns fresh detached official Hyperliquid JSON for one inclusive range.
+func (s *Simulator) GetFillHistory(
+	account string,
+	startMS uint64,
+	endMS uint64,
+) ([]byte, error) {
+	if err := s.venueValidateAccount(account); err != nil {
 		return nil, err
 	}
 	if endMS < startMS {
@@ -611,7 +648,7 @@ func (s *Simulator) Fills(account string, startMS uint64, endMS uint64) ([]byte,
 			Symbol:        execution.symbol,
 			Price:         execution.price.String(),
 			Size:          execution.quantity.String(),
-			Side:          sideCode(execution.isBuy),
+			Side:          venueSideCode(execution.isBuy),
 			TimestampMS:   execution.timestampMS,
 			StartPosition: execution.startPosition.String(),
 			Direction:     execution.direction,
@@ -627,12 +664,19 @@ func (s *Simulator) Fills(account string, startMS uint64, endMS uint64) ([]byte,
 	return hyperliquid.Encode(rows)
 }
 
-// OrderStatus returns fresh detached official Hyperliquid JSON for one CLOID.
-func (s *Simulator) OrderStatus(account string, value string) ([]byte, error) {
-	if err := s.validateAccount(account); err != nil {
+// GetOrderStatus returns fresh detached official Hyperliquid JSON for one OID or CLOID.
+func (s *Simulator) GetOrderStatus(account string, value string) ([]byte, error) {
+	if err := s.venueValidateAccount(account); err != nil {
 		return nil, err
 	}
 	var row = s.ordersByCLOID[value]
+	if row == nil {
+		var venueOrderID uint64
+		if _, err := fmt.Sscan(value, &venueOrderID); err == nil &&
+			venueOrderID > 0 && venueOrderID <= uint64(len(s.orders)) {
+			row = s.orders[venueOrderID-1]
+		}
+	}
 	if row == nil {
 		return hyperliquid.Encode(struct {
 			Status string `json:"status"`
@@ -641,25 +685,16 @@ func (s *Simulator) OrderStatus(account string, value string) ([]byte, error) {
 	return hyperliquid.Encode(orderStatusResponse{
 		Status: "order",
 		Order: orderStatusResponseBody{
-			Order: orderStatusOrder{
-				Symbol:      row.symbol,
-				Side:        sideCode(row.isBuy),
-				LimitPrice:  orderPrice(row).String(),
-				Size:        row.quantity.String(),
-				OID:         row.venueOrderID,
-				TimestampMS: row.timestampMS,
-				OriginalSz:  row.quantity.String(),
-				CLOID:       row.cloid,
-			},
+			Order:           venueOrderResponse(row),
 			Status:          row.status,
-			StatusTimestamp: row.timestampMS,
+			StatusTimestamp: row.statusMS,
 		},
 	})
 }
 
-// AccountState returns fresh detached official Hyperliquid clearinghouse JSON.
-func (s *Simulator) AccountState(account string) ([]byte, error) {
-	if err := s.validateAccount(account); err != nil {
+// GetAccountState returns fresh detached official Hyperliquid clearinghouse JSON.
+func (s *Simulator) GetAccountState(account string) ([]byte, error) {
+	if err := s.venueValidateAccount(account); err != nil {
 		return nil, err
 	}
 	var current = s.currentPosition
@@ -673,7 +708,7 @@ func (s *Simulator) AccountState(account string) ([]byte, error) {
 		positionValue = current.size.Abs().Mul(s.lastPrice)
 	}
 	var accountValue = s.config.Equity.Add(current.realized).Add(unrealized).Sub(current.fees)
-	var margin = positionValue.Div(decimal.NewFromInt(5))
+	var margin = positionValue.Div(decimal.NewFromInt32(int32(s.leverage)))
 	var summary = marginSummaryResponse{
 		AccountValue:    accountValue.String(),
 		TotalMarginUsed: margin.String(),
@@ -689,9 +724,9 @@ func (s *Simulator) AccountState(account string) ([]byte, error) {
 				Symbol:           s.config.Symbol,
 				Cumulative:       fundingResponse{"0", "0", "0"},
 				EntryPrice:       &entryPrice,
-				Leverage:         leverageResponse{Type: "cross", Value: 5},
+				Leverage:         leverageResponse{Type: venueLeverageType(s.isCross), Value: s.leverage},
 				MarginUsed:       margin.String(),
-				MaxLeverage:      5,
+				MaxLeverage:      s.config.MaxLeverage,
 				PositionValue:    positionValue.String(),
 				ReturnOnEquity:   unrealized.Div(margin).String(),
 				Size:             current.size.String(),
@@ -710,31 +745,57 @@ func (s *Simulator) AccountState(account string) ([]byte, error) {
 	})
 }
 
-// SetFillFeeAvailableForTest controls delayed-fee evidence in focused tests.
-func (s *Simulator) SetFillFeeAvailableForTest(venueTID uint64, available bool) error {
-	for index := range s.fills {
-		if s.fills[index].venueTID == venueTID {
-			s.fills[index].hasFee = available
-			return nil
+// Section 1.4 — Market Data
+
+func (s *Simulator) onBBO() error {
+	var bbo, found = s.config.MarketData.LatestBBO(s.config.MarketKey)
+	if !found {
+		return fmt.Errorf("ingest simulator BBO: latest BBO is unavailable")
+	}
+	if !s.started || s.stopped {
+		return fmt.Errorf("ingest simulator BBO: invalid lifecycle state")
+	}
+	if bbo.TimestampMS == 0 || bbo.Price <= 0 ||
+		(s.hasBBO && bbo.TimestampMS < s.lastTimestampMS) {
+		return fmt.Errorf("ingest simulator BBO: invalid timestamp or price")
+	}
+
+	// Step 1: normalize BBO
+	var price = decimal.NewFromFloat(bbo.Price)
+	var priceKey = matchingComparisonKey(price)
+
+	// Step 2: warm initial BBO state
+	if !s.hasBBO {
+		s.lastPrice = price
+		s.lastPriceKey = priceKey
+		s.lastTimestampMS = bbo.TimestampMS
+		s.observedMS = max(s.observedMS, bbo.TimestampMS)
+		s.hasBBO = true
+		return nil
+	}
+
+	// Step 3: stage BBO matching
+	var staged = s.saveStage()
+	var changed = staged.matching(bbo)
+
+	// Step 4: persist changed Venue truth
+	if changed {
+		if err := staged.save(); err != nil {
+			return err
 		}
 	}
-	return fmt.Errorf("set simulator Fill fee availability: unknown Venue TID %d", venueTID)
-}
 
-// Section 2.3 - Validation and Construction
-
-func (s *Simulator) validateAccount(account string) error {
-	if !s.started || s.stopped {
-		return fmt.Errorf("query simulator: invalid lifecycle state")
-	}
-	if account != s.config.Account {
-		return fmt.Errorf("query simulator: unknown account %q", account)
-	}
+	// Step 5: publish BBO outcome
+	s.saveCommit(staged)
 	return nil
 }
 
-func (s *Simulator) validateRequest(request hyperliquid.OrderRequest) error {
-	if request.Asset != s.config.Asset || !validCLOID(request.CLOID) {
+// Section 2 — Domain Functionality
+
+// Section 2.1 — Matching Engine
+
+func (s *Simulator) matchingValidateRequest(request hyperliquid.OrderRequest) error {
+	if request.Asset != s.config.Asset || !matchingValidCLOID(request.CLOID) {
 		return fmt.Errorf("place simulator Orders: invalid official identity")
 	}
 	var price, err = decimal.NewFromString(request.Price)
@@ -766,9 +827,10 @@ func (s *Simulator) validateRequest(request hyperliquid.OrderRequest) error {
 	return nil
 }
 
-func (s *Simulator) newOrder(
+func (s *Simulator) matchingCreateOrder(
 	request hyperliquid.OrderRequest,
 	batchID uint64,
+	grouping string,
 	timestampMS uint64,
 ) (*simOrder, error) {
 	var price, err = decimal.NewFromString(request.Price)
@@ -787,45 +849,45 @@ func (s *Simulator) newOrder(
 		symbol:            s.config.Symbol,
 		batchID:           batchID,
 		kind:              kindLimit,
-		isBuy:             request.IsBuy,
-		price:             price,
-		quantity:          quantity,
-		reduceOnly:        request.ReduceOnly,
+		submitGrouping:    grouping,
+		submitIsBuy:       request.IsBuy,
+		submitPrice:       price,
+		submitQuantity:    quantity,
+		submitReduceOnly:  request.ReduceOnly,
 		status:            orderOpen,
 		armed:             true,
 		remainingQuantity: quantity,
-		timestampMS:       timestampMS,
+		submitMS:          timestampMS,
+		statusMS:          timestampMS,
 	}
 	if request.Type.Limit != nil {
-		row.timeInForce = request.Type.Limit.TimeInForce
+		row.submitTimeInForce = request.Type.Limit.TimeInForce
 	} else {
 		row.kind = request.Type.Trigger.TPSL
-		row.timeInForce = "Gtc"
-		row.hasTriggerPrice = true
-		row.triggerPrice, err = decimal.NewFromString(request.Type.Trigger.TriggerPrice)
+		row.submitTimeInForce = "Gtc"
+		row.hasSubmitTrigger = true
+		row.submitTriggerMkt = request.Type.Trigger.IsMarket
+		row.submitTriggerPx, err = decimal.NewFromString(request.Type.Trigger.TriggerPrice)
 		if err != nil {
 			return nil, err
 		}
 	}
-	row.comparisonKey = newComparisonKey(orderPrice(row))
+	row.comparisonKey = matchingComparisonKey(matchingOrderPrice(row))
 	return row, nil
 }
 
-// Section 2.4 - Matching and Position
-
-func (s *Simulator) match(price comparisonKey, timestampMS uint64) bool {
+func (s *Simulator) matching(bbo market.BBO) bool {
+	var price = decimal.NewFromFloat(bbo.Price)
+	var priceKey = matchingComparisonKey(price)
+	var timestampMS = bbo.TimestampMS
 	var changed = false
-	var filledBatches = make(map[uint64]struct{})
 	for {
 		var matched *simOrder
-		for _, row := range s.sortedActiveOrders() {
-			if !row.armed || row.timestampMS >= timestampMS {
+		for _, row := range s.matchingActiveOrders() {
+			if !row.armed || row.statusMS >= timestampMS {
 				continue
 			}
-			if _, filled := filledBatches[row.batchID]; filled {
-				continue
-			}
-			if crosses(row, price) {
+			if matchingCrosses(row, priceKey) {
 				matched = row
 				break
 			}
@@ -833,74 +895,78 @@ func (s *Simulator) match(price comparisonKey, timestampMS uint64) bool {
 		if matched == nil {
 			break
 		}
-		var quantity, executable = s.executableQuantity(matched)
+		var quantity, executable = s.matchingExecutableQuantity(matched)
 		if !executable {
-			s.cancel(matched, max(timestampMS, matched.timestampMS))
+			s.matchingCancelOrder(matched, max(timestampMS, matched.statusMS))
 		} else {
-			s.fill(matched, quantity, max(timestampMS, matched.timestampMS))
-			filledBatches[matched.batchID] = struct{}{}
+			s.matchingCreateFill(matched, quantity, max(timestampMS, matched.statusMS))
 		}
 		changed = true
 	}
+	s.lastPrice = price
+	s.lastPriceKey = priceKey
+	s.lastTimestampMS = timestampMS
+	s.observedMS = max(s.observedMS, timestampMS)
 	return changed
 }
 
-func (s *Simulator) matchAdded(added []*simOrder, timestampMS uint64) {
-	var filledBatches = make(map[uint64]struct{})
-	for _, row := range added {
+func (s *Simulator) matchingSubmittedOrders(orders []*simOrder, timestampMS uint64) {
+	for _, row := range orders {
 		if !row.armed {
 			continue
 		}
-		if row.timeInForce != "Ioc" && !crosses(row, s.lastPriceKey) {
+		if row.submitTimeInForce != "Ioc" && !matchingCrosses(row, s.lastPriceKey) {
 			continue
 		}
-		if _, filled := filledBatches[row.batchID]; filled {
-			continue
-		}
-		var quantity, executable = s.executableQuantity(row)
+		var quantity, executable = s.matchingExecutableQuantity(row)
 		if !executable {
-			s.cancel(row, max(timestampMS, row.timestampMS))
+			s.matchingCancelOrder(row, max(timestampMS, row.statusMS))
 			continue
 		}
-		s.fill(row, quantity, max(timestampMS, row.timestampMS))
-		filledBatches[row.batchID] = struct{}{}
+		s.matchingCreateFill(row, quantity, max(timestampMS, row.statusMS))
 	}
 }
 
-func (s *Simulator) fill(row *simOrder, quantity decimal.Decimal, timestampMS uint64) {
-	var basis = orderPrice(row)
+func (s *Simulator) matchingCreateFill(
+	row *simOrder,
+	quantity decimal.Decimal,
+	timestampMS uint64,
+) {
+	var basis = matchingOrderPrice(row)
 	var rate = s.config.SlippagePct.Div(decimal.NewFromInt(100))
 	var price = basis.Mul(decimal.NewFromInt(1).Add(rate))
-	if !row.isBuy {
+	if !row.submitIsBuy {
 		price = basis.Mul(decimal.NewFromInt(1).Sub(rate))
 	}
 	var before = s.currentPosition
 	var fee = quantity.Mul(price).Mul(s.config.FeePct).Div(decimal.NewFromInt(100))
-	var closedPnL = closePnL(before, row.isBuy, quantity, price)
-	s.fills = append(s.fills, simFill{
+	var closedPnL = matchingClosePnL(before, row.submitIsBuy, quantity, price)
+	var execution = simFill{
 		venueOrderID:  row.venueOrderID,
 		venueTID:      s.nextVenueTID,
 		symbol:        row.symbol,
-		isBuy:         row.isBuy,
+		isBuy:         row.submitIsBuy,
 		quantity:      quantity,
 		price:         price,
 		timestampMS:   timestampMS,
 		startPosition: before.size,
 		closedPnL:     closedPnL,
-		direction:     fillDirection(before.size, row.isBuy),
+		direction:     matchingFillDirection(before.size, row.submitIsBuy),
 		fee:           fee,
 		hasFee:        true,
 		liquidity:     "taker",
-	})
+	}
+	s.fills = append(s.fills, execution)
+	s.dirtyFills[execution.venueTID] = execution
 	s.nextVenueTID++
 
 	var delta = quantity
-	if !row.isBuy {
+	if !row.submitIsBuy {
 		delta = delta.Neg()
 	}
 	var current = before
 	current.fees = current.fees.Add(fee)
-	if before.size.IsZero() || sameSign(before.size, delta) {
+	if before.size.IsZero() || matchingSameSign(before.size, delta) {
 		var total = before.size.Abs().Add(quantity)
 		current.entryPrice = before.size.Abs().Mul(before.entryPrice).
 			Add(quantity.Mul(price)).
@@ -911,7 +977,7 @@ func (s *Simulator) fill(row *simOrder, quantity decimal.Decimal, timestampMS ui
 		current.size = before.size.Add(delta)
 		if current.size.IsZero() {
 			current.entryPrice = decimal.Zero
-		} else if !sameSign(before.size, current.size) {
+		} else if !matchingSameSign(before.size, current.size) {
 			current.entryPrice = price
 		}
 	}
@@ -923,44 +989,47 @@ func (s *Simulator) fill(row *simOrder, quantity decimal.Decimal, timestampMS ui
 	row.remainingQuantity = decimal.Zero
 	row.averageFillPrice = price
 	row.fees = fee
-	row.timestampMS = timestampMS
+	row.statusMS = timestampMS
+	s.dirtyOrders[row.venueOrderID] = row
 	if row.kind == kindLimit {
-		s.armChildren(row.batchID, timestampMS)
+		s.matchingArmChildren(row.batchID, timestampMS)
 	} else {
-		s.cancelChildren(row.batchID, timestampMS)
+		s.matchingCancelChildren(row.batchID, timestampMS)
 	}
 }
 
-func (s *Simulator) cancel(row *simOrder, timestampMS uint64) {
+func (s *Simulator) matchingCancelOrder(row *simOrder, timestampMS uint64) {
 	delete(s.activeOrders, row.venueOrderID)
 	row.status = orderCanceled
 	row.armed = false
-	row.timestampMS = timestampMS
+	row.statusMS = timestampMS
+	s.dirtyOrders[row.venueOrderID] = row
 }
 
-func (s *Simulator) armChildren(batchID uint64, timestampMS uint64) {
+func (s *Simulator) matchingArmChildren(batchID uint64, timestampMS uint64) {
 	for _, child := range s.activeOrders {
 		if child.batchID == batchID && child.kind != kindLimit {
 			child.armed = true
-			child.timestampMS = timestampMS
+			child.statusMS = timestampMS
+			s.dirtyOrders[child.venueOrderID] = child
 		}
 	}
 }
 
-func (s *Simulator) cancelChildren(batchID uint64, timestampMS uint64) {
-	for _, child := range s.sortedActiveOrders() {
+func (s *Simulator) matchingCancelChildren(batchID uint64, timestampMS uint64) {
+	for _, child := range s.matchingActiveOrders() {
 		if child.batchID == batchID && child.kind != kindLimit {
-			s.cancel(child, timestampMS)
+			s.matchingCancelOrder(child, timestampMS)
 		}
 	}
 }
 
-func (s *Simulator) executableQuantity(row *simOrder) (decimal.Decimal, bool) {
-	if !row.reduceOnly {
+func (s *Simulator) matchingExecutableQuantity(row *simOrder) (decimal.Decimal, bool) {
+	if !row.submitReduceOnly {
 		return row.remainingQuantity, true
 	}
 	var available = s.currentPosition.size
-	if row.isBuy {
+	if row.submitIsBuy {
 		available = available.Neg()
 	}
 	if !available.IsPositive() {
@@ -969,7 +1038,7 @@ func (s *Simulator) executableQuantity(row *simOrder) (decimal.Decimal, bool) {
 	return decimal.Min(row.remainingQuantity, available), true
 }
 
-func (s *Simulator) sortedActiveOrders() []*simOrder {
+func (s *Simulator) matchingActiveOrders() []*simOrder {
 	var rows = make([]*simOrder, 0, len(s.activeOrders))
 	for _, row := range s.activeOrders {
 		rows = append(rows, row)
@@ -980,7 +1049,9 @@ func (s *Simulator) sortedActiveOrders() []*simOrder {
 	return rows
 }
 
-func (s *Simulator) position() (position, error) {
+// Section 2.2 — Persistence
+
+func (s *Simulator) loadPosition() (position, error) {
 	var result position
 	for index, execution := range s.fills {
 		if execution.venueOrderID == 0 || execution.venueTID != uint64(index+1) ||
@@ -988,7 +1059,7 @@ func (s *Simulator) position() (position, error) {
 			!execution.price.IsPositive() || execution.timestampMS == 0 {
 			return position{}, fmt.Errorf("load Simulator: invalid Fill %d", index+1)
 		}
-		var expectedClosed = closePnL(
+		var expectedClosed = matchingClosePnL(
 			result,
 			execution.isBuy,
 			execution.quantity,
@@ -996,7 +1067,7 @@ func (s *Simulator) position() (position, error) {
 		)
 		if !execution.startPosition.Equal(result.size) ||
 			!execution.closedPnL.Equal(expectedClosed) ||
-			execution.direction != fillDirection(result.size, execution.isBuy) {
+			execution.direction != matchingFillDirection(result.size, execution.isBuy) {
 			return position{}, fmt.Errorf("load Simulator: invalid derived Fill %d", index+1)
 		}
 		var delta = execution.quantity
@@ -1004,7 +1075,7 @@ func (s *Simulator) position() (position, error) {
 			delta = delta.Neg()
 		}
 		result.fees = result.fees.Add(execution.fee)
-		if result.size.IsZero() || sameSign(result.size, delta) {
+		if result.size.IsZero() || matchingSameSign(result.size, delta) {
 			var total = result.size.Abs().Add(execution.quantity)
 			result.entryPrice = result.size.Abs().Mul(result.entryPrice).
 				Add(execution.quantity.Mul(execution.price)).
@@ -1017,7 +1088,7 @@ func (s *Simulator) position() (position, error) {
 		result.size = result.size.Add(delta)
 		if result.size.IsZero() {
 			result.entryPrice = decimal.Zero
-		} else if !sameSign(before, result.size) {
+		} else if !matchingSameSign(before, result.size) {
 			result.entryPrice = execution.price
 		}
 	}
@@ -1027,16 +1098,19 @@ func (s *Simulator) position() (position, error) {
 	return result, nil
 }
 
-// Section 2.5 - Persistence State
-
-func (s *Simulator) persist() error {
+func (s *Simulator) save() error {
 	if s.config.PersistMode == "none" {
 		return nil
 	}
-	return s.store.save(s.config, s.storedState())
+	var err = s.store.save(s.config, s.saveState(false))
+	if err == nil {
+		clear(s.dirtyOrders)
+		clear(s.dirtyFills)
+	}
+	return err
 }
 
-func (s *Simulator) storedState() storedState {
+func (s *Simulator) saveState(all bool) storedState {
 	var state = storedState{
 		SchemaVersion:    simulatorSchemaVersion,
 		Account:          s.config.Account,
@@ -1045,12 +1119,22 @@ func (s *Simulator) storedState() storedState {
 		Equity:           s.config.Equity.String(),
 		FeePct:           s.config.FeePct.String(),
 		SlippagePct:      s.config.SlippagePct.String(),
+		MaxLeverage:      s.config.MaxLeverage,
+		Leverage:         s.leverage,
+		IsCross:          s.isCross,
 		NextVenueOrderID: s.nextVenueOrderID,
 		NextVenueTID:     s.nextVenueTID,
 		NextBatchID:      s.nextBatchID,
 		ObservedMS:       s.observedMS,
 	}
-	for _, row := range s.orders {
+	var orders = s.dirtyOrders
+	if all {
+		orders = make(map[uint64]*simOrder, len(s.orders))
+		for _, row := range s.orders {
+			orders[row.venueOrderID] = row
+		}
+	}
+	for _, row := range orders {
 		state.Orders = append(state.Orders, storedOrder{
 			VenueOrderID:      row.venueOrderID,
 			CLOID:             row.cloid,
@@ -1058,23 +1142,33 @@ func (s *Simulator) storedState() storedState {
 			Symbol:            row.symbol,
 			BatchID:           row.batchID,
 			Kind:              row.kind,
-			IsBuy:             row.isBuy,
-			Price:             row.price.String(),
-			Quantity:          row.quantity.String(),
-			ReduceOnly:        row.reduceOnly,
-			TimeInForce:       row.timeInForce,
-			TriggerPrice:      row.triggerPrice.String(),
-			HasTriggerPrice:   row.hasTriggerPrice,
+			SubmitGrouping:    row.submitGrouping,
+			SubmitIsBuy:       row.submitIsBuy,
+			SubmitPrice:       row.submitPrice.String(),
+			SubmitQuantity:    row.submitQuantity.String(),
+			SubmitReduceOnly:  row.submitReduceOnly,
+			SubmitTimeInForce: row.submitTimeInForce,
+			SubmitTriggerPx:   row.submitTriggerPx.String(),
+			HasSubmitTrigger:  row.hasSubmitTrigger,
+			SubmitTriggerMkt:  row.submitTriggerMkt,
+			SubmitMS:          row.submitMS,
+			StatusMS:          row.statusMS,
 			Status:            row.status,
 			Armed:             row.armed,
 			RemainingQuantity: row.remainingQuantity.String(),
 			FilledQuantity:    row.filledQuantity.String(),
 			AverageFillPrice:  row.averageFillPrice.String(),
 			Fees:              row.fees.String(),
-			TimestampMS:       row.timestampMS,
 		})
 	}
-	for _, execution := range s.fills {
+	var fills = s.dirtyFills
+	if all {
+		fills = make(map[uint64]simFill, len(s.fills))
+		for _, execution := range s.fills {
+			fills[execution.venueTID] = execution
+		}
+	}
+	for _, execution := range fills {
 		state.Fills = append(state.Fills, storedFill{
 			VenueOrderID:  execution.venueOrderID,
 			VenueTID:      execution.venueTID,
@@ -1094,7 +1188,7 @@ func (s *Simulator) storedState() storedState {
 	return state
 }
 
-func (s *Simulator) stage() *Simulator {
+func (s *Simulator) saveStage() *Simulator {
 	if s.config.PersistMode != "max" {
 		return s
 	}
@@ -1102,6 +1196,8 @@ func (s *Simulator) stage() *Simulator {
 	staged.orders = make([]*simOrder, 0, len(s.orders))
 	staged.ordersByCLOID = make(map[string]*simOrder, len(s.ordersByCLOID))
 	staged.activeOrders = make(map[uint64]*simOrder, len(s.activeOrders))
+	staged.dirtyOrders = make(map[uint64]*simOrder)
+	staged.dirtyFills = make(map[uint64]simFill)
 	for _, row := range s.orders {
 		var copied = *row
 		staged.orders = append(staged.orders, &copied)
@@ -1114,14 +1210,16 @@ func (s *Simulator) stage() *Simulator {
 	return &staged
 }
 
-func (s *Simulator) commit(staged *Simulator) {
+func (s *Simulator) saveCommit(staged *Simulator) {
 	if staged != s {
 		*s = *staged
 	}
 }
 
-func (s *Simulator) restore(state storedState) error {
-	if state.NextVenueOrderID == 0 || state.NextVenueTID == 0 || state.NextBatchID == 0 {
+func (s *Simulator) load(state storedState) error {
+	if state.NextVenueOrderID == 0 || state.NextVenueTID == 0 ||
+		state.NextBatchID == 0 || state.Leverage == 0 ||
+		state.Leverage > s.config.MaxLeverage {
 		return fmt.Errorf("load Simulator: invalid counters")
 	}
 	var orders = make([]*simOrder, 0, len(state.Orders))
@@ -1129,7 +1227,7 @@ func (s *Simulator) restore(state storedState) error {
 	var active = make(map[uint64]*simOrder)
 	var maxBatchID uint64
 	for index, stored := range state.Orders {
-		var row, err = restoreOrder(stored)
+		var row, err = loadOrder(stored)
 		if err != nil {
 			return fmt.Errorf("load Simulator: invalid Order %d: %v", index+1, err)
 		}
@@ -1152,7 +1250,7 @@ func (s *Simulator) restore(state storedState) error {
 	}
 	var fills = make([]simFill, 0, len(state.Fills))
 	for _, stored := range state.Fills {
-		var execution, err = restoreFill(stored)
+		var execution, err = loadFill(stored)
 		if err != nil {
 			return fmt.Errorf("load Simulator: invalid Fill: %v", err)
 		}
@@ -1168,29 +1266,31 @@ func (s *Simulator) restore(state storedState) error {
 	s.nextVenueTID = state.NextVenueTID
 	s.nextBatchID = state.NextBatchID
 	s.observedMS = state.ObservedMS
+	s.leverage = state.Leverage
+	s.isCross = state.IsCross
 	s.orders = orders
 	s.ordersByCLOID = byCLOID
 	s.activeOrders = active
 	s.fills = fills
+	clear(s.dirtyOrders)
+	clear(s.dirtyFills)
 	var err error
-	s.currentPosition, err = s.position()
+	s.currentPosition, err = s.loadPosition()
 	return err
 }
 
-// Section 3 - Generic Helpers
-
-func restoreOrder(stored storedOrder) (*simOrder, error) {
-	var price, err = decimal.NewFromString(stored.Price)
+func loadOrder(stored storedOrder) (*simOrder, error) {
+	var price, err = decimal.NewFromString(stored.SubmitPrice)
 	if err != nil {
 		return nil, err
 	}
 	var quantity decimal.Decimal
-	quantity, err = decimal.NewFromString(stored.Quantity)
+	quantity, err = decimal.NewFromString(stored.SubmitQuantity)
 	if err != nil {
 		return nil, err
 	}
 	var trigger decimal.Decimal
-	trigger, err = decimal.NewFromString(stored.TriggerPrice)
+	trigger, err = decimal.NewFromString(stored.SubmitTriggerPx)
 	if err != nil {
 		return nil, err
 	}
@@ -1215,10 +1315,14 @@ func restoreOrder(stored storedOrder) (*simOrder, error) {
 		return nil, err
 	}
 	if stored.CLOID == "" || stored.Symbol == "" || stored.BatchID == 0 ||
-		!price.IsPositive() || !quantity.IsPositive() || stored.TimestampMS == 0 ||
+		!price.IsPositive() || !quantity.IsPositive() ||
+		stored.SubmitMS == 0 || stored.StatusMS == 0 ||
+		(stored.SubmitGrouping != "na" &&
+			stored.SubmitGrouping != "normalTpsl" &&
+			stored.SubmitGrouping != "positionTpsl") ||
 		(stored.Kind != kindLimit && stored.Kind != kindTP && stored.Kind != kindSL) ||
-		(stored.Kind == kindLimit && stored.HasTriggerPrice) ||
-		(stored.Kind != kindLimit && !stored.HasTriggerPrice) ||
+		(stored.Kind == kindLimit && stored.HasSubmitTrigger) ||
+		(stored.Kind != kindLimit && !stored.HasSubmitTrigger) ||
 		(stored.Status != orderOpen && stored.Status != orderFilled &&
 			stored.Status != orderCanceled) {
 		return nil, fmt.Errorf("invalid fields")
@@ -1230,26 +1334,29 @@ func restoreOrder(stored storedOrder) (*simOrder, error) {
 		symbol:            stored.Symbol,
 		batchID:           stored.BatchID,
 		kind:              stored.Kind,
-		isBuy:             stored.IsBuy,
-		price:             price,
-		quantity:          quantity,
-		reduceOnly:        stored.ReduceOnly,
-		timeInForce:       stored.TimeInForce,
-		triggerPrice:      trigger,
-		hasTriggerPrice:   stored.HasTriggerPrice,
+		submitIsBuy:       stored.SubmitIsBuy,
+		submitGrouping:    stored.SubmitGrouping,
+		submitPrice:       price,
+		submitQuantity:    quantity,
+		submitReduceOnly:  stored.SubmitReduceOnly,
+		submitTimeInForce: stored.SubmitTimeInForce,
+		submitTriggerPx:   trigger,
+		hasSubmitTrigger:  stored.HasSubmitTrigger,
+		submitTriggerMkt:  stored.SubmitTriggerMkt,
+		submitMS:          stored.SubmitMS,
+		statusMS:          stored.StatusMS,
 		status:            stored.Status,
 		armed:             stored.Armed,
 		remainingQuantity: remaining,
 		filledQuantity:    filled,
 		averageFillPrice:  average,
 		fees:              fees,
-		timestampMS:       stored.TimestampMS,
 	}
-	row.comparisonKey = newComparisonKey(orderPrice(row))
+	row.comparisonKey = matchingComparisonKey(matchingOrderPrice(row))
 	return row, nil
 }
 
-func restoreFill(stored storedFill) (simFill, error) {
+func loadFill(stored storedFill) (simFill, error) {
 	var quantity, err = decimal.NewFromString(stored.Quantity)
 	if err != nil {
 		return simFill{}, err
@@ -1291,38 +1398,70 @@ func restoreFill(stored storedFill) (simFill, error) {
 	}, nil
 }
 
-func orderPrice(row *simOrder) decimal.Decimal {
-	if row.hasTriggerPrice {
-		return row.triggerPrice
+// Section 3 — Helpers
+
+func (s *Simulator) venueValidateAccount(account string) error {
+	if !s.started || s.stopped {
+		return fmt.Errorf("query simulator: invalid lifecycle state")
 	}
-	return row.price
+	if account != s.config.Account {
+		return fmt.Errorf("query simulator: unknown account %q", account)
+	}
+	return nil
 }
 
-func crosses(row *simOrder, price comparisonKey) bool {
-	if row.timeInForce == "Ioc" {
+func venueOrderResponse(row *simOrder) orderStatusOrder {
+	return orderStatusOrder{
+		Symbol:      row.symbol,
+		Side:        venueSideCode(row.submitIsBuy),
+		LimitPrice:  matchingOrderPrice(row).String(),
+		Size:        row.remainingQuantity.String(),
+		OID:         row.venueOrderID,
+		TimestampMS: row.submitMS,
+		OriginalSz:  row.submitQuantity.String(),
+		CLOID:       row.cloid,
+	}
+}
+
+func venueLeverageType(isCross bool) string {
+	if isCross {
+		return "cross"
+	}
+	return "isolated"
+}
+
+func matchingOrderPrice(row *simOrder) decimal.Decimal {
+	if row.hasSubmitTrigger {
+		return row.submitTriggerPx
+	}
+	return row.submitPrice
+}
+
+func matchingCrosses(row *simOrder, price comparisonKey) bool {
+	if row.submitTimeInForce == "Ioc" {
 		return true
 	}
-	var comparison = compareComparisonKeys(price, row.comparisonKey)
+	var comparison = matchingCompareKeys(price, row.comparisonKey)
 	switch row.kind {
 	case kindTP:
-		if !row.isBuy {
+		if !row.submitIsBuy {
 			return comparison >= 0
 		}
 		return comparison <= 0
 	case kindSL:
-		if !row.isBuy {
+		if !row.submitIsBuy {
 			return comparison <= 0
 		}
 		return comparison >= 0
 	default:
-		if row.isBuy {
+		if row.submitIsBuy {
 			return comparison <= 0
 		}
 		return comparison >= 0
 	}
 }
 
-func newComparisonKey(value decimal.Decimal) comparisonKey {
+func matchingComparisonKey(value decimal.Decimal) comparisonKey {
 	var digits = value.Coefficient().String()
 	return comparisonKey{
 		digits:        digits,
@@ -1330,7 +1469,7 @@ func newComparisonKey(value decimal.Decimal) comparisonKey {
 	}
 }
 
-func compareComparisonKeys(left comparisonKey, right comparisonKey) int {
+func matchingCompareKeys(left comparisonKey, right comparisonKey) int {
 	if left.integerDigits < right.integerDigits {
 		return -1
 	}
@@ -1357,7 +1496,7 @@ func compareComparisonKeys(left comparisonKey, right comparisonKey) int {
 	return 0
 }
 
-func closePnL(
+func matchingClosePnL(
 	current position,
 	isBuy bool,
 	quantity decimal.Decimal,
@@ -1372,7 +1511,7 @@ func closePnL(
 	return decimal.Zero
 }
 
-func fillDirection(size decimal.Decimal, isBuy bool) string {
+func matchingFillDirection(size decimal.Decimal, isBuy bool) string {
 	if isBuy {
 		if size.IsNegative() {
 			return "Close Short"
@@ -1385,19 +1524,19 @@ func fillDirection(size decimal.Decimal, isBuy bool) string {
 	return "Open Short"
 }
 
-func sideCode(isBuy bool) string {
+func venueSideCode(isBuy bool) string {
 	if isBuy {
 		return "B"
 	}
 	return "A"
 }
 
-func sameSign(left decimal.Decimal, right decimal.Decimal) bool {
+func matchingSameSign(left decimal.Decimal, right decimal.Decimal) bool {
 	return left.IsPositive() && right.IsPositive() ||
 		left.IsNegative() && right.IsNegative()
 }
 
-func validCLOID(value string) bool {
+func matchingValidCLOID(value string) bool {
 	if len(value) != 34 || !strings.HasPrefix(value, "0x") {
 		return false
 	}

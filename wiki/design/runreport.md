@@ -397,6 +397,26 @@ No external reporting dependency is required.
 
 Formatting never recalculates metrics.
 
+## Baseline Comparison
+
+User-facing run results always compare:
+
+```text
+Baseline 1
+Baseline 2 - Post ALTOFRVS Change
+Current Run
+Diff versus Baseline 2
+```
+
+ALTOFRVS means Account, Ledger, Trade, Order, Fill, Recon, Venue, and Simulator.
+
+The comparison includes timing, Trades, Orders, Fills, financial results,
+memory, and garbage collection.
+
+Completed round trips are not a baseline comparison metric.
+
+The current run never replaces either saved baseline automatically.
+
 ## API and Website
 
 The future website does not execute the terminal renderer.

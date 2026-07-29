@@ -107,11 +107,12 @@ Conflicting CLOID and OID fail validation.
 
 ## Persistence
 
-Simulator owns schema version 3.
+Simulator owns schema version 2.
 
 One row is keyed by official simulated account and symbol.
 
-The payload stores canonical Orders once, canonical Fills once, counters, and policy identity.
+The tables store immutable submission evidence, mutable Order status, canonical
+Fills, leverage, counters, and policy identity.
 
 It stores no Ledger, Trade, local Order, role, or purpose identity.
 
@@ -135,7 +136,7 @@ It does not replace Account-to-Ledger integration or complete Bot system proof.
 - Detached JSON mutation cannot alter Simulator truth.
 - Bracket Fill and sibling cancellation update canonical records.
 - Terminal Orders cannot create duplicate Fills.
-- Version 3 persistence round-trips each record once.
+- Version 2 persistence round-trips each record once.
 - Failed durable mutation does not change memory truth.
 
 External frozen-output and Hyperliquid testnet parity remain pending.
