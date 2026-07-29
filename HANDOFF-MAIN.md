@@ -4,15 +4,12 @@ Last updated: 2026-07-29
 
 ## Focus
 
-Finish the flat Account Store integration.
+Preserve Nuubot5 as the stable implementation baseline.
 
-The Venue and Simulator protocol expansion is complete.
+The next implementation will clone this baseline into Nuubot6 and apply the
+approved Config plus Strategy pairing redesign.
 
-The Account, Ledger, Trade, Order, Fill, Recon, Venue, and Simulator production
-stack is connected well enough for Observer, Trade, and Grid backtests.
-
-Persistence is partially restored. Account writes work. Account reload remains
-unfinished.
+Canonical redesign: `.audits/07-29-Redesign-v3.md`.
 
 Do not commit or push without explicit user authority.
 
@@ -22,8 +19,40 @@ Shared `AGENTS.md` and `HANDOFF.md` now route by exact worktree.
 
 Main state lives in `AGENTS-MAIN.md` and `HANDOFF-MAIN.md`.
 
-Server targets were not copied. They will arrive through the server-worktree
-sync.
+Main and Server worktrees are synchronized at `cdb4301`.
+
+`origin/main` and `origin/nuubot5-server` are synchronized at `cdb4301`.
+
+`HANDOFF-SERVER.md` matches its Server-owned pre-sync version exactly.
+
+## Current State
+
+- No active agents.
+- No blockers.
+- No production code changed during the redesign discussion.
+- Redesign v1 and v2 preserve intermediate exploration.
+- Redesign v3 contains the current implementation target.
+- The clean `nuubot5-server` worktree will be removed after this handoff and
+  redesign commit reaches `origin/main`.
+
+## Redesign Decisions
+
+- Backtest and Live implement one standard Runner lifecycle.
+- Commands and Server can create and drive either Runner.
+- Each exact Config pairs with one concrete Strategy.
+- Config parameterizes bricks. Strategy code composes and controls them.
+- Strategy components are optional and Strategy-specific.
+- Strategy assigns Account roles and injects one Account into each Executor.
+- Account remains opaque and owns Venue, Ledger, persistence, and reconciliation.
+- Nuubot6 preserves current TOML Symbol and Network ownership initially.
+- Functional Live WebSocket, credentials, and live Bar gaps remain separate work.
+
+## Next Action
+
+1. Commit and push this handoff with redesign v1 through v3.
+2. Remove the clean `nuubot5-server` worktree without deleting its branch.
+3. Clone the pushed Nuubot5 baseline into Nuubot6.
+4. Implement and prove the redesign in Nuubot6.
 
 ## DONE
 
@@ -65,6 +94,10 @@ sync.
 - Delete stale Simulator and ResultPublisher tests for later replacement.
 - Hardcut runtime commands to `nuubot-backtest`, `nuubot-live`,
   `nuubot-sweep`, and `nuubot-stest-report`.
+- Commit and push the command-name hardcut as `07bdcc4`.
+- Fast-forward the Server worktree through the command-name hardcut.
+- Preserve `HANDOFF-SERVER.md` unchanged after synchronization.
+- Synchronize both local worktrees and remote branches at `cdb4301`.
 
 ## Domain Model
 
@@ -258,6 +291,18 @@ go test -tags noasm ./cmd/nuubot-backtest ./cmd/nuubot-live \
 PASS
 ./stest.sh -bot 9 -runs 1
 PASS  workspace/logs/nuubot5-stest-s6-b9-1-20260729T061422Z.json
+```
+
+Full synchronized proof:
+
+```text
+go build -tags noasm ./...
+go test -tags noasm ./...
+go vet -tags noasm ./...
+build.sh
+stale command-name scan
+git diff --check
+PASS
 ```
 
 CLOID test proof:
