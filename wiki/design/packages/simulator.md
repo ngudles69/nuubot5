@@ -6,7 +6,7 @@ Purpose: Simulate one Hyperliquid Venue without sharing Account domain state.
 
 ## Ownership
 
-Account owns Simulator lifetime.
+Venue owns Simulator lifetime.
 
 Simulator owns:
 
@@ -25,7 +25,7 @@ Simulator owns no Ledger, Trade, domain Order, domain Fill, role, or purpose.
 
 ## Inputs
 
-`Config` contains simulated Venue identity, policy, one exact MarketData key, and one narrow Account change callback:
+`Config` contains simulated Venue identity, policy, and one exact MarketData key:
 
 ```text
 account
@@ -43,6 +43,12 @@ Place receives `hyperliquid.PlaceOrderAction`.
 Cancel receives `hyperliquid.CancelByCLOIDAction`.
 
 Simulator subscribes directly to MarketData during Init and reads the latest buffered BBO inside its callback.
+
+Simulator receives no Account or Ledger reference.
+
+Simulator never calls Account.
+
+Account observes Simulator truth only through Venue protocol queries.
 
 CLOID is mandatory, shape-validated, stored unchanged, and never domain-decoded.
 
@@ -147,6 +153,33 @@ Each canonical Order owns one transient exact comparison key.
 Simulator builds one matching key per admitted BBO.
 
 Matching-key comparison performs no allocation and changes no official value.
+
+## IOC Approximation
+
+Hyperliquid exposes no native Market Order.
+
+Executor creates market-like execution by reading the latest BBO and submitting
+an IOC limit Order.
+
+Current backtest BBO data is sampled once per second.
+
+It cannot prove intra-second Exchange ticks or exact crossing.
+
+Simulator therefore provides deterministic execution approximation, not exact
+tick-level execution parity.
+
+Executor owns IOC price selection.
+
+Simulator trusts that submitted price and performs no IOC crossing check.
+
+An executable IOC fills immediately at submitted price with configured adverse
+slippage.
+
+The latest BBO proves simulated market availability and supplies event timing.
+
+A non-executable reduce-only IOC cancels.
+
+IOC behavior must not claim precision unavailable from the one-second input.
 
 ## Official Responses
 

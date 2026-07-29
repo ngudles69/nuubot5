@@ -69,8 +69,6 @@ CREATE TABLE IF NOT EXISTS account_order (
     order_id           INTEGER NOT NULL,
     account_name       TEXT NOT NULL,
     cycle_no           INTEGER NOT NULL,
-    batch_no           INTEGER NOT NULL,
-    order_pos          INTEGER NOT NULL,
     symbol             TEXT NOT NULL,
     cloid              TEXT NOT NULL UNIQUE,
     order_role         TEXT NOT NULL,
@@ -94,7 +92,6 @@ CREATE TABLE IF NOT EXISTS account_order (
     fees               TEXT NOT NULL,
     raw_json           TEXT NOT NULL,
     PRIMARY KEY (ledger_id, order_id),
-    UNIQUE (ledger_id, trade_id, batch_no, order_pos),
     UNIQUE (ledger_id, trade_id, order_id, cloid),
     FOREIGN KEY (ledger_id, trade_id)
         REFERENCES account_trade (ledger_id, trade_id)
@@ -160,9 +157,9 @@ It stores:
 - submission attempts; and
 - last submitted and completed timestamps.
 
-Grid Level identity is not duplicated into persisted Order `order_pos`.
+Grid Level identity remains Executor-owned.
 
-CLOID `order_level` provides Order-to-Level identity.
+CLOID contains only the canonical Ledger and Order keys.
 
 ## Persistence Modes
 

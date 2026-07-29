@@ -53,7 +53,7 @@ func (r Result) Clone() Result {
 	var copied = r
 	copied.Levels = append([]GridLevel(nil), r.Levels...)
 	if r.Account != nil {
-		var accountResult = r.Account.Clone()
+		var accountResult = *r.Account
 		copied.Account = &accountResult
 	}
 	return copied
@@ -77,7 +77,6 @@ type GridLevel struct {
 	ReentryExpectedPnL         decimal.Decimal
 	IntendedAction             string
 	CurrentTradeID             uint64
-	CurrentTradeNo             uint32
 	CurrentTradeStatus         string
 	Status                     string
 	InitialSubmissionCompleted bool

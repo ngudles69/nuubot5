@@ -7,7 +7,6 @@ import (
 	"github.com/shopspring/decimal"
 
 	"nuubot/internal/account"
-	"nuubot/internal/account/ledger"
 	"nuubot/internal/account/order"
 	"nuubot/internal/account/trade"
 	"nuubot/internal/botspec"
@@ -125,13 +124,7 @@ func (e *tradeExecutor) OnInit(ctx BotCycleContext) error {
 		return fmt.Errorf("trade executor config is invalid")
 	}
 
-	// Step 3.11: validate persistence mode
-	if ctx.Spec.PersistMode != ledger.None && ctx.Spec.PersistMode != ledger.Max {
-		e.status = Error
-		return fmt.Errorf("trade executor config is invalid")
-	}
-
-	// Step 3.12: validate fixed side
+	// Step 3.11: validate fixed side
 	e.side = ctx.Spec.Side
 	if e.side != Long && e.side != Short {
 		e.status = Error
@@ -147,6 +140,8 @@ func (e *tradeExecutor) OnInit(ctx BotCycleContext) error {
 	var ledgerID = uint64(ctx.CycleNumber)<<32 | uint64(ctx.ExecutorNumber)
 	var err = e.account.Init(account.Config{
 		Nuubot:         ctx.Nuubot,
+		SweepID:        ctx.Nuubot.Bot.SweepID,
+		BotID:          ctx.Nuubot.Bot.BotID,
 		LedgerID:       ledgerID,
 		CycleNumber:    ctx.CycleNumber,
 		ExecutorNumber: ctx.ExecutorNumber,
@@ -164,17 +159,6 @@ func (e *tradeExecutor) OnInit(ctx BotCycleContext) error {
 		e.status = Error
 		return fmt.Errorf("initialize trade executor: %w", err)
 	}
-	var existing account.Result
-	existing, err = e.account.Result()
-	if err != nil {
-		return e.stopError(fmt.Errorf("initialize trade executor: %w", err))
-	}
-	if existing.Ledger.Trades != 0 {
-		return e.stopError(fmt.Errorf(
-			"initialize trade executor: persisted Trade recovery is pending Runner",
-		))
-	}
-
 	// Step 6: log init completed
 	e.log.Info(fmt.Sprintf(
 		"executor init completed cycle=%d executor=%d id=%s kind=trade side=%s signal_ts_ms=%d",
@@ -331,7 +315,7 @@ func (e *tradeExecutor) OnStop(reason string) error {
 	}
 
 	// Step 10: cache terminal Account result
-	e.accountResult = result.Clone()
+	e.accountResult = result
 	e.hasResult = true
 	e.status = Stopped
 
@@ -389,7 +373,6 @@ func (e *tradeExecutor) OnRecon() error {
 		}
 		var nowMS = e.nuubot.Clock.NowMS()
 		var entry = decimal.NewFromFloat(bbo.Price)
-		var quantity = e.notional.Div(entry)
 		var takeProfit = entry.Mul(decimal.NewFromInt(1).Add(e.takeProfitPct))
 		var stopLoss = entry.Mul(decimal.NewFromInt(1).Sub(e.stopLossPct))
 		var entrySide = order.Buy
@@ -399,6 +382,14 @@ func (e *tradeExecutor) OnRecon() error {
 			exitSide = order.Buy
 			takeProfit = entry.Mul(decimal.NewFromInt(1).Sub(e.takeProfitPct))
 			stopLoss = entry.Mul(decimal.NewFromInt(1).Add(e.stopLossPct))
+		}
+		var sizingPrice = decimal.Min(entry, decimal.Min(takeProfit, stopLoss))
+		var quantity = e.nuubot.Meta.RoundSize(e.notional.Div(sizingPrice))
+		var minimum = decimal.NewFromInt(
+			int64(e.nuubot.App.Hyperliquid.MinOrderNotionalUSDC),
+		)
+		if quantity.Mul(sizingPrice).LessThan(minimum) {
+			quantity = quantity.Add(decimal.New(1, -e.nuubot.Meta.SizeDecimals))
 		}
 		var placed account.PlaceResult
 		placed, err = e.account.PlaceOrders([]account.OrderSpec{
@@ -486,7 +477,7 @@ func (e *tradeExecutor) Result() (Result, error) {
 	if !e.hasResult {
 		return Result{}, errors.New("trade executor result is unavailable")
 	}
-	var accountResult = e.accountResult.Clone()
+	var accountResult = e.accountResult
 	return Result{
 		ID:            e.spec.ID,
 		Role:          e.spec.Role,

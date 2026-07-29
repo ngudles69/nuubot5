@@ -11,181 +11,100 @@ const (
 	Sell = "A"
 )
 
-// Input contains one normalized execution observation.
-type Input struct {
+// Fill preserves one admitted execution and optional later fee evidence.
+type Fill struct {
+	FillID       uint64
+	SweepID      uint64
+	BotID        uint64
+	Venue        string
+	Network      string
+	Account      string
 	LedgerID     uint64
 	TradeID      uint64
 	OrderID      uint64
-	Account      string
-	CycleNumber  int
-	Symbol       string
 	CLOID        string
 	VenueOrderID uint64
 	VenueTID     uint64
+	CycleNumber  int
+	Symbol       string
 	Side         string
 	Quantity     decimal.Decimal
 	Price        decimal.Decimal
 	TimestampMS  uint64
 	Fee          *decimal.Decimal
 	Liquidity    string
-	Raw          string
-}
-
-// Fill preserves one admitted execution and optional later metadata.
-type Fill struct {
-	input     Input
-	fee       decimal.Decimal
-	hasFee    bool
-	liquidity string
-	raw       string
-}
-
-// Record contains one immutable Fill value.
-type Record struct {
-	LedgerID     uint64
-	TradeID      uint64
-	OrderID      uint64
-	Account      string
-	CycleNumber  int
-	Symbol       string
-	CLOID        string
-	VenueOrderID uint64
-	VenueTID     uint64
-	Side         string
-	Quantity     decimal.Decimal
-	Price        decimal.Decimal
-	TimestampMS  uint64
-	Fee          decimal.Decimal
-	HasFee       bool
-	Liquidity    string
-	Raw          string
+	RawJSON      string
 }
 
 // Section 1 - Program Flow
 
 // New creates one Fill from normalized execution evidence.
-func New(input Input) (*Fill, error) {
-	// Step 1: validate complete execution identity
-	var err = validateInput(input)
+func New(input Fill) (*Fill, error) {
+	// Step 1: validate Fill evidence
+	var err = input.Validate()
 	if err != nil {
 		return nil, err
 	}
 
-	// Step 2: keep immutable execution
-	var created = &Fill{input: input}
-	created.input.Fee = nil
-
-	// Step 3: keep available metadata
+	// Step 2: retain independently owned fee evidence
 	if input.Fee != nil {
-		created.fee = *input.Fee
-		created.hasFee = true
+		var fee = *input.Fee
+		input.Fee = &fee
 	}
-	created.liquidity = input.Liquidity
-	created.raw = input.Raw
-	return created, nil
+	return &input, nil
 }
 
-// Enrich applies later metadata without changing execution identity.
-func (f *Fill) Enrich(input Input) error {
-	// Step 1: reject changed execution
-	var err = validateInput(input)
-	if err != nil {
-		return err
-	}
-	if !f.sameExecution(input) {
-		return fmt.Errorf("enrich fill: changed execution for venue tid %d", input.VenueTID)
-	}
-	if input.Fee != nil && f.hasFee && !f.fee.Equal(*input.Fee) {
-		return fmt.Errorf("enrich fill: changed fee for venue tid %d", input.VenueTID)
-	}
-	if input.Liquidity != "" && f.liquidity != "" && f.liquidity != input.Liquidity {
-		return fmt.Errorf("enrich fill: changed liquidity for venue tid %d", input.VenueTID)
+// Update applies later fee evidence and the latest raw Fill payload.
+func (f *Fill) Update(fee *decimal.Decimal, rawJSON string) (bool, error) {
+	// Step 1: reject conflicting fee evidence
+	if fee != nil && f.Fee != nil && !f.Fee.Equal(*fee) {
+		return false, fmt.Errorf("update fill: changed fee for venue tid %d", f.VenueTID)
 	}
 
-	// Step 2: accept later metadata
-	if input.Fee != nil {
-		f.fee = *input.Fee
-		f.hasFee = true
+	// Step 2: apply later evidence
+	var changed bool
+	if fee != nil && f.Fee == nil {
+		var copied = *fee
+		f.Fee = &copied
+		changed = true
 	}
-	if input.Liquidity != "" {
-		f.liquidity = input.Liquidity
+	if rawJSON != "" && rawJSON != f.RawJSON {
+		f.RawJSON = rawJSON
+		changed = true
 	}
-	if input.Raw != "" {
-		f.raw = input.Raw
-	}
-	return nil
-}
-
-// State returns one allocation-free Fill value.
-func (f *Fill) State() Record {
-	return Record{
-		LedgerID:     f.input.LedgerID,
-		TradeID:      f.input.TradeID,
-		OrderID:      f.input.OrderID,
-		Account:      f.input.Account,
-		CycleNumber:  f.input.CycleNumber,
-		Symbol:       f.input.Symbol,
-		CLOID:        f.input.CLOID,
-		VenueOrderID: f.input.VenueOrderID,
-		VenueTID:     f.input.VenueTID,
-		Side:         f.input.Side,
-		Quantity:     f.input.Quantity,
-		Price:        f.input.Price,
-		TimestampMS:  f.input.TimestampMS,
-		Fee:          f.fee,
-		HasFee:       f.hasFee,
-		Liquidity:    f.liquidity,
-		Raw:          f.raw,
-	}
+	return changed, nil
 }
 
 // HasFee reports whether Venue fee evidence is complete.
 func (f *Fill) HasFee() bool {
-	return f.hasFee
-}
-
-// Clone returns one independently owned Fill.
-func (f *Fill) Clone() *Fill {
-	var clone = *f
-	return &clone
+	return f.Fee != nil
 }
 
 // Section 2 - Domain Helpers
 
 // Section 2.1 - Validation and Identity
 
-func (f *Fill) sameExecution(input Input) bool {
-	return f.input.LedgerID == input.LedgerID &&
-		f.input.TradeID == input.TradeID &&
-		f.input.OrderID == input.OrderID &&
-		f.input.Account == input.Account &&
-		f.input.CycleNumber == input.CycleNumber &&
-		f.input.Symbol == input.Symbol &&
-		f.input.CLOID == input.CLOID &&
-		f.input.VenueOrderID == input.VenueOrderID &&
-		f.input.VenueTID == input.VenueTID &&
-		f.input.Side == input.Side &&
-		f.input.Quantity.Equal(input.Quantity) &&
-		f.input.Price.Equal(input.Price) &&
-		f.input.TimestampMS == input.TimestampMS
-}
-
-func validateInput(input Input) error {
-	if input.LedgerID == 0 || input.TradeID == 0 || input.OrderID == 0 ||
-		input.VenueOrderID == 0 || input.VenueTID == 0 {
-		return fmt.Errorf("create fill: identity values must be positive")
+// Validate validates one complete Fill.
+func (f Fill) Validate() error {
+	if f.FillID == 0 || f.SweepID == 0 || f.BotID == 0 || f.LedgerID == 0 ||
+		f.TradeID == 0 || f.OrderID == 0 || f.VenueTID == 0 {
+		return fmt.Errorf("validate fill: identity values must be positive")
 	}
-	if input.Account == "" || input.Symbol == "" || input.CLOID == "" {
-		return fmt.Errorf("create fill: text identity must not be empty")
+	if f.Venue == "" || f.Network == "" || f.Account == "" ||
+		f.Symbol == "" {
+		return fmt.Errorf("validate fill: text identity must not be empty")
 	}
-	if input.CycleNumber <= 0 || input.TimestampMS == 0 {
-		return fmt.Errorf("create fill: cycle and timestamp must be positive")
+	if f.CLOID == "" && f.VenueOrderID == 0 {
+		return fmt.Errorf("validate fill: Exchange Order identity is required")
 	}
-	if input.Side != Buy && input.Side != Sell {
-		return fmt.Errorf("create fill: unknown side %q", input.Side)
+	if f.CycleNumber <= 0 || f.TimestampMS == 0 {
+		return fmt.Errorf("validate fill: cycle and timestamp must be positive")
 	}
-	if !input.Quantity.IsPositive() || !input.Price.IsPositive() {
-		return fmt.Errorf("create fill: quantity and price must be positive")
+	if f.Side != Buy && f.Side != Sell {
+		return fmt.Errorf("validate fill: unknown side %q", f.Side)
+	}
+	if !f.Quantity.IsPositive() || !f.Price.IsPositive() {
+		return fmt.Errorf("validate fill: quantity and price must be positive")
 	}
 	return nil
 }

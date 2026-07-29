@@ -8,7 +8,6 @@ import (
 	"github.com/shopspring/decimal"
 
 	"nuubot/internal/account"
-	"nuubot/internal/account/ledger"
 	"nuubot/internal/account/order"
 	"nuubot/internal/account/trade"
 	"nuubot/internal/botspec"
@@ -81,8 +80,7 @@ func (e *gridExecutor) OnInit(ctx BotCycleContext) error {
 		ctx.Spec.Resource.Venue != "simulator" ||
 		ctx.Spec.Resource.Network != "simnet" ||
 		ctx.Spec.Resource.PhysicalAccountID == "" ||
-		ctx.Spec.Resource.Symbol == "" ||
-		(ctx.Spec.PersistMode != ledger.None && ctx.Spec.PersistMode != ledger.Max) {
+		ctx.Spec.Resource.Symbol == "" {
 		e.status = Error
 		return fmt.Errorf("grid executor config is invalid")
 	}
@@ -104,6 +102,8 @@ func (e *gridExecutor) OnInit(ctx BotCycleContext) error {
 	var ledgerID = uint64(ctx.CycleNumber)<<32 | uint64(ctx.ExecutorNumber)
 	var err = e.account.Init(account.Config{
 		Nuubot:         ctx.Nuubot,
+		SweepID:        ctx.Nuubot.Bot.SweepID,
+		BotID:          ctx.Nuubot.Bot.BotID,
 		LedgerID:       ledgerID,
 		CycleNumber:    ctx.CycleNumber,
 		ExecutorNumber: ctx.ExecutorNumber,
@@ -121,17 +121,6 @@ func (e *gridExecutor) OnInit(ctx BotCycleContext) error {
 		e.status = Error
 		return fmt.Errorf("initialize grid executor: %w", err)
 	}
-	var existing account.Result
-	existing, err = e.account.Result()
-	if err != nil {
-		return e.stopError(fmt.Errorf("initialize grid executor: %w", err))
-	}
-	if existing.Ledger.Trades != 0 {
-		return e.stopError(fmt.Errorf(
-			"initialize grid executor: persisted Trade recovery is pending Runner",
-		))
-	}
-
 	// Step 7: log init completed
 	e.log.Info(fmt.Sprintf(
 		"executor init completed cycle=%d executor=%d id=%s kind=grid side=%s signal_ts_ms=%d",
@@ -285,7 +274,7 @@ func (e *gridExecutor) OnStop(reason string) error {
 		var price = decimal.NewFromFloat(bbo.Price)
 		err = e.placeExistingWithRetries(account.OrderSpec{
 			TradeID:     owned.TradeID,
-			OrderLevel:  level,
+			Level:       level,
 			Role:        order.Stop,
 			Side:        closeSide,
 			Type:        order.Limit,
@@ -325,7 +314,7 @@ func (e *gridExecutor) OnStop(reason string) error {
 	if err != nil {
 		return e.stopError(fmt.Errorf("stop grid executor: %w", err))
 	}
-	e.roundTrips = e.account.CountOrders(order.TakeProfit, order.Filled)
+	e.roundTrips = uint64(result.Ledger.Summary.ClosedTrades)
 
 	// Step 10: stop Account
 	err = e.account.Stop()
@@ -335,7 +324,7 @@ func (e *gridExecutor) OnStop(reason string) error {
 	}
 
 	// Step 11: cache terminal Account result
-	e.accountResult = result.Clone()
+	e.accountResult = result
 	e.hasResult = true
 	e.status = Stopped
 
@@ -440,7 +429,6 @@ func (e *gridExecutor) OnRecon() error {
 		if err != nil {
 			return fmt.Errorf("run grid executor recon: %w", err)
 		}
-		level.CurrentTradeNo = owned.TradeNo
 		level.CurrentTradeStatus = string(owned.Status)
 		if owned.Status != trade.Closed && owned.Status != trade.Canceled {
 			continue
@@ -487,7 +475,7 @@ func (e *gridExecutor) Result() (Result, error) {
 	if !e.hasResult {
 		return Result{}, errors.New("grid executor result is unavailable")
 	}
-	var accountResult = e.accountResult.Clone()
+	var accountResult = e.accountResult
 	return Result{
 		ID:            e.spec.ID,
 		Role:          e.spec.Role,
@@ -532,7 +520,7 @@ func (e *gridExecutor) submitLevel(index int, initial bool, nowMS uint64) error 
 		var placed account.PlaceResult
 		placed, lastErr = e.account.PlaceOrders([]account.OrderSpec{
 			{
-				OrderLevel:  level.Level,
+				Level:       level.Level,
 				Role:        order.Entry,
 				Side:        entrySide,
 				Type:        order.Limit,
@@ -542,7 +530,7 @@ func (e *gridExecutor) submitLevel(index int, initial bool, nowMS uint64) error 
 				TimestampMS: nowMS,
 			},
 			{
-				OrderLevel:   level.Level,
+				Level:        level.Level,
 				Role:         order.TakeProfit,
 				Side:         exitSide,
 				Type:         order.Trigger,
@@ -558,7 +546,6 @@ func (e *gridExecutor) submitLevel(index int, initial bool, nowMS uint64) error 
 			level.CurrentTradeID = placed.TradeID
 			var owned, tradeErr = e.account.Trade(placed.TradeID)
 			if tradeErr == nil {
-				level.CurrentTradeNo = owned.TradeNo
 				level.CurrentTradeStatus = string(owned.Status)
 			}
 		}
@@ -568,13 +555,12 @@ func (e *gridExecutor) submitLevel(index int, initial bool, nowMS uint64) error 
 			}
 			break
 		}
-		var owned trade.ReconState
+		var owned trade.Trade
 		owned, lastErr = e.account.Trade(placed.TradeID)
 		if lastErr != nil {
 			break
 		}
 		level.CurrentTradeID = placed.TradeID
-		level.CurrentTradeNo = owned.TradeNo
 		level.CurrentTradeStatus = string(owned.Status)
 		level.Status = "active"
 		level.LastSubmittedMS = nowMS
@@ -639,7 +625,6 @@ func (e *gridExecutor) refreshLevelStates(nowMS uint64) error {
 		if err != nil {
 			return err
 		}
-		level.CurrentTradeNo = owned.TradeNo
 		level.CurrentTradeStatus = string(owned.Status)
 		if owned.Status == trade.Closed || owned.Status == trade.Canceled {
 			level.Status = "completed"
@@ -806,7 +791,7 @@ func calculateGridLevels(
 	return levels, nil
 }
 
-func orderedCancellations(active []order.ActiveState) []order.ActiveState {
+func orderedCancellations(active []order.Order) []order.Order {
 	var priority = func(role string) int {
 		switch role {
 		case order.TakeProfit:

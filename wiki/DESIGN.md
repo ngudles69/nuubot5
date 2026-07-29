@@ -14,6 +14,7 @@ Nuubot5 source proves implementation. Reservation files prove names only.
 - [`design/server.md`](design/server.md) owns the Server, unified binary, and child-process design.
 - [`design/startup.md`](design/startup.md) owns Runner startup and crash recovery across all live networks.
 - [`design/marketdata.md`](design/marketdata.md) owns permanent BBO ingestion, buffering, and subscription decisions.
+- [`design/account.md`](design/account.md) owns Executor, Account, Venue, and Exchange-fact authority.
 - [`design/entities.md`](design/entities.md) shows backtest and live runtime ownership cardinality.
 - [`design/fprof.md`](design/fprof.md) owns deterministic function profiling and A/B/C overhead semantics.
 - [`design/hyperliquid`](design/hyperliquid/) contains the internal Hyperliquid boundary details.
@@ -133,6 +134,7 @@ Nuubot admits only required, audited code. It does not import or preserve either
 | [signaler](design/packages/signaler.md) | Implemented | Calculate and serve ordered Signal packages. |
 | [simulator](design/packages/simulator.md) | Implemented | Provide venue-shaped simulated execution. |
 | [trade](design/packages/account-trade.md) | Implemented | Own strategy-level orders and evidence. |
+| [venue](design/packages/venue.md) | Implemented | Route one Account through configured Venue behavior. |
 | [toolkit/clock](design/packages/clock.md) | Implemented | Provide deterministic clock mechanics. |
 | [toolkit/logging](design/packages/logging.md) | Implemented | Write exact-format append-only file logs. |
 

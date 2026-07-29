@@ -1,4 +1,4 @@
-// Package ledger owns one Account's coherent Trades, Orders, and Fills.
+// Package ledger owns one Account's flat Trades, Orders, and Fills.
 package ledger
 
 import (
@@ -12,80 +12,35 @@ import (
 	"nuubot/internal/account/trade"
 )
 
-const (
-	// None keeps Ledger evidence in memory until terminal publication.
-	None = "none"
-	// Max persists every accepted Ledger mutation.
-	Max = "max"
-)
-
-// Config contains one Ledger's identity and persistence policy.
+// Config contains one Ledger's identity.
 type Config struct {
+	SweepID        uint64
+	BotID          uint64
 	ID             uint64
 	CycleNumber    int
 	ExecutorNumber int
-	Account        string
+	Venue          string
 	Network        string
+	Account        string
 	Symbol         string
-	PersistMode    string
-	Path           string
 }
 
-// Plan reserves no state and describes the next admissible Trade batch identity.
+// Plan contains the next Trade and Order identities.
 type Plan struct {
-	Trade    trade.Input
+	Trade    trade.Trade
 	OrderIDs []uint64
 }
 
-// SubmitOutcome contains one ordered Venue submission acknowledgement.
-type SubmitOutcome struct {
-	OrderID      uint64
-	VenueOrderID uint64
-	Error        string
-	Raw          string
-	Status       order.Status
-	TimestampMS  uint64
+// OrderUpdate identifies one trusted update for an existing Order.
+type OrderUpdate struct {
+	OrderID uint64
+	Update  order.Update
 }
 
-// OrderEvidence contains one normalized canonical Venue Order observation.
-type OrderEvidence struct {
-	CLOID        string
-	VenueOrderID uint64
-	Status       order.Status
-	RejectReason string
-	TimestampMS  uint64
-	Raw          string
-}
-
-// FillEvidence contains one normalized canonical Venue Fill observation.
-type FillEvidence struct {
-	CLOID        string
-	VenueOrderID uint64
-	VenueTID     uint64
-	Side         string
-	Quantity     decimal.Decimal
-	Price        decimal.Decimal
-	TimestampMS  uint64
-	Fee          *decimal.Decimal
-	Liquidity    string
-	Raw          string
-}
-
-// ReconInput contains one complete validated reconciliation batch.
-type ReconInput struct {
-	Orders          []OrderEvidence
-	Fills           []FillEvidence
-	FillsThroughMS  uint64
-	ObservedMS      uint64
-	AccountStateRaw string
-}
-
-// Result contains one terminal Ledger summary without owned domain records.
+// Result contains one terminal Ledger summary.
 type Result struct {
 	Config
-	FillsThroughMS uint64
-	LastReconMS    uint64
-	AccountState   string
+	AccountRawJSON string
 	Summary        Summary
 	Trades         int
 	Orders         int
@@ -94,7 +49,7 @@ type Result struct {
 	StopOrders     int
 }
 
-// Summary contains cached Ledger totals for one Account observation.
+// Summary contains cached Ledger totals.
 type Summary struct {
 	RealizedPnL   decimal.Decimal
 	UnrealizedPnL decimal.Decimal
@@ -102,282 +57,354 @@ type Summary struct {
 	Fees          decimal.Decimal
 	NetPnL        decimal.Decimal
 	OpenTrades    int
+	ClosedTrades  int
 	ActiveOrders  int
 	Fills         int
 	PendingOrders int
 	PendingFills  int
 }
 
-// PendingFillAnchor identifies one stable missing-fee repair target.
+// PendingFillAnchor identifies one missing-fee Fill.
 type PendingFillAnchor struct {
 	VenueTID    uint64
 	TimestampMS uint64
 }
 
-// FillChangeKind identifies one staged Fill publication outcome.
-type FillChangeKind string
-
-const (
-	// FillAdded identifies one newly admitted Fill.
-	FillAdded FillChangeKind = "added"
-	// FillFeeEnriched identifies one existing Fill whose fee became present.
-	FillFeeEnriched FillChangeKind = "fee_enriched"
-)
-
-// FillChange contains one identity-bearing staged Fill change.
-type FillChange struct {
-	Kind     FillChangeKind
-	VenueTID uint64
-	HasFee   bool
-	Fee      decimal.Decimal
+// OrderRef locates one Order without duplicating it.
+type OrderRef struct {
+	TradeID uint64
+	OrderID uint64
 }
 
-type orderLocation struct {
-	tradeID uint64
-	orderID uint64
+// StoreState exposes current records selected for one persistence transaction.
+type StoreState struct {
+	Config
+	NextTradeID    uint64
+	NextOrderID    uint64
+	NextFillID     uint64
+	AccountRawJSON string
+	LedgerDirty    bool
+	Trades         []*trade.Trade
+	Orders         []*order.Order
+	Fills          []*fill.Fill
 }
 
-type fillLocation struct {
-	tradeID  uint64
-	orderID  uint64
-	venueTID uint64
-}
-
-// Ledger owns one coherent local trading tree.
+// Ledger owns one flat set of accounting records and relationship indexes.
 type Ledger struct {
 	config          Config
 	trades          map[uint64]*trade.Trade
-	orders          map[uint64]orderLocation
-	cloids          map[string]orderLocation
-	venueOrders     map[uint64]orderLocation
-	fills           map[uint64]fillLocation
-	activeTrades    map[uint64]struct{}
-	activeOrders    map[uint64]struct{}
-	pendingOrders   map[uint64]struct{}
-	pendingFills    map[uint64]struct{}
+	orders          map[uint64]*order.Order
+	fills           map[uint64]*fill.Fill
+	orderByCLOID    map[string]OrderRef
+	orderByOID      map[uint64]OrderRef
+	orderIDsByTrade map[uint64][]uint64
+	fillIDByTID     map[uint64]uint64
+	fillIDsByOrder  map[uint64][]uint64
+	activeTradeIDs  map[uint64]struct{}
+	activeOrderIDs  map[uint64]struct{}
 	summary         Summary
 	nextTradeID     uint64
-	nextTradeNo     uint32
 	nextOrderID     uint64
-	fillsThroughMS  uint64
-	lastReconMS     uint64
-	accountStateRaw string
-	store           *ledgerStore
+	nextFillID      uint64
+	accountRawJSON  string
+	dirtyTrades     map[uint64]struct{}
+	dirtyOrders     map[uint64]struct{}
+	dirtyFills      map[uint64]struct{}
+	ledgerDirty     bool
 	started         bool
 	stopped         bool
 }
 
 // Section 1 - Program Flow
 
-// CreateTrade publishes one validated Trade and its initial Orders.
-func (l *Ledger) CreateTrade(input trade.Input, orders []*order.Order) error {
-	if !l.started || l.stopped {
-		return fmt.Errorf("create ledger trade: invalid lifecycle state")
+// Init initializes one empty flat Ledger.
+func (l *Ledger) Init(cfg Config) error {
+	// Step 1: validate Ledger configuration
+	if cfg.SweepID == 0 || cfg.BotID == 0 || cfg.ID == 0 || cfg.CycleNumber <= 0 ||
+		cfg.Venue == "" || cfg.Network == "" || cfg.Account == "" ||
+		cfg.Symbol == "" {
+		return fmt.Errorf("initialize ledger: invalid configuration")
+	}
+	if l.started || l.stopped {
+		return fmt.Errorf("initialize ledger: invalid lifecycle state")
 	}
 
-	// Step 1: prepare Trade and initial Orders
-	if input != l.nextTradeInput() || len(orders) == 0 {
-		return fmt.Errorf("create ledger trade: unexpected Trade identity or empty Orders")
+	// Step 2: initialize flat records and indexes
+	l.config = cfg
+	l.trades = make(map[uint64]*trade.Trade)
+	l.orders = make(map[uint64]*order.Order)
+	l.fills = make(map[uint64]*fill.Fill)
+	l.orderByCLOID = make(map[string]OrderRef)
+	l.orderByOID = make(map[uint64]OrderRef)
+	l.orderIDsByTrade = make(map[uint64][]uint64)
+	l.fillIDByTID = make(map[uint64]uint64)
+	l.fillIDsByOrder = make(map[uint64][]uint64)
+	l.activeTradeIDs = make(map[uint64]struct{})
+	l.activeOrderIDs = make(map[uint64]struct{})
+	l.dirtyTrades = make(map[uint64]struct{})
+	l.dirtyOrders = make(map[uint64]struct{})
+	l.dirtyFills = make(map[uint64]struct{})
+	l.nextTradeID = 1
+	l.nextOrderID = 1
+	l.nextFillID = 1
+	l.ledgerDirty = true
+	l.started = true
+	return nil
+}
+
+// CreateTrade stores one Trade and its initial Orders.
+func (l *Ledger) CreateTrade(created *trade.Trade, orders []*order.Order) error {
+	// Step 1: validate Trade and Order identities
+	if !l.ready() || created == nil || len(orders) == 0 {
+		return fmt.Errorf("create ledger trade: invalid state or empty records")
 	}
-	var staged, err = trade.New(input)
+	if created.SweepID != l.config.SweepID ||
+		created.BotID != l.config.BotID ||
+		created.Venue != l.config.Venue ||
+		created.Network != l.config.Network ||
+		created.Account != l.config.Account ||
+		created.LedgerID != l.config.ID ||
+		created.TradeID != l.nextTradeID ||
+		created.CycleNumber != l.config.CycleNumber ||
+		created.Symbol != l.config.Symbol {
+		return fmt.Errorf("create ledger trade: unexpected Trade identity")
+	}
+	var err = l.validateOrders(created.TradeID, orders)
 	if err != nil {
 		return fmt.Errorf("create ledger trade: %w", err)
 	}
-	for index, created := range orders {
-		if created == nil || created.ReconState().OrderID != l.nextOrderID+uint64(index) {
-			return fmt.Errorf("create ledger trade: unexpected Order identity")
-		}
-		err = staged.AddOrder(created)
-		if err != nil {
-			return fmt.Errorf("create ledger trade: %w", err)
-		}
-	}
-	err = l.validateNewOrderIndexes(nil, orders)
-	if err != nil {
-		return fmt.Errorf("create ledger trade: %w", err)
-	}
 
-	// Step 2: persist new Trade and Orders when configured
-	if l.config.PersistMode == Max {
-		var state = l.currentCandidate()
-		state.nextTradeID++
-		state.nextTradeNo++
-		state.nextOrderID += uint64(len(orders))
-		err = l.store.saveMutation(l.config, state, []*trade.Trade{staged}, orders)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Step 3: publish Trade, Orders, and exact Summary delta
-	l.trades[input.TradeID] = staged
-	l.replaceTradeSummary(nil, staged.Summary())
+	// Step 2: store flat records and indexes
+	l.trades[created.TradeID] = created
+	l.activeTradeIDs[created.TradeID] = struct{}{}
+	l.dirtyTrades[created.TradeID] = struct{}{}
 	l.nextTradeID++
-	l.nextTradeNo++
-	l.nextOrderID += uint64(len(orders))
-	var indexErr = l.replaceTradeIndexes(input.TradeID, nil, staged)
-	if indexErr != nil {
-		return fmt.Errorf("create ledger trade: %w", indexErr)
+	l.ledgerDirty = true
+	for _, current := range orders {
+		l.addOrder(current)
 	}
-	return nil
+
+	// Step 3: refresh cached accounting
+	return l.refreshTrade(created.TradeID)
 }
 
-// AddOrders publishes later Orders under one existing Trade.
+// AddOrders stores later Orders under one existing Trade.
 func (l *Ledger) AddOrders(tradeID uint64, orders []*order.Order) error {
-	if !l.started || l.stopped {
-		return fmt.Errorf("add ledger orders: invalid lifecycle state")
+	// Step 1: validate parent and child records
+	if !l.ready() || l.trades[tradeID] == nil || len(orders) == 0 {
+		return fmt.Errorf("add ledger Orders: invalid state or empty records")
 	}
-
-	// Step 1: validate new Orders
-	var owned = l.trades[tradeID]
-	if owned == nil || len(orders) == 0 {
-		return fmt.Errorf("add ledger orders: unknown Trade or empty Orders")
-	}
-	var err = l.validateAddedOrders(tradeID, owned, orders)
+	var err = l.validateOrders(tradeID, orders)
 	if err != nil {
-		return fmt.Errorf("add ledger orders: %w", err)
-	}
-	// Step 2: attach validated Orders directly
-	// Venue truth owns recovery; copying unchanged Ledger records cannot restore trust.
-	var previousSummary = owned.Summary()
-	defer func() {
-		var currentSummary = owned.Summary()
-		l.replaceTradeSummary(&previousSummary, currentSummary)
-	}()
-	for _, created := range orders {
-		err = owned.AddOrder(created)
-		if err != nil {
-			return fmt.Errorf("add ledger orders: %w", err)
-		}
+		return fmt.Errorf("add ledger Orders: %w", err)
 	}
 
-	// Step 3: persist touched Trade and Orders when configured
-	if l.config.PersistMode == Max {
-		var state = l.currentCandidate()
-		state.nextOrderID += uint64(len(orders))
-		err = l.store.saveMutation(l.config, state, []*trade.Trade{owned}, orders)
-		if err != nil {
-			return err
-		}
+	// Step 2: store Orders and refresh accounting
+	for _, current := range orders {
+		l.addOrder(current)
 	}
-
-	// Step 4: publish Orders and exact Trade Summary delta
-	l.nextOrderID += uint64(len(orders))
-	l.addValidatedTradeIndexes(tradeID, owned)
+	err = l.refreshTrade(tradeID)
+	if err != nil {
+		return fmt.Errorf("add ledger Orders: %w", err)
+	}
+	l.dirtyTrades[tradeID] = struct{}{}
 	return nil
 }
 
-// RecordSubmit publishes one complete ordered submission batch.
-func (l *Ledger) RecordSubmit(outcomes []SubmitOutcome) error {
-	if !l.started || l.stopped {
-		return fmt.Errorf("record ledger submit: invalid lifecycle state")
+// UpdateOrders updates existing Orders and affected Trades.
+func (l *Ledger) UpdateOrders(updates []OrderUpdate) error {
+	// Step 1: validate complete Order update identities
+	if !l.ready() || len(updates) == 0 {
+		return fmt.Errorf("update ledger Orders: invalid state or empty updates")
+	}
+	var proposedOwners = make(map[uint64]uint64)
+	var proposedOrderOIDs = make(map[uint64]uint64)
+	for _, current := range updates {
+		var owned = l.orders[current.OrderID]
+		if owned == nil {
+			return fmt.Errorf("update ledger Orders: unknown Order %d", current.OrderID)
+		}
+		var venueOrderID = current.Update.VenueOrderID
+		if venueOrderID == 0 {
+			continue
+		}
+		if owned.VenueOrderID != 0 && owned.VenueOrderID != venueOrderID {
+			return fmt.Errorf("update ledger Orders: changed Venue Order identity")
+		}
+		var proposedOID, proposed = proposedOrderOIDs[current.OrderID]
+		if proposed && proposedOID != venueOrderID {
+			return fmt.Errorf("update ledger Orders: changed Venue Order identity")
+		}
+		var indexed, exists = l.orderByOID[venueOrderID]
+		if exists && indexed.OrderID != current.OrderID {
+			return fmt.Errorf("update ledger Orders: duplicate Venue Order %d", venueOrderID)
+		}
+		var proposedOwner, duplicate = proposedOwners[venueOrderID]
+		if duplicate && proposedOwner != current.OrderID {
+			return fmt.Errorf("update ledger Orders: duplicate Venue Order %d", venueOrderID)
+		}
+		proposedOrderOIDs[current.OrderID] = venueOrderID
+		proposedOwners[venueOrderID] = current.OrderID
 	}
 
-	// Step 1: validate submitted Orders
-	if len(outcomes) == 0 {
-		return fmt.Errorf("record ledger submit: outcomes are required")
+	// Step 2: apply trusted Order updates
+	var touched = make(map[uint64]struct{})
+	for _, current := range updates {
+		var owned = l.orders[current.OrderID]
+		var changed, err = owned.Update(current.Update)
+		if err != nil {
+			return fmt.Errorf("update ledger Orders: %w", err)
+		}
+		if !changed {
+			continue
+		}
+		if owned.VenueOrderID != 0 {
+			l.orderByOID[owned.VenueOrderID] = OrderRef{TradeID: owned.TradeID, OrderID: owned.OrderID}
+		}
+		l.refreshActiveOrder(owned)
+		l.dirtyOrders[owned.OrderID] = struct{}{}
+		touched[owned.TradeID] = struct{}{}
 	}
-	var submitted, touchedTrades, err = l.validateSubmitOutcomes(outcomes)
+
+	// Step 3: refresh affected Trades
+	for tradeID := range touched {
+		var err = l.refreshTrade(tradeID)
+		if err != nil {
+			return fmt.Errorf("update ledger Orders: %w", err)
+		}
+		l.dirtyTrades[tradeID] = struct{}{}
+	}
+	return nil
+}
+
+// AddFill stores one new Fill or applies later evidence to an existing Fill.
+func (l *Ledger) AddFill(input fill.Fill) (bool, error) {
+	// Step 1: update existing Fill evidence
+	if !l.ready() {
+		return false, fmt.Errorf("add ledger Fill: invalid state")
+	}
+	var existingID = l.fillIDByTID[input.VenueTID]
+	var existing = l.fills[existingID]
+	if existing != nil {
+		var hadFee = existing.HasFee()
+		var changed, err = existing.Update(input.Fee, input.RawJSON)
+		if err != nil {
+			return false, fmt.Errorf("add ledger Fill: %w", err)
+		}
+		if !changed {
+			return false, nil
+		}
+		var owned = l.orders[existing.OrderID]
+		if !hadFee && existing.HasFee() {
+			owned.Fees = owned.Fees.Add(*existing.Fee)
+			owned.PendingFeeCount--
+			l.refreshActiveOrder(owned)
+		}
+		err = l.refreshTrade(owned.TradeID)
+		l.dirtyFills[existing.FillID] = struct{}{}
+		l.dirtyOrders[owned.OrderID] = struct{}{}
+		l.dirtyTrades[owned.TradeID] = struct{}{}
+		return true, err
+	}
+
+	// Step 2: resolve the existing parent Order
+	var reference, err = l.resolveOrder(input.CLOID, input.VenueOrderID)
 	if err != nil {
-		return err
+		return false, fmt.Errorf("add ledger Fill: %w", err)
+	}
+	var owned = l.orders[reference.OrderID]
+	input.SweepID = l.config.SweepID
+	input.BotID = l.config.BotID
+	input.Venue = l.config.Venue
+	input.Network = l.config.Network
+	input.Account = l.config.Account
+	input.LedgerID = l.config.ID
+	input.TradeID = owned.TradeID
+	input.OrderID = owned.OrderID
+	input.FillID = l.nextFillID
+	input.CycleNumber = owned.CycleNumber
+	if input.Symbol != owned.Symbol || input.Side != owned.Side {
+		return false, fmt.Errorf("add ledger Fill: Exchange Fill does not match Order")
 	}
 
-	// Step 2: apply ordered outcomes directly
-	// Venue truth owns recovery; copying unchanged Ledger records cannot restore trust.
-	var previousSummaries = make(map[uint64]trade.Summary, len(touchedTrades))
-	for _, ownedTrade := range touchedTrades {
-		var state = ownedTrade.ReconState()
-		previousSummaries[state.TradeID] = ownedTrade.Summary()
+	// Step 3: store the new Fill and update its parent records
+	var created *fill.Fill
+	created, err = fill.New(input)
+	if err != nil {
+		return false, fmt.Errorf("add ledger Fill: %w", err)
 	}
-	defer func() {
-		for _, ownedTrade := range touchedTrades {
-			var state = ownedTrade.ReconState()
-			var previous = previousSummaries[state.TradeID]
-			l.replaceTradeSummary(&previous, ownedTrade.Summary())
-		}
-	}()
-	for index, outcome := range outcomes {
-		var owned = submitted[index]
-		err = owned.RecordSubmit(outcome.VenueOrderID, outcome.Error, outcome.Raw)
-		if err != nil {
-			return fmt.Errorf("record ledger submit: %w", err)
-		}
-		if outcome.Status != "" {
-			err = owned.ApplyVenueState(order.VenueState{
-				VenueOrderID: outcome.VenueOrderID,
-				Status:       outcome.Status,
-				RejectReason: outcome.Error,
-				TimestampMS:  outcome.TimestampMS,
-				Raw:          outcome.Raw,
-			})
-			if err != nil {
-				return fmt.Errorf("record ledger submit: %w", err)
-			}
-		}
+	var total = owned.FilledQuantity.Add(created.Quantity)
+	if total.GreaterThan(owned.SubmittedQuantity) {
+		return false, fmt.Errorf("add ledger Fill: quantity exceeds Order")
 	}
-	for _, ownedTrade := range touchedTrades {
-		err = ownedTrade.Refresh()
-		if err != nil {
-			return fmt.Errorf("record ledger submit: %w", err)
-		}
+	l.fills[created.FillID] = created
+	l.fillIDByTID[created.VenueTID] = created.FillID
+	l.fillIDsByOrder[created.OrderID] = append(l.fillIDsByOrder[created.OrderID], created.FillID)
+	l.nextFillID++
+	l.ledgerDirty = true
+	l.applyFillTotals(owned, created)
+	err = l.refreshTrade(owned.TradeID)
+	if err != nil {
+		return false, fmt.Errorf("add ledger Fill: %w", err)
 	}
+	l.dirtyFills[created.FillID] = struct{}{}
+	l.dirtyOrders[owned.OrderID] = struct{}{}
+	l.dirtyTrades[owned.TradeID] = struct{}{}
+	return true, nil
+}
 
-	// Step 3: persist touched submission rows when configured
-	if l.config.PersistMode == Max {
-		err = l.store.saveMutation(l.config, l.currentCandidate(), touchedTrades, submitted)
-		if err != nil {
-			return err
-		}
+// UpdateAccountPayload stores the latest raw Account payload.
+func (l *Ledger) UpdateAccountPayload(rawJSON string) bool {
+	if rawJSON == "" || rawJSON == l.accountRawJSON {
+		return false
 	}
+	l.accountRawJSON = rawJSON
+	l.ledgerDirty = true
+	return true
+}
 
-	// Step 4: refresh touched indexes and exact Trade Summary deltas
-	for _, ownedTrade := range touchedTrades {
-		var state = ownedTrade.ReconState()
-		l.addValidatedTradeIndexes(state.TradeID, ownedTrade)
+// UpdateMark refreshes marked finance for active Trades.
+func (l *Ledger) UpdateMark(markPrice *decimal.Decimal) error {
+	if !l.ready() {
+		return fmt.Errorf("update ledger mark: invalid state")
+	}
+	for _, tradeID := range sortedSet(l.activeTradeIDs) {
+		var owned = l.trades[tradeID]
+		var previous = tradeSummary(owned)
+		var changed, err = owned.UpdateMark(markPrice)
+		if err != nil {
+			return fmt.Errorf("update ledger mark: %w", err)
+		}
+		if changed {
+			l.replaceTradeSummary(previous, tradeSummary(owned))
+			l.dirtyTrades[tradeID] = struct{}{}
+		}
 	}
 	return nil
 }
 
 // Result returns one terminal Ledger summary.
 func (l *Ledger) Result() (Result, error) {
-	// Step 1: validate result state
 	if !l.started && !l.stopped {
 		return Result{}, fmt.Errorf("read ledger result: ledger is not initialized")
 	}
-
-	// Step 2: aggregate terminal domain counts
-	var orders int
-	var fills int
 	var cancellations int
 	var stopOrders int
-	for _, owned := range l.trades {
-		var err = owned.EachOrder(func(ownedOrder *order.Order) error {
-			var state = ownedOrder.ReconState()
-			orders++
-			fills += state.FillCount
-			if state.Status == order.Canceled {
-				cancellations++
-			}
-			if state.Role == order.Stop {
-				stopOrders++
-			}
-			return nil
-		})
-		if err != nil {
-			return Result{}, err
+	for _, current := range l.orders {
+		if current.Status == order.Canceled {
+			cancellations++
+		}
+		if current.Role == order.Stop {
+			stopOrders++
 		}
 	}
-
-	// Step 3: return terminal Ledger result
 	return Result{
 		Config:         l.config,
-		FillsThroughMS: l.fillsThroughMS,
-		LastReconMS:    l.lastReconMS,
-		AccountState:   l.accountStateRaw,
+		AccountRawJSON: l.accountRawJSON,
 		Summary:        l.summary,
 		Trades:         len(l.trades),
-		Orders:         orders,
-		Fills:          fills,
+		Orders:         len(l.orders),
+		Fills:          len(l.fills),
 		Cancellations:  cancellations,
 		StopOrders:     stopOrders,
 	}, nil
@@ -388,36 +415,76 @@ func (l *Ledger) Stop() error {
 	if l.stopped {
 		return nil
 	}
-
-	// Step 1: stop Ledger
-	var err error
-	if l.store != nil {
-		err = l.store.close()
-	}
 	l.started = false
 	l.stopped = true
-	return err
+	return nil
+}
+
+// StoreChanges returns direct pointers for dirty or complete persistence.
+func (l *Ledger) StoreChanges(all bool) StoreState {
+	var state = StoreState{
+		Config:         l.config,
+		NextTradeID:    l.nextTradeID,
+		NextOrderID:    l.nextOrderID,
+		NextFillID:     l.nextFillID,
+		AccountRawJSON: l.accountRawJSON,
+		LedgerDirty:    all || l.ledgerDirty,
+	}
+	for _, id := range selectedIDs(l.trades, l.dirtyTrades, all) {
+		state.Trades = append(state.Trades, l.trades[id])
+	}
+	for _, id := range selectedIDs(l.orders, l.dirtyOrders, all) {
+		state.Orders = append(state.Orders, l.orders[id])
+	}
+	for _, id := range selectedIDs(l.fills, l.dirtyFills, all) {
+		state.Fills = append(state.Fills, l.fills[id])
+	}
+	return state
+}
+
+// StoreCommitted clears only rows included in one successful transaction.
+func (l *Ledger) StoreCommitted(state StoreState) {
+	if state.LedgerDirty {
+		l.ledgerDirty = false
+	}
+	for _, current := range state.Trades {
+		delete(l.dirtyTrades, current.TradeID)
+	}
+	for _, current := range state.Orders {
+		delete(l.dirtyOrders, current.OrderID)
+	}
+	for _, current := range state.Fills {
+		delete(l.dirtyFills, current.FillID)
+	}
 }
 
 // Section 2 - Domain Helpers
 
 // Section 2.1 - Identity Planning
 
-// PlanTrade returns the next synchronous Trade and Order identities.
+// PlanTrade returns the next Trade and Order identities.
 func (l *Ledger) PlanTrade(orderCount int) (Plan, error) {
-	if !l.started || l.stopped || orderCount <= 0 || orderCount > 1000 {
-		return Plan{}, fmt.Errorf("plan ledger trade: invalid state or Order count")
+	if !l.ready() || orderCount <= 0 {
+		return Plan{}, fmt.Errorf("plan ledger Trade: invalid state or Order count")
 	}
 	var ids = make([]uint64, orderCount)
 	for index := range ids {
 		ids[index] = l.nextOrderID + uint64(index)
 	}
-	return Plan{Trade: l.nextTradeInput(), OrderIDs: ids}, nil
+	return Plan{
+		Trade: trade.Trade{
+			SweepID: l.config.SweepID, BotID: l.config.BotID,
+			Venue: l.config.Venue, Network: l.config.Network, Account: l.config.Account,
+			LedgerID: l.config.ID, TradeID: l.nextTradeID,
+			CycleNumber: l.config.CycleNumber, Symbol: l.config.Symbol,
+		},
+		OrderIDs: ids,
+	}, nil
 }
 
-// PlanOrders returns the next synchronous Order identities.
+// PlanOrders returns the next Order identities.
 func (l *Ledger) PlanOrders(orderCount int) ([]uint64, error) {
-	if !l.started || l.stopped || orderCount <= 0 || orderCount > 1000 {
+	if !l.ready() || orderCount <= 0 {
 		return nil, fmt.Errorf("plan ledger Orders: invalid state or Order count")
 	}
 	var ids = make([]uint64, orderCount)
@@ -429,151 +496,89 @@ func (l *Ledger) PlanOrders(orderCount int) ([]uint64, error) {
 
 // Section 2.2 - Domain Observation
 
-// ActiveOrders returns focused current active Order evidence.
-func (l *Ledger) ActiveOrders() []order.ActiveState {
-	var ids = sortedSet(l.activeOrders)
-	var active = make([]order.ActiveState, 0, len(ids))
+// ActiveOrders returns current active Orders.
+func (l *Ledger) ActiveOrders() []order.Order {
+	var ids = sortedSet(l.activeOrderIDs)
+	var values = make([]order.Order, 0, len(ids))
 	for _, orderID := range ids {
-		var location = l.orders[orderID]
-		var ownedTrade = l.trades[location.tradeID]
-		var ownedOrder, _ = ownedTrade.Order(orderID)
-		active = append(active, ownedOrder.ActiveState())
+		values = append(values, *l.orders[orderID])
 	}
-	return active
+	return values
 }
 
-// TradeState returns focused current Trade state.
-func (l *Ledger) TradeState(tradeID uint64) (trade.ReconState, error) {
-	var owned = l.trades[tradeID]
-	if owned == nil {
-		return trade.ReconState{}, fmt.Errorf("read ledger Trade: unknown Trade %d", tradeID)
-	}
-	return owned.ReconState(), nil
-}
-
-// NextBatchNo returns the next Order batch number for one Trade.
-func (l *Ledger) NextBatchNo(tradeID uint64) (uint16, error) {
-	var owned = l.trades[tradeID]
-	if owned == nil {
-		return 0, fmt.Errorf("read ledger Trade: unknown Trade %d", tradeID)
-	}
-	var batchNo uint16 = 1
-	var err = owned.EachOrder(func(current *order.Order) error {
-		var state = current.ReconState()
-		if state.BatchNo >= batchNo {
-			batchNo = state.BatchNo + 1
-		}
-		return nil
-	})
-	if err != nil {
-		return 0, err
-	}
-	if batchNo > 1000 {
-		return 0, fmt.Errorf("read ledger Trade: Trade exceeded 1000 batches")
-	}
-	return batchNo, nil
-}
-
-// OpenTrades returns focused state for current open exposure.
-func (l *Ledger) OpenTrades() []trade.ReconState {
-	var ids = sortedSet(l.activeTrades)
-	var states = make([]trade.ReconState, 0, len(ids))
+// ActiveTrades returns current active Trades.
+func (l *Ledger) ActiveTrades() []trade.Trade {
+	var ids = sortedSet(l.activeTradeIDs)
+	var values = make([]trade.Trade, 0, len(ids))
 	for _, tradeID := range ids {
-		var state = l.trades[tradeID].ReconState()
-		if state.OpenQuantity.IsPositive() {
-			states = append(states, state)
-		}
+		values = append(values, *l.trades[tradeID])
 	}
-	return states
+	return values
 }
 
-// CountOrders returns the number of Orders matching role and status.
-func (l *Ledger) CountOrders(role string, status order.Status) uint64 {
-	var count uint64
-	for _, ownedTrade := range l.trades {
-		ownedTrade.EachOrder(func(owned *order.Order) error {
-			var current = owned.ReconState()
-			if current.Role == role && current.Status == status {
-				count++
-			}
-			return nil
-		})
-	}
-	return count
-}
-
-// TradeCount returns the number of owned Trades.
-func (l *Ledger) TradeCount() int {
-	return len(l.trades)
-}
-
-// TradeOrders returns flat Order records linked by Trade identity.
-func (l *Ledger) TradeOrders(tradeID uint64) ([]order.Record, error) {
+// Trade returns one Trade.
+func (l *Ledger) Trade(tradeID uint64) (trade.Trade, error) {
 	var owned = l.trades[tradeID]
 	if owned == nil {
+		return trade.Trade{}, fmt.Errorf("read ledger Trade: unknown Trade %d", tradeID)
+	}
+	return *owned, nil
+}
+
+// Order returns one Order.
+func (l *Ledger) Order(orderID uint64) (order.Order, error) {
+	var owned = l.orders[orderID]
+	if owned == nil {
+		return order.Order{}, fmt.Errorf("read ledger Order: unknown Order %d", orderID)
+	}
+	return *owned, nil
+}
+
+// Fill returns one Fill by Venue identity.
+func (l *Ledger) Fill(venueTID uint64) (fill.Fill, bool) {
+	var fillID, exists = l.fillIDByTID[venueTID]
+	if !exists {
+		return fill.Fill{}, false
+	}
+	var owned = l.fills[fillID]
+	return *owned, true
+}
+
+// TradeOrders returns Orders linked to one Trade.
+func (l *Ledger) TradeOrders(tradeID uint64) ([]order.Order, error) {
+	if l.trades[tradeID] == nil {
 		return nil, fmt.Errorf("read ledger Trade Orders: unknown Trade %d", tradeID)
 	}
-	var records = make([]order.Record, 0)
-	var err = owned.EachOrder(func(current *order.Order) error {
-		records = append(records, current.Record())
-		return nil
-	})
-	if err != nil {
-		return nil, err
+	var ids = append([]uint64(nil), l.orderIDsByTrade[tradeID]...)
+	sort.Slice(ids, func(left int, right int) bool { return ids[left] < ids[right] })
+	var values = make([]order.Order, 0, len(ids))
+	for _, orderID := range ids {
+		values = append(values, *l.orders[orderID])
 	}
-	sort.Slice(records, func(left int, right int) bool {
-		return records[left].OrderID < records[right].OrderID
-	})
-	return records, nil
+	return values, nil
 }
 
-// Orders returns selected flat Order records.
-func (l *Ledger) Orders(orderIDs []uint64) ([]order.Record, error) {
-	var records = make([]order.Record, 0, len(orderIDs))
-	for _, orderID := range orderIDs {
-		var location, exists = l.orders[orderID]
-		if !exists {
-			return nil, fmt.Errorf("read ledger Orders: unknown Order %d", orderID)
-		}
-		var owned, _ = l.trades[location.tradeID].Order(orderID)
-		records = append(records, owned.Record())
-	}
-	return records, nil
-}
-
-// FillsThroughMS returns the inclusive Fill cursor.
-func (l *Ledger) FillsThroughMS() uint64 {
-	return l.fillsThroughMS
-}
-
-// Fill returns one current Fill by Venue identity.
-func (l *Ledger) Fill(venueTID uint64) (fill.Record, bool) {
-	var location, exists = l.fills[venueTID]
-	if !exists {
-		return fill.Record{}, false
-	}
-	var ownedTrade = l.trades[location.tradeID]
-	var ownedOrder, _ = ownedTrade.Order(location.orderID)
-	var execution, found = ownedOrder.Fill(venueTID)
-	if !found {
-		return fill.Record{}, false
-	}
-	return execution.State(), true
-}
-
-// PendingCounts returns current reconciliation-pending Order and Fill counts.
+// PendingCounts returns unresolved Order and Fill counts.
 func (l *Ledger) PendingCounts() (int, int) {
-	return len(l.pendingOrders), len(l.pendingFills)
+	var orders int
+	var fills int
+	for _, current := range l.orders {
+		if current.PendingFeeCount > 0 ||
+			(current.Status == order.Filled && !current.IsClosed()) {
+			orders++
+		}
+		fills += current.PendingFeeCount
+	}
+	return orders, fills
 }
 
-// PendingFillAnchors returns stable missing-fee repair targets.
+// PendingFillAnchors returns missing-fee Fill anchors.
 func (l *Ledger) PendingFillAnchors() []PendingFillAnchor {
-	var anchors = make([]PendingFillAnchor, 0, len(l.pendingFills))
-	for venueTID := range l.pendingFills {
-		var execution, exists = l.Fill(venueTID)
-		if exists {
+	var anchors = make([]PendingFillAnchor, 0)
+	for _, current := range l.fills {
+		if !current.HasFee() {
 			anchors = append(anchors, PendingFillAnchor{
-				VenueTID: venueTID, TimestampMS: execution.TimestampMS,
+				VenueTID: current.VenueTID, TimestampMS: current.TimestampMS,
 			})
 		}
 	}
@@ -586,431 +591,215 @@ func (l *Ledger) PendingFillAnchors() []PendingFillAnchor {
 	return anchors
 }
 
-// ReconFillChanges returns staged Fill additions and fee enrichments.
-func (l *Ledger) ReconFillChanges(attempt *ReconAttempt) []FillChange {
-	if attempt == nil {
-		return nil
-	}
-	return append([]FillChange(nil), attempt.fillChanges...)
-}
-
-// HasPendingRecon reports selected unresolved Order or Fill work.
+// HasPendingRecon reports unresolved Order or Fill evidence.
 func (l *Ledger) HasPendingRecon() bool {
-	return len(l.pendingOrders) != 0 || len(l.pendingFills) != 0
+	var orders, fills = l.PendingCounts()
+	return orders != 0 || fills != 0
 }
 
-// Summary returns current cached finance and evidence totals.
+// Summary returns current cached accounting totals.
 func (l *Ledger) Summary() Summary {
 	return l.summary
 }
 
-// Section 2.3 - Mutation Validation
+// Section 2.3 - Flat Record Ownership
 
-func (l *Ledger) validateAddedOrders(
-	tradeID uint64,
-	owned *trade.Trade,
-	orders []*order.Order,
-) error {
-	var tradeState = owned.ReconState()
-	if !tradeIsActive(tradeState.Status) {
-		return fmt.Errorf("add trade order: terminal trade cannot change")
-	}
-	for index, created := range orders {
-		if created == nil {
+func (l *Ledger) validateOrders(tradeID uint64, orders []*order.Order) error {
+	var orderIDs = make(map[uint64]struct{}, len(orders))
+	var cloids = make(map[string]struct{}, len(orders))
+	for index, current := range orders {
+		if current == nil ||
+			current.SweepID != l.config.SweepID ||
+			current.BotID != l.config.BotID ||
+			current.Venue != l.config.Venue ||
+			current.Network != l.config.Network ||
+			current.Account != l.config.Account ||
+			current.LedgerID != l.config.ID ||
+			current.TradeID != tradeID ||
+			current.OrderID != l.nextOrderID+uint64(index) ||
+			current.CycleNumber != l.config.CycleNumber ||
+			current.Symbol != l.config.Symbol {
 			return fmt.Errorf("unexpected Order identity")
 		}
-		var state = created.ReconState()
-		if state.OrderID != l.nextOrderID+uint64(index) {
-			return fmt.Errorf("unexpected Order identity")
+		if _, exists := l.orders[current.OrderID]; exists {
+			return fmt.Errorf("duplicate Order %d", current.OrderID)
 		}
-		if state.LedgerID != l.config.ID || state.TradeID != tradeID ||
-			state.Account != l.config.Account || state.CycleNumber != l.config.CycleNumber ||
-			state.Symbol != l.config.Symbol {
-			return fmt.Errorf("add trade order: ownership mismatch")
+		if _, exists := l.orderByCLOID[current.CLOID]; exists {
+			return fmt.Errorf("duplicate cloid %s", current.CLOID)
 		}
-	}
-	return l.validateNewOrderIndexes(owned, orders)
-}
-
-func (l *Ledger) validateNewOrderIndexes(
-	owned *trade.Trade,
-	orders []*order.Order,
-) error {
-	type position struct {
-		batchNo  uint16
-		orderPos uint16
-	}
-	var positions = make(map[position]struct{})
-	if owned != nil {
-		owned.EachOrder(func(existing *order.Order) error {
-			var state = existing.ReconState()
-			positions[position{batchNo: state.BatchNo, orderPos: state.OrderPos}] = struct{}{}
-			return nil
-		})
-	}
-	var seenCLOIDs = make(map[string]struct{}, len(orders))
-	for _, created := range orders {
-		var state = created.ReconState()
-		if _, exists := l.orders[state.OrderID]; exists {
-			return fmt.Errorf("add trade order: duplicate order id %d", state.OrderID)
+		if _, exists := orderIDs[current.OrderID]; exists {
+			return fmt.Errorf("duplicate Order %d", current.OrderID)
 		}
-		if _, exists := l.cloids[state.CLOID]; exists {
-			return fmt.Errorf("add trade order: duplicate cloid %s", state.CLOID)
+		if _, exists := cloids[current.CLOID]; exists {
+			return fmt.Errorf("duplicate cloid %s", current.CLOID)
 		}
-		if _, exists := seenCLOIDs[state.CLOID]; exists {
-			return fmt.Errorf("add trade order: duplicate cloid %s", state.CLOID)
-		}
-		var current = position{batchNo: state.BatchNo, orderPos: state.OrderPos}
-		if _, exists := positions[current]; exists {
-			return fmt.Errorf(
-				"add trade order: duplicate batch %d position %d",
-				state.BatchNo,
-				state.OrderPos,
-			)
-		}
-		seenCLOIDs[state.CLOID] = struct{}{}
-		positions[current] = struct{}{}
+		orderIDs[current.OrderID] = struct{}{}
+		cloids[current.CLOID] = struct{}{}
 	}
 	return nil
 }
 
-func (l *Ledger) validateSubmitOutcomes(
-	outcomes []SubmitOutcome,
-) ([]*order.Order, []*trade.Trade, error) {
-	var submitted = make([]*order.Order, 0, len(outcomes))
-	var tradesByID = make(map[uint64]*trade.Trade)
-	var seenOrders = make(map[uint64]struct{}, len(outcomes))
-	var seenVenueOrders = make(map[uint64]uint64, len(outcomes))
-	for _, outcome := range outcomes {
-		if _, duplicate := seenOrders[outcome.OrderID]; duplicate {
-			return nil, nil, fmt.Errorf("record ledger submit: duplicate Order %d", outcome.OrderID)
-		}
-		var location, exists = l.orders[outcome.OrderID]
-		if !exists {
-			return nil, nil, fmt.Errorf("record ledger submit: unknown Order %d", outcome.OrderID)
-		}
-		var ownedTrade = l.trades[location.tradeID]
-		var owned, _ = ownedTrade.Order(outcome.OrderID)
-		var state = owned.ReconState()
-		if state.Status != order.Created && state.Status != order.Submitted {
-			return nil, nil, fmt.Errorf("record ledger submit: order is already %s", state.Status)
-		}
-		if outcome.VenueOrderID != 0 && state.VenueOrderID != 0 &&
-			state.VenueOrderID != outcome.VenueOrderID {
-			return nil, nil, fmt.Errorf("record ledger submit: changed venue order identity")
-		}
-		if outcome.Status != "" &&
-			((outcome.Status != order.Rejected && outcome.Status != order.Error) ||
-				outcome.TimestampMS == 0) {
-			return nil, nil, fmt.Errorf("record ledger submit: invalid terminal outcome")
-		}
-		if outcome.VenueOrderID != 0 {
-			var indexed, indexedExists = l.venueOrders[outcome.VenueOrderID]
-			if indexedExists && indexed.orderID != outcome.OrderID {
-				return nil, nil, fmt.Errorf("record ledger submit: duplicate Venue Order %d", outcome.VenueOrderID)
-			}
-			var seenOrderID, duplicate = seenVenueOrders[outcome.VenueOrderID]
-			if duplicate && seenOrderID != outcome.OrderID {
-				return nil, nil, fmt.Errorf("record ledger submit: duplicate Venue Order %d", outcome.VenueOrderID)
-			}
-			seenVenueOrders[outcome.VenueOrderID] = outcome.OrderID
-		}
-		submitted = append(submitted, owned)
-		tradesByID[location.tradeID] = ownedTrade
-		seenOrders[outcome.OrderID] = struct{}{}
+func (l *Ledger) addOrder(current *order.Order) {
+	var reference = OrderRef{TradeID: current.TradeID, OrderID: current.OrderID}
+	l.orders[current.OrderID] = current
+	l.orderByCLOID[current.CLOID] = reference
+	if current.VenueOrderID != 0 {
+		l.orderByOID[current.VenueOrderID] = reference
 	}
-	var tradeIDs = make([]uint64, 0, len(tradesByID))
-	for tradeID := range tradesByID {
-		tradeIDs = append(tradeIDs, tradeID)
-	}
-	sort.Slice(tradeIDs, func(left int, right int) bool {
-		return tradeIDs[left] < tradeIDs[right]
-	})
-	var touchedTrades = make([]*trade.Trade, 0, len(tradeIDs))
-	for _, tradeID := range tradeIDs {
-		touchedTrades = append(touchedTrades, tradesByID[tradeID])
-	}
-	return submitted, touchedTrades, nil
+	l.orderIDsByTrade[current.TradeID] = append(l.orderIDsByTrade[current.TradeID], current.OrderID)
+	l.refreshActiveOrder(current)
+	l.dirtyOrders[current.OrderID] = struct{}{}
+	l.nextOrderID++
+	l.ledgerDirty = true
 }
 
-func (l *Ledger) nextTradeInput() trade.Input {
-	return trade.Input{
-		LedgerID:    l.config.ID,
-		TradeID:     l.nextTradeID,
-		TradeNo:     l.nextTradeNo,
-		Account:     l.config.Account,
-		CycleNumber: l.config.CycleNumber,
-		Symbol:      l.config.Symbol,
+func (l *Ledger) resolveOrder(cloid string, venueOrderID uint64) (OrderRef, error) {
+	if cloid == "" && venueOrderID == 0 {
+		return OrderRef{}, fmt.Errorf("unknown Fill parent")
 	}
-}
-
-// Section 2.4 - State and Indexes
-
-type candidate struct {
-	trades          map[uint64]*trade.Trade
-	nextTradeID     uint64
-	nextTradeNo     uint32
-	nextOrderID     uint64
-	fillsThroughMS  uint64
-	lastReconMS     uint64
-	accountStateRaw string
-}
-
-func (l *Ledger) persistCandidate(state candidate) error {
-	if l.config.PersistMode == None {
-		return nil
-	}
-	return l.store.save(l.config, state)
-}
-
-func (l *Ledger) currentCandidate() candidate {
-	return candidate{
-		trades:          l.trades,
-		nextTradeID:     l.nextTradeID,
-		nextTradeNo:     l.nextTradeNo,
-		nextOrderID:     l.nextOrderID,
-		fillsThroughMS:  l.fillsThroughMS,
-		lastReconMS:     l.lastReconMS,
-		accountStateRaw: l.accountStateRaw,
-	}
-}
-
-func (l *Ledger) publish(state candidate) {
-	l.trades = state.trades
-	l.nextTradeID = state.nextTradeID
-	l.nextTradeNo = state.nextTradeNo
-	l.nextOrderID = state.nextOrderID
-	l.fillsThroughMS = state.fillsThroughMS
-	l.lastReconMS = state.lastReconMS
-	l.accountStateRaw = state.accountStateRaw
-}
-
-func (l *Ledger) rebuildIndexes() error {
-	clear(l.orders)
-	clear(l.cloids)
-	clear(l.venueOrders)
-	clear(l.fills)
-	clear(l.activeTrades)
-	clear(l.activeOrders)
-	clear(l.pendingOrders)
-	clear(l.pendingFills)
-	l.summary = Summary{}
-	for tradeID, owned := range l.trades {
-		var err = l.addTradeIndexes(tradeID, owned)
-		if err != nil {
-			return err
+	var byCLOID OrderRef
+	var hasCLOID bool
+	if cloid != "" {
+		byCLOID, hasCLOID = l.orderByCLOID[cloid]
+		if !hasCLOID {
+			return OrderRef{}, fmt.Errorf("unknown Fill cloid %s", cloid)
 		}
-		l.replaceTradeSummary(nil, owned.Summary())
 	}
-	return nil
+	var byOID OrderRef
+	var hasOID bool
+	if venueOrderID != 0 {
+		byOID, hasOID = l.orderByOID[venueOrderID]
+		if !hasOID {
+			return OrderRef{}, fmt.Errorf("unknown Fill Venue Order %d", venueOrderID)
+		}
+	}
+	if hasCLOID && hasOID && byCLOID != byOID {
+		return OrderRef{}, fmt.Errorf("Fill identity resolves different Orders")
+	}
+	if hasCLOID {
+		return byCLOID, nil
+	}
+	if hasOID {
+		return byOID, nil
+	}
+	return OrderRef{}, fmt.Errorf("unknown Fill parent")
 }
 
-func (l *Ledger) replaceTradeIndexes(
-	tradeID uint64,
-	previous *trade.Trade,
-	current *trade.Trade,
-) error {
-	if previous != nil {
-		l.removeTradeIndexes(tradeID, previous)
+func (l *Ledger) applyFillTotals(owned *order.Order, execution *fill.Fill) {
+	owned.FilledQuantity = owned.FilledQuantity.Add(execution.Quantity)
+	owned.FilledNotional = owned.FilledNotional.Add(execution.Quantity.Mul(execution.Price))
+	owned.AverageFillPrice = owned.FilledNotional.Div(owned.FilledQuantity)
+	owned.RemainingQuantity = owned.SubmittedQuantity.Sub(owned.FilledQuantity)
+	owned.FillCount++
+	if execution.HasFee() {
+		owned.Fees = owned.Fees.Add(*execution.Fee)
+	} else {
+		owned.PendingFeeCount++
 	}
-	var err = l.addTradeIndexes(tradeID, current)
+	if execution.TimestampMS > owned.LastFillMS {
+		owned.LastFillMS = execution.TimestampMS
+	}
+	l.refreshActiveOrder(owned)
+}
+
+func (l *Ledger) refreshTrade(tradeID uint64) error {
+	var owned = l.trades[tradeID]
+	var orders = make([]*order.Order, 0, len(l.orderIDsByTrade[tradeID]))
+	var fills = make([]*fill.Fill, 0)
+	for _, orderID := range l.orderIDsByTrade[tradeID] {
+		orders = append(orders, l.orders[orderID])
+		for _, fillID := range l.fillIDsByOrder[orderID] {
+			fills = append(fills, l.fills[fillID])
+		}
+	}
+	var previous = tradeSummary(owned)
+	var changed, err = owned.Update(orders, fills)
 	if err != nil {
-		if previous != nil {
-			var restoreErr = l.addTradeIndexes(tradeID, previous)
-			if restoreErr != nil {
-				return fmt.Errorf("replace Trade %d indexes: %v; restore: %w", tradeID, err, restoreErr)
-			}
-		}
 		return err
 	}
+	_ = changed
+	l.replaceTradeSummary(previous, tradeSummary(owned))
+	if owned.IsClosed() {
+		delete(l.activeTradeIDs, tradeID)
+	} else {
+		l.activeTradeIDs[tradeID] = struct{}{}
+	}
 	return nil
 }
 
-func (l *Ledger) addTradeIndexes(tradeID uint64, owned *trade.Trade) error {
-	var state = owned.ReconState()
-	if state.TradeID != tradeID {
-		return fmt.Errorf("index ledger: Trade identity mismatch")
-	}
-	if tradeIsActive(state.Status) {
-		l.activeTrades[tradeID] = struct{}{}
-	}
-	return owned.EachOrder(func(ownedOrder *order.Order) error {
-		var current = ownedOrder.ReconState()
-		var location = orderLocation{tradeID: tradeID, orderID: current.OrderID}
-		if _, exists := l.orders[current.OrderID]; exists {
-			return fmt.Errorf("index ledger: duplicate Order %d", current.OrderID)
-		}
-		if _, exists := l.cloids[current.CLOID]; exists {
-			return fmt.Errorf("index ledger: duplicate cloid %s", current.CLOID)
-		}
-		l.orders[current.OrderID] = location
-		l.cloids[current.CLOID] = location
-		if current.VenueOrderID != 0 {
-			if _, exists := l.venueOrders[current.VenueOrderID]; exists {
-				return fmt.Errorf("index ledger: duplicate Venue Order %d", current.VenueOrderID)
-			}
-			l.venueOrders[current.VenueOrderID] = location
-		}
-		if current.Active {
-			l.activeOrders[current.OrderID] = struct{}{}
-		}
-		var orderPending = current.ReconciliationPending
-		var err = ownedOrder.EachFill(func(execution *fill.Fill) error {
-			var observed = execution.State()
-			if _, exists := l.fills[observed.VenueTID]; exists {
-				return fmt.Errorf("index ledger: duplicate Venue TID %d", observed.VenueTID)
-			}
-			l.fills[observed.VenueTID] = fillLocation{
-				tradeID: tradeID, orderID: current.OrderID, venueTID: observed.VenueTID,
-			}
-			if !observed.HasFee {
-				l.pendingFills[observed.VenueTID] = struct{}{}
-				orderPending = true
-			}
-			return nil
-		})
-		if err != nil {
-			return err
-		}
-		if orderPending {
-			l.pendingOrders[current.OrderID] = struct{}{}
-		}
-		return nil
-	})
-}
-
-func (l *Ledger) refreshTradeIndexes(tradeID uint64) {
-	var owned = l.trades[tradeID]
-	var state = owned.ReconState()
-	if tradeIsActive(state.Status) {
-		l.activeTrades[tradeID] = struct{}{}
+func (l *Ledger) refreshActiveOrder(owned *order.Order) {
+	if owned.IsClosed() {
+		delete(l.activeOrderIDs, owned.OrderID)
 	} else {
-		delete(l.activeTrades, tradeID)
+		l.activeOrderIDs[owned.OrderID] = struct{}{}
 	}
-	owned.EachOrder(func(ownedOrder *order.Order) error {
-		var current = ownedOrder.ReconState()
-		var location = orderLocation{tradeID: tradeID, orderID: current.OrderID}
-		l.orders[current.OrderID] = location
-		l.cloids[current.CLOID] = location
-		if current.VenueOrderID != 0 {
-			l.venueOrders[current.VenueOrderID] = location
-		}
-		if current.Active {
-			l.activeOrders[current.OrderID] = struct{}{}
-		} else {
-			delete(l.activeOrders, current.OrderID)
-		}
-		var orderPending = current.ReconciliationPending
-		ownedOrder.EachFill(func(execution *fill.Fill) error {
-			var observed = execution.State()
-			l.fills[observed.VenueTID] = fillLocation{
-				tradeID: tradeID, orderID: current.OrderID, venueTID: observed.VenueTID,
-			}
-			if observed.HasFee {
-				delete(l.pendingFills, observed.VenueTID)
-			} else {
-				l.pendingFills[observed.VenueTID] = struct{}{}
-				orderPending = true
-			}
-			return nil
-		})
-		if orderPending {
-			l.pendingOrders[current.OrderID] = struct{}{}
-		} else {
-			delete(l.pendingOrders, current.OrderID)
-		}
-		return nil
-	})
 }
 
-func (l *Ledger) addValidatedTradeIndexes(tradeID uint64, _ *trade.Trade) {
-	l.refreshTradeIndexes(tradeID)
+func (l *Ledger) replaceTradeSummary(previous Summary, current Summary) {
+	l.summary.RealizedPnL = l.summary.RealizedPnL.Sub(previous.RealizedPnL).Add(current.RealizedPnL)
+	l.summary.UnrealizedPnL = l.summary.UnrealizedPnL.Sub(previous.UnrealizedPnL).Add(current.UnrealizedPnL)
+	l.summary.GrossPnL = l.summary.GrossPnL.Sub(previous.GrossPnL).Add(current.GrossPnL)
+	l.summary.Fees = l.summary.Fees.Sub(previous.Fees).Add(current.Fees)
+	l.summary.NetPnL = l.summary.NetPnL.Sub(previous.NetPnL).Add(current.NetPnL)
+	l.recountSummary()
 }
 
-// Cached totals avoid repeated all-Trade aggregation while owned Trades remain authoritative.
-func (l *Ledger) replaceTradeSummary(previous *trade.Summary, current trade.Summary) {
-	if previous != nil {
-		l.summary.RealizedPnL = l.summary.RealizedPnL.Sub(previous.RealizedPnL)
-		l.summary.UnrealizedPnL = l.summary.UnrealizedPnL.Sub(previous.UnrealizedPnL)
-		l.summary.GrossPnL = l.summary.GrossPnL.Sub(previous.GrossPnL)
-		l.summary.Fees = l.summary.Fees.Sub(previous.Fees)
-		l.summary.NetPnL = l.summary.NetPnL.Sub(previous.NetPnL)
-		if tradeIsActive(previous.Status) {
-			l.summary.OpenTrades--
+func (l *Ledger) recountSummary() {
+	l.summary.OpenTrades = len(l.activeTradeIDs)
+	l.summary.ClosedTrades = 0
+	for _, current := range l.trades {
+		if current.Status == trade.Closed {
+			l.summary.ClosedTrades++
 		}
-		l.summary.ActiveOrders -= previous.ActiveOrders
-		l.summary.Fills -= previous.Fills
-		l.summary.PendingOrders -= previous.PendingOrders
-		l.summary.PendingFills -= previous.PendingFills
 	}
-	l.summary.RealizedPnL = l.summary.RealizedPnL.Add(current.RealizedPnL)
-	l.summary.UnrealizedPnL = l.summary.UnrealizedPnL.Add(current.UnrealizedPnL)
-	l.summary.GrossPnL = l.summary.GrossPnL.Add(current.GrossPnL)
-	l.summary.Fees = l.summary.Fees.Add(current.Fees)
-	l.summary.NetPnL = l.summary.NetPnL.Add(current.NetPnL)
-	if tradeIsActive(current.Status) {
-		l.summary.OpenTrades++
-	}
-	l.summary.ActiveOrders += current.ActiveOrders
-	l.summary.Fills += current.Fills
-	l.summary.PendingOrders += current.PendingOrders
-	l.summary.PendingFills += current.PendingFills
+	l.summary.ActiveOrders = len(l.activeOrderIDs)
+	l.summary.Fills = len(l.fills)
+	l.summary.PendingOrders, l.summary.PendingFills = l.PendingCounts()
 }
 
-func (l *Ledger) removeTradeIndexes(tradeID uint64, owned *trade.Trade) {
-	delete(l.activeTrades, tradeID)
-	owned.EachOrder(func(ownedOrder *order.Order) error {
-		var current = ownedOrder.ReconState()
-		delete(l.orders, current.OrderID)
-		delete(l.cloids, current.CLOID)
-		delete(l.activeOrders, current.OrderID)
-		delete(l.pendingOrders, current.OrderID)
-		if current.VenueOrderID != 0 {
-			delete(l.venueOrders, current.VenueOrderID)
-		}
-		ownedOrder.EachFill(func(execution *fill.Fill) error {
-			var observed = execution.State()
-			delete(l.fills, observed.VenueTID)
-			delete(l.pendingFills, observed.VenueTID)
-			return nil
-		})
-		return nil
-	})
+func tradeSummary(current *trade.Trade) Summary {
+	if current == nil {
+		return Summary{}
+	}
+	return Summary{
+		RealizedPnL:   current.RealizedPnL,
+		UnrealizedPnL: current.UnrealizedPnL,
+		GrossPnL:      current.GrossPnL,
+		Fees:          current.Fees,
+		NetPnL:        current.NetPnL,
+	}
+}
+
+func (l *Ledger) ready() bool {
+	return l.started && !l.stopped
 }
 
 // Section 3 - Generic Helpers
-
-func cloneTrades(source map[uint64]*trade.Trade) map[uint64]*trade.Trade {
-	var cloned = make(map[uint64]*trade.Trade, len(source))
-	for id, owned := range source {
-		cloned[id] = owned.Clone()
-	}
-	return cloned
-}
-
-func indexCLOIDs(trades map[uint64]*trade.Trade) map[string]*order.Order {
-	var indexed = make(map[string]*order.Order)
-	for _, ownedTrade := range trades {
-		ownedTrade.EachOrder(func(owned *order.Order) error {
-			var state = owned.ReconState()
-			indexed[state.CLOID] = owned
-			return nil
-		})
-	}
-	return indexed
-}
 
 func sortedSet(values map[uint64]struct{}) []uint64 {
 	var ids = make([]uint64, 0, len(values))
 	for id := range values {
 		ids = append(ids, id)
 	}
-	sort.Slice(ids, func(left int, right int) bool {
-		return ids[left] < ids[right]
-	})
+	sort.Slice(ids, func(left int, right int) bool { return ids[left] < ids[right] })
 	return ids
 }
 
-func tradeIsActive(status trade.Status) bool {
-	return status != trade.Closed && status != trade.Canceled && status != trade.Error
+func selectedIDs[T any](
+	values map[uint64]T,
+	dirty map[uint64]struct{},
+	all bool,
+) []uint64 {
+	if all {
+		var ids = make([]uint64, 0, len(values))
+		for id := range values {
+			ids = append(ids, id)
+		}
+		return ids
+	}
+	var ids = make([]uint64, 0, len(dirty))
+	for id := range dirty {
+		ids = append(ids, id)
+	}
+	return ids
 }

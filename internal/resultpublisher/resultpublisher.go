@@ -20,7 +20,6 @@ func Publish(path string, input report.Input, report report.Run) error {
 	if path == "" {
 		return fmt.Errorf("publish result: path is empty")
 	}
-	var domainPersisted bool
 	var partial = path + ".partial"
 	for _, cycle := range input.Controller.Cycles {
 		for _, executorResult := range cycle.Executors {
@@ -31,12 +30,6 @@ func Publish(path string, input report.Input, report report.Run) error {
 			if current.Nuubot.ResultPath != path {
 				return fmt.Errorf("publish result: Accounts use different result paths")
 			}
-			if current.PersistMode == "max" {
-				if current.Nuubot.RuntimePath != partial {
-					return fmt.Errorf("publish result: Account uses invalid runtime path")
-				}
-				domainPersisted = true
-			}
 		}
 	}
 
@@ -46,13 +39,7 @@ func Publish(path string, input report.Input, report report.Run) error {
 		return fmt.Errorf("publish result: prepare directory: %v", err)
 	}
 
-	// prepare temporary result path
-	if !domainPersisted {
-		err = os.Remove(partial)
-		if err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("publish result: clear partial file: %v", err)
-		}
-	}
+	// retain domain Store tables in the fresh Backtest runtime database
 	var published = false
 	defer func() {
 		if !published {
@@ -162,7 +149,6 @@ func publishResult(
 			reentry_expected_pnl TEXT NOT NULL,
 			intended_action TEXT NOT NULL,
 			current_trade_id INTEGER NOT NULL,
-			current_trade_no INTEGER NOT NULL,
 			current_trade_status TEXT NOT NULL,
 			status TEXT NOT NULL,
 			initial_submission_completed INTEGER NOT NULL,
@@ -325,7 +311,7 @@ func publishResult(
 				_, err = tx.Exec(
 					`INSERT INTO grid_level_result VALUES (
 						?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-						?, ?, ?, ?, ?, ?, ?, ?
+						?, ?, ?, ?, ?, ?, ?
 					)`,
 					cycle.CycleNumber,
 					current.ID,
@@ -345,7 +331,6 @@ func publishResult(
 					level.ReentryExpectedPnL.String(),
 					level.IntendedAction,
 					level.CurrentTradeID,
-					level.CurrentTradeNo,
 					level.CurrentTradeStatus,
 					level.Status,
 					level.InitialSubmissionCompleted,
@@ -538,8 +523,8 @@ func publishTelemetryEvents(transaction *sql.Tx, input report.Input) error {
 				fmt.Sprint(accountResult.Ledger.ID),
 				accountResult.Name,
 				map[string]any{
-					"fills_through_ms": accountResult.Ledger.FillsThroughMS,
-					"last_recon_ms":    accountResult.Ledger.LastReconMS,
+					"fills_through_ms": accountResult.Snapshot.ObservedMS,
+					"last_recon_ms":    accountResult.Snapshot.ObservedMS,
 					"trades":           accountResult.Ledger.Trades,
 				},
 			)

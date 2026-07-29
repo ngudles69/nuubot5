@@ -35,9 +35,9 @@ pending -> canceled
 pending/open/closing -> error
 ```
 
-`closed`, `canceled`, and `error` are terminal.
+Trade status is derived from the current Order and Fill snapshots.
 
-Terminal Trade values never reopen.
+A later Exchange snapshot may revise a previously closed Trade.
 
 ## Responsibilities
 
@@ -47,7 +47,7 @@ Terminal Trade values never reopen.
 - Recalculate structure only after changed Order or Fill evidence.
 - Recalculate open exposure from stored Trade state at the current mark.
 - Derive status from Fill and active Order evidence.
-- Lock final values when terminal.
+- Recalculate current state when synchronized evidence changes.
 
 ## PnL
 
@@ -110,4 +110,4 @@ Orders remain separate rows linked by `trade_id`. Fills remain separate rows lin
 - Closing Fills calculate gross realized PnL.
 - Fees reduce net PnL once.
 - Over-closing Fill batches fail before mutation.
-- Terminal Trades cannot reopen.
+- Later synchronized evidence can revise a previously closed Trade snapshot.

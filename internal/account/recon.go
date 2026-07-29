@@ -2,16 +2,17 @@ package account
 
 import (
 	"fmt"
-	"slices"
+	"sort"
 	"time"
 
 	"github.com/shopspring/decimal"
 
+	"nuubot/internal/account/fill"
 	"nuubot/internal/account/ledger"
 	"nuubot/internal/account/order"
 	"nuubot/internal/hyperliquid"
 	"nuubot/internal/market"
-	"nuubot/internal/simulator"
+	"nuubot/internal/venue"
 )
 
 const feeRepairWindowMS = 1000
@@ -20,16 +21,17 @@ type reconAttempt struct {
 	nowMS              uint64
 	started            time.Time
 	stage              string
-	orders             []ledger.OrderEvidence
+	orders             []ledger.OrderUpdate
 	orderStatusQueries int
-	fills              []ledger.FillEvidence
+	fills              []fill.Fill
+	deferredFills      []fill.Fill
 	fillQueries        []FillQueryTelemetry
-	fillChanges        []ledger.FillChange
+	oidSearchOrders    int
+	oidSearchFills     int
 	pendingOrders      int
 	pendingFills       int
 	accountState       hyperliquid.AccountState
 	accountRaw         string
-	ledgerAttempt      *ledger.ReconAttempt
 	ledgerSummary      ledger.Summary
 	snapshot           Snapshot
 }
@@ -47,27 +49,39 @@ func (a *Account) Init(cfg Config) error {
 		return err
 	}
 
-	// Step 3: validate persistence mode
-	err = a.validatePersistence()
-	if err != nil {
-		return err
-	}
-
-	// Step 4: initialize Ledger with persistence mode
+	// Step 3: initialize Ledger
 	err = a.initializeLedger()
 	if err != nil {
 		return err
 	}
 
-	// Step 5: initialize Venue with persistence mode
+	// Step 4: initialize Store
+	if cfg.PersistMode == "max" {
+		a.store, err = openStore(cfg.Nuubot.RuntimePath)
+		if err != nil {
+			a.ledger.Stop()
+			return err
+		}
+	}
+
+	// Step 5: initialize Venue
 	err = a.initializeVenue()
 	if err != nil {
+		if a.store != nil {
+			a.store.close()
+		}
 		a.ledger.Stop()
 		return err
 	}
 
 	// Step 6: initialize Account
 	a.initializeAccount()
+	if err = a.persist(false); err != nil {
+		a.venue.Stop()
+		a.store.close()
+		a.ledger.Stop()
+		return err
+	}
 	return nil
 }
 
@@ -93,7 +107,7 @@ func (a *Account) Reconcile(nowMS uint64, forced bool) (Snapshot, bool, uint64, 
 }
 
 func (a *Account) reconcile(nowMS uint64, forced bool) (Snapshot, bool, error) {
-	// Step 1: prepare attempt
+	// Step 1: prepare reconciliation
 	var attempt, skipped, err = a.prepareRecon(nowMS, forced)
 	if err != nil || skipped {
 		return a.finalizeRecon(attempt, err)
@@ -117,37 +131,43 @@ func (a *Account) reconcile(nowMS uint64, forced bool) (Snapshot, bool, error) {
 		return a.finalizeRecon(attempt, err)
 	}
 
-	// Step 5: update Fill records
-	err = a.updateFillRecords(attempt)
+	// Step 5 - Update Fill Records
+	attempt.deferredFills, err = a.updateFillRecords(attempt, attempt.fills)
 	if err != nil {
 		return a.finalizeRecon(attempt, err)
 	}
 
-	// Step 6: update Order records
-	err = a.updateOrderRecords(attempt)
+	// Step 6 - Update Order Records
+	err = a.updateOrderRecords(attempt, attempt.orders)
 	if err != nil {
 		return a.finalizeRecon(attempt, err)
 	}
 
-	// Step 7: update Trade records
+	// Step 7 - Search Fills by Updated Order OIDs
+	err = a.searchFillOIDs(attempt)
+	if err != nil {
+		return a.finalizeRecon(attempt, err)
+	}
+
+	// Step 8 - Update Trade Records
 	err = a.updateTradeRecords(attempt)
 	if err != nil {
 		return a.finalizeRecon(attempt, err)
 	}
 
-	// Step 8: update Account Snapshot
+	// Step 9 - Update Account Snapshot
 	err = a.updateAccountSnapshot(attempt)
 	if err != nil {
 		return a.finalizeRecon(attempt, err)
 	}
 
-	// Step 9: persist and publish
-	err = a.persistAndPublishRecon(attempt)
+	// Step 10 - Persist and Publish
+	err = a.publishRecon(attempt)
 	if err != nil {
 		return a.finalizeRecon(attempt, err)
 	}
 
-	// Step 10: finalize Recon outcome and return
+	// Step 11 - Finalize Recon Outcome and Return
 	return a.finalizeRecon(attempt, nil)
 }
 
@@ -170,14 +190,18 @@ func (a *Account) recordReconOutcome(refreshed bool, err error) {
 }
 
 func (a *Account) bindInputs(cfg Config) {
-	a.log = cfg.Nuubot.Log
 	a.config = cfg
+	if cfg.Nuubot != nil {
+		a.log = cfg.Nuubot.Log
+	}
 }
 
 func (a *Account) validateIdentity() error {
 	var cfg = a.config
-	if a.log == nil || cfg.Nuubot.MarketData == nil || cfg.LedgerID == 0 ||
-		cfg.CycleNumber <= 0 || cfg.ExecutorNumber <= 0 || cfg.Name == "" || cfg.Symbol == "" {
+	if cfg.Nuubot == nil || a.log == nil || cfg.Nuubot.MarketData == nil ||
+		cfg.SweepID == 0 || cfg.BotID == 0 || cfg.LedgerID == 0 ||
+		cfg.CycleNumber <= 0 || cfg.ExecutorNumber <= 0 ||
+		cfg.Name == "" || cfg.Symbol == "" {
 		return fmt.Errorf("initialize Account: complete identity is required")
 	}
 	if cfg.Venue != "simulator" || cfg.Network != "simnet" {
@@ -192,15 +216,8 @@ func (a *Account) validateIdentity() error {
 		!cfg.EquityUSDC.IsPositive() {
 		return fmt.Errorf("initialize Account: notional floor and equity must be positive")
 	}
-	return nil
-}
-
-func (a *Account) validatePersistence() error {
-	if a.config.PersistMode != ledger.None && a.config.PersistMode != ledger.Max {
-		return fmt.Errorf(
-			"initialize Account: invalid persistence mode %q",
-			a.config.PersistMode,
-		)
+	if cfg.PersistMode != "none" && cfg.PersistMode != "max" {
+		return fmt.Errorf("initialize Account: invalid persistence mode")
 	}
 	return nil
 }
@@ -208,14 +225,15 @@ func (a *Account) validatePersistence() error {
 func (a *Account) initializeLedger() error {
 	var cfg = a.config
 	var err = a.ledger.Init(ledger.Config{
+		SweepID:        cfg.SweepID,
+		BotID:          cfg.BotID,
 		ID:             cfg.LedgerID,
 		CycleNumber:    cfg.CycleNumber,
 		ExecutorNumber: cfg.ExecutorNumber,
+		Venue:          cfg.Venue,
 		Account:        cfg.Name,
 		Network:        cfg.Network,
 		Symbol:         cfg.Symbol,
-		PersistMode:    cfg.PersistMode,
-		Path:           cfg.Nuubot.RuntimePath,
 	})
 	if err != nil {
 		return fmt.Errorf("initialize Account: %w", err)
@@ -225,16 +243,12 @@ func (a *Account) initializeLedger() error {
 
 func (a *Account) initializeVenue() error {
 	var cfg = a.config
-	var simulated simulator.Simulator
-	var err = simulated.Init(simulator.Config{
+	var err = a.venue.Init(venue.Config{
 		MarketData: cfg.Nuubot.MarketData,
 		MarketKey: market.Key{
 			Venue:   cfg.Venue,
 			Network: cfg.Network,
 			Symbol:  cfg.Symbol,
-		},
-		OnChange: func() {
-			a.dirty = true
 		},
 		Account:     cfg.Name,
 		Asset:       int(cfg.Nuubot.Meta.AssetID),
@@ -248,7 +262,6 @@ func (a *Account) initializeVenue() error {
 	if err != nil {
 		return fmt.Errorf("initialize Account: %w", err)
 	}
-	a.venue = &simulated
 	return nil
 }
 
@@ -257,7 +270,7 @@ func (a *Account) initializeAccount() {
 	a.started = true
 }
 
-// Section 2.2 - Reconciliation Pipeline
+// Section 2.2 - Reconciliation
 
 func (a *Account) prepareRecon(nowMS uint64, forced bool) (*reconAttempt, bool, error) {
 	var attempt = &reconAttempt{
@@ -265,10 +278,13 @@ func (a *Account) prepareRecon(nowMS uint64, forced bool) (*reconAttempt, bool, 
 		started: time.Now(),
 		stage:   "prepare",
 	}
-	if !a.started || a.stopped || nowMS == 0 {
-		return attempt, false, fmt.Errorf("invalid state or timestamp")
+	if !a.started || a.stopped {
+		return attempt, false, fmt.Errorf("reconcile Account: invalid lifecycle state")
 	}
-	if a.lastReconMS > nowMS {
+	if nowMS == 0 {
+		return attempt, false, fmt.Errorf("reconcile Account: timestamp is required")
+	}
+	if a.lastReconMS != 0 && nowMS < a.lastReconMS {
 		return attempt, false, fmt.Errorf("recon clock moved backward")
 	}
 	attempt.pendingOrders, attempt.pendingFills = a.ledger.PendingCounts()
@@ -299,61 +315,45 @@ func (a *Account) downloadOrderEvidence(attempt *reconAttempt) error {
 	if err != nil {
 		return err
 	}
-	var openCLOIDs = make(map[string]uint64, len(openOrders))
-	var openOIDs = make(map[uint64]string, len(openOrders))
-	attempt.orders = make([]ledger.OrderEvidence, 0, len(openOrders))
+
+	var active = a.ledger.ActiveOrders()
+	var byCLOID = make(map[string]order.Order, len(active))
+	var byOID = make(map[uint64]order.Order, len(active))
+	for _, owned := range active {
+		byCLOID[owned.CLOID] = owned
+		if owned.VenueOrderID != 0 {
+			byOID[owned.VenueOrderID] = owned
+		}
+	}
+
+	var observed = make(map[uint64]struct{}, len(active))
+	attempt.orders = make([]ledger.OrderUpdate, 0, len(active))
 	for _, current := range openOrders {
-		var evidence ledger.OrderEvidence
-		evidence, err = a.orderEvidence(current, order.Open, current.TimestampMS, "")
+		var owned, found, resolveErr = resolveActiveOrder(current, byCLOID, byOID)
+		if resolveErr != nil {
+			return resolveErr
+		}
+		if !found {
+			continue
+		}
+		if _, duplicate := observed[owned.OrderID]; duplicate {
+			return fmt.Errorf("download Order evidence: duplicate Order %d", owned.OrderID)
+		}
+		var update ledger.OrderUpdate
+		update, err = a.orderUpdate(owned, current, "open", order.Open, current.TimestampMS, "")
 		if err != nil {
 			return err
 		}
-		if current.CLOID != "" {
-			var _, exists = openCLOIDs[current.CLOID]
-			if exists {
-				return fmt.Errorf("download Order evidence: duplicate cloid %s", current.CLOID)
-			}
-			openCLOIDs[current.CLOID] = current.VenueOrderID
-		}
-		if current.VenueOrderID != 0 {
-			var _, exists = openOIDs[current.VenueOrderID]
-			if exists {
-				return fmt.Errorf(
-					"download Order evidence: duplicate Venue OID %d",
-					current.VenueOrderID,
-				)
-			}
-			openOIDs[current.VenueOrderID] = current.CLOID
-		}
-		attempt.orders = append(attempt.orders, evidence)
+		attempt.orders = append(attempt.orders, update)
+		observed[owned.OrderID] = struct{}{}
 	}
-	for _, active := range a.ledger.ActiveOrders() {
-		var venueOID, open = openCLOIDs[active.CLOID]
-		if open {
-			if active.VenueOrderID != 0 && venueOID != 0 &&
-				venueOID != active.VenueOrderID {
-				return fmt.Errorf(
-					"download Order evidence: cloid %s changed Venue OID",
-					active.CLOID,
-				)
-			}
+
+	for _, owned := range active {
+		if _, found := observed[owned.OrderID]; found {
 			continue
 		}
-		if active.VenueOrderID != 0 {
-			var venueCLOID string
-			venueCLOID, open = openOIDs[active.VenueOrderID]
-			if open {
-				if venueCLOID != "" && venueCLOID != active.CLOID {
-					return fmt.Errorf(
-						"download Order evidence: Venue OID %d changed CLOID",
-						active.VenueOrderID,
-					)
-				}
-				continue
-			}
-		}
 		attempt.orderStatusQueries++
-		payload, err = a.venue.OrderStatus(a.config.Name, active.CLOID)
+		payload, err = a.venue.OrderStatus(a.config.Name, owned.CLOID)
 		if err != nil {
 			return err
 		}
@@ -363,41 +363,31 @@ func (a *Account) downloadOrderEvidence(attempt *reconAttempt) error {
 			return err
 		}
 		if current.Status == "unknownOid" {
-			if active.VenueOrderID == 0 &&
-				(active.Status == order.Created || active.Status == order.Submitted) {
-				attempt.orders = append(attempt.orders, ledger.OrderEvidence{
-					CLOID:        active.CLOID,
-					Status:       order.Error,
-					RejectReason: "Venue submission is absent",
-					TimestampMS:  attempt.nowMS,
-					Raw:          current.Raw,
-				})
-				continue
-			}
-			return fmt.Errorf("download Order evidence: unknown cloid %s", active.CLOID)
+			attempt.orders = append(attempt.orders, ledger.OrderUpdate{
+				OrderID: owned.OrderID,
+				Update: order.Update{
+					VenueOrderID: owned.VenueOrderID,
+					VenueStatus:  current.Status,
+					Status:       owned.Status,
+					UpdatedMS:    attempt.nowMS,
+					RawJSON:      current.Raw,
+				},
+			})
+			continue
 		}
 		if current.Order == nil {
 			return fmt.Errorf("download Order evidence: exact Order is absent")
-		}
-		if current.Order.CLOID != "" && current.Order.CLOID != active.CLOID {
-			return fmt.Errorf(
-				"download Order evidence: exact Order changed CLOID",
-			)
-		}
-		if active.VenueOrderID != 0 && current.Order.VenueOrderID != 0 &&
-			current.Order.VenueOrderID != active.VenueOrderID {
-			return fmt.Errorf(
-				"download Order evidence: exact Order changed Venue OID",
-			)
 		}
 		var status order.Status
 		status, err = venueOrderStatus(current.OrderStatus)
 		if err != nil {
 			return err
 		}
-		var evidence ledger.OrderEvidence
-		evidence, err = a.orderEvidence(
+		var update ledger.OrderUpdate
+		update, err = a.orderUpdate(
+			owned,
 			*current.Order,
+			current.OrderStatus,
 			status,
 			current.StatusTimestamp,
 			current.Raw,
@@ -405,19 +395,19 @@ func (a *Account) downloadOrderEvidence(attempt *reconAttempt) error {
 		if err != nil {
 			return err
 		}
-		attempt.orders = append(attempt.orders, evidence)
+		attempt.orders = append(attempt.orders, update)
 	}
 	return nil
 }
 
 func (a *Account) downloadFillEvidence(attempt *reconAttempt) error {
 	attempt.stage = "download_fills"
-	var merged = make(map[uint64]ledger.FillEvidence)
-	var observed = make(map[uint64]ledger.FillEvidence)
+	var merged = make(map[uint64]fill.Fill)
+	var observed = make(map[uint64]fill.Fill)
 	var err = a.pullFillEvidence(
 		attempt,
 		"discovery",
-		a.ledger.FillsThroughMS(),
+		a.lastReconMS,
 		attempt.nowMS,
 		merged,
 		observed,
@@ -449,7 +439,7 @@ func (a *Account) downloadFillEvidence(attempt *reconAttempt) error {
 			return err
 		}
 	}
-	attempt.fills = sortedFillEvidence(merged)
+	attempt.fills = sortedFills(merged)
 	return nil
 }
 
@@ -458,8 +448,8 @@ func (a *Account) pullFillEvidence(
 	kind string,
 	startMS uint64,
 	endMS uint64,
-	merged map[uint64]ledger.FillEvidence,
-	observed map[uint64]ledger.FillEvidence,
+	merged map[uint64]fill.Fill,
+	observed map[uint64]fill.Fill,
 ) error {
 	var started = time.Now()
 	var payload, err = a.venue.Fills(a.config.Name, startMS, endMS)
@@ -479,8 +469,8 @@ func (a *Account) pullFillEvidence(
 		DurationMS: time.Since(started).Milliseconds(),
 	}
 	for _, row := range rows {
-		var current ledger.FillEvidence
-		current, err = a.fillEvidence(row)
+		var current fill.Fill
+		current, err = a.venueFill(row)
 		if err != nil {
 			query.Error = err.Error()
 			attempt.fillQueries = append(attempt.fillQueries, query)
@@ -488,8 +478,8 @@ func (a *Account) pullFillEvidence(
 		}
 		var previous, seen = observed[current.VenueTID]
 		if seen {
-			var combined ledger.FillEvidence
-			combined, err = mergeFillEvidence(previous, current)
+			var combined fill.Fill
+			combined, err = mergeFill(previous, current)
 			if err != nil {
 				query.Error = err.Error()
 				attempt.fillQueries = append(attempt.fillQueries, query)
@@ -499,7 +489,7 @@ func (a *Account) pullFillEvidence(
 			merged[current.VenueTID] = combined
 			query.FillsUnchanged++
 			var existing, exists = a.ledger.Fill(current.VenueTID)
-			if exists && !existing.HasFee {
+			if exists && !existing.HasFee() {
 				query.PendingMatched++
 			}
 			continue
@@ -508,10 +498,10 @@ func (a *Account) pullFillEvidence(
 		switch {
 		case !exists:
 			query.FillsAdded++
-		case !existing.HasFee && current.Fee != nil:
+		case !existing.HasFee() && current.Fee != nil:
 			query.FeesEnriched++
 			query.PendingMatched++
-		case !existing.HasFee:
+		case !existing.HasFee():
 			query.FillsUnchanged++
 			query.PendingMatched++
 		default:
@@ -544,49 +534,143 @@ func (a *Account) downloadAccountState(attempt *reconAttempt) error {
 	return nil
 }
 
-func (a *Account) updateFillRecords(attempt *reconAttempt) error {
+func (a *Account) updateOrderRecords(
+	attempt *reconAttempt,
+	updates []ledger.OrderUpdate,
+) error {
+	attempt.stage = "update_orders"
+	if len(updates) == 0 {
+		return nil
+	}
+	return a.ledger.UpdateOrders(updates)
+}
+
+func (a *Account) updateFillRecords(
+	attempt *reconAttempt,
+	fills []fill.Fill,
+) ([]fill.Fill, error) {
 	attempt.stage = "update_fills"
-	var err = enrichFillCLOIDs(attempt.orders, attempt.fills)
+	var deferredFills = make([]fill.Fill, 0)
+	for _, execution := range fills {
+		var previous, existed = a.ledger.Fill(execution.VenueTID)
+		var changed, deferred, err = a.ledger.UpdateReconFill(execution)
+		if err != nil {
+			return nil, err
+		}
+		if deferred {
+			deferredFills = append(deferredFills, execution)
+			continue
+		}
+		if !changed {
+			continue
+		}
+		if existed && !previous.HasFee() && execution.Fee != nil {
+			a.log.Info(fmt.Sprintf(
+				"fill fee enriched venue=simulator network=%s account=%s symbol=%s venue_tid=%d previous=missing fee=%s",
+				a.config.Network,
+				a.config.Name,
+				a.config.Symbol,
+				execution.VenueTID,
+				execution.Fee,
+			))
+			continue
+		}
+		a.log.Info(fmt.Sprintf(
+			"fill added venue=simulator network=%s account=%s symbol=%s venue_tid=%d has_fee=%t",
+			a.config.Network,
+			a.config.Name,
+			a.config.Symbol,
+			execution.VenueTID,
+			execution.Fee != nil,
+		))
+	}
+	return deferredFills, nil
+}
+
+func (a *Account) searchFillOIDs(attempt *reconAttempt) error {
+	attempt.stage = "oid_search"
+	var matched, orderIDs, unmatched, err = a.ledger.ReconOIDSearch(attempt.deferredFills)
+	attempt.oidSearchOrders = len(orderIDs)
+	attempt.oidSearchFills = len(matched)
+	if attempt.oidSearchFills == 0 {
+		a.log.Info("Recon-OIDSearch found nothing")
+	} else {
+		a.log.Info(fmt.Sprintf(
+			"Recon-OIDSearch found orders=%d fills=%d",
+			attempt.oidSearchOrders,
+			attempt.oidSearchFills,
+		))
+	}
 	if err != nil {
 		return err
 	}
-	var staged *ledger.ReconAttempt
-	staged, err = a.ledger.PrepareRecon(ledger.ReconInput{
-		FillsThroughMS:  attempt.nowMS,
-		ObservedMS:      attempt.nowMS,
-		AccountStateRaw: attempt.accountRaw,
-	})
-	if err != nil {
-		return err
+	if len(matched) != 0 {
+		var deferredAgain []fill.Fill
+		deferredAgain, err = a.updateFillRecords(attempt, matched)
+		if err != nil {
+			attempt.stage = "oid_search"
+			return err
+		}
+		if len(deferredAgain) != 0 {
+			attempt.stage = "oid_search"
+			return fmt.Errorf("Recon-OIDSearch matched Fills remained unresolved")
+		}
+		var updates []ledger.OrderUpdate
+		updates, err = selectOrderUpdates(attempt.orders, orderIDs)
+		if err != nil {
+			attempt.stage = "oid_search"
+			return err
+		}
+		err = a.updateOrderRecords(attempt, updates)
+		if err != nil {
+			attempt.stage = "oid_search"
+			return err
+		}
 	}
-	attempt.ledgerAttempt = staged
-	err = a.ledger.UpdateReconFills(staged, attempt.fills)
-	if err != nil {
-		return err
+	attempt.stage = "oid_search"
+	if unmatched != 0 {
+		return fmt.Errorf("Recon-OIDSearch left %d Fills unmatched", unmatched)
 	}
-	attempt.fillChanges = a.ledger.ReconFillChanges(staged)
+	if len(matched) != 0 {
+		return fmt.Errorf("Recon-OIDSearch found Fills after Order updates")
+	}
 	return nil
 }
 
-func (a *Account) updateOrderRecords(attempt *reconAttempt) error {
-	attempt.stage = "update_orders"
-	return a.ledger.UpdateReconOrders(attempt.ledgerAttempt, attempt.orders)
+func selectOrderUpdates(
+	updates []ledger.OrderUpdate,
+	orderIDs []uint64,
+) ([]ledger.OrderUpdate, error) {
+	var wanted = make(map[uint64]struct{}, len(orderIDs))
+	for _, orderID := range orderIDs {
+		wanted[orderID] = struct{}{}
+	}
+	var selected = make([]ledger.OrderUpdate, 0, len(wanted))
+	for _, update := range updates {
+		if _, found := wanted[update.OrderID]; !found {
+			continue
+		}
+		selected = append(selected, update)
+		delete(wanted, update.OrderID)
+	}
+	if len(wanted) != 0 {
+		return nil, fmt.Errorf(
+			"Recon-OIDSearch missing %d Order updates",
+			len(wanted),
+		)
+	}
+	return selected, nil
 }
 
 func (a *Account) updateTradeRecords(attempt *reconAttempt) error {
 	attempt.stage = "update_trades"
-	return a.ledger.UpdateReconTrades(attempt.ledgerAttempt, a.markPrice())
+	return a.ledger.UpdateMark(a.markPrice())
 }
 
 func (a *Account) updateAccountSnapshot(attempt *reconAttempt) error {
 	attempt.stage = "update_account"
-	var current, err = a.ledger.ReconSummary(attempt.ledgerAttempt)
-	if err != nil {
-		return err
-	}
-	var positionSize decimal.Decimal
-	var entryPrice decimal.Decimal
-	positionSize, entryPrice, err = accountPosition(
+	var current = a.ledger.Summary()
+	var positionSize, entryPrice, err = accountPosition(
 		attempt.accountState,
 		a.config.Symbol,
 	)
@@ -621,40 +705,12 @@ func (a *Account) updateAccountSnapshot(attempt *reconAttempt) error {
 	return nil
 }
 
-func (a *Account) persistAndPublishRecon(attempt *reconAttempt) error {
-	attempt.stage = "persist_publish"
-	var err = a.ledger.CommitRecon(attempt.ledgerAttempt)
-	if err != nil {
-		return err
-	}
+func (a *Account) publishRecon(attempt *reconAttempt) error {
+	attempt.stage = "publish"
+	a.ledger.UpdateAccountPayload(attempt.accountRaw)
 	a.generation = attempt.snapshot.Generation
 	a.lastSnapshot = attempt.snapshot
-	a.logFillChanges(attempt.fillChanges)
-	return nil
-}
-
-func (a *Account) logFillChanges(changes []ledger.FillChange) {
-	for _, change := range changes {
-		if change.Kind == ledger.FillAdded {
-			a.log.Info(fmt.Sprintf(
-				"fill added venue=simulator network=%s account=%s symbol=%s venue_tid=%d has_fee=%t",
-				a.config.Network,
-				a.config.Name,
-				a.config.Symbol,
-				change.VenueTID,
-				change.HasFee,
-			))
-		} else if change.Kind == ledger.FillFeeEnriched {
-			a.log.Info(fmt.Sprintf(
-				"fill fee enriched venue=simulator network=%s account=%s symbol=%s venue_tid=%d previous=missing fee=%s",
-				a.config.Network,
-				a.config.Name,
-				a.config.Symbol,
-				change.VenueTID,
-				change.Fee,
-			))
-		}
-	}
+	return a.persist(false)
 }
 
 func (a *Account) finalizeRecon(
@@ -672,6 +728,8 @@ func (a *Account) finalizeRecon(
 		Fills:               len(attempt.fills),
 		PendingOrdersBefore: attempt.pendingOrders,
 		PendingFillsBefore:  attempt.pendingFills,
+		OIDSearchOrders:     attempt.oidSearchOrders,
+		OIDSearchFills:      attempt.oidSearchFills,
 		FillQueries:         append([]FillQueryTelemetry(nil), attempt.fillQueries...),
 	}
 	if err != nil {
@@ -702,119 +760,135 @@ func (a *Account) finalizeRecon(
 
 // Section 2.3 - Venue Evidence
 
-func (a *Account) orderEvidence(
+func resolveActiveOrder(
 	current hyperliquid.OpenOrder,
+	byCLOID map[string]order.Order,
+	byOID map[uint64]order.Order,
+) (order.Order, bool, error) {
+	var byClient, hasClient = byCLOID[current.CLOID]
+	var byVenue, hasVenue = byOID[current.VenueOrderID]
+	if hasClient && hasVenue && byClient.OrderID != byVenue.OrderID {
+		return order.Order{}, false, fmt.Errorf(
+			"download Order evidence: CLOID and Venue OID resolve different Orders",
+		)
+	}
+	if hasClient {
+		return byClient, true, nil
+	}
+	if hasVenue {
+		return byVenue, true, nil
+	}
+	return order.Order{}, false, nil
+}
+
+func (a *Account) orderUpdate(
+	owned order.Order,
+	current hyperliquid.OpenOrder,
+	venueStatus string,
 	status order.Status,
 	timestampMS uint64,
 	raw string,
-) (ledger.OrderEvidence, error) {
+) (ledger.OrderUpdate, error) {
 	if current.Coin != a.config.Symbol ||
-		(current.Side != order.Buy && current.Side != order.Sell) ||
-		(current.CLOID == "" && current.VenueOrderID == 0) || timestampMS == 0 {
-		return ledger.OrderEvidence{}, fmt.Errorf(
+		current.Side != owned.Side ||
+		(current.CLOID == "" && current.VenueOrderID == 0) ||
+		timestampMS == 0 {
+		return ledger.OrderUpdate{}, fmt.Errorf(
 			"download Order evidence: invalid official identity",
 		)
 	}
-	var price, err = decimal.NewFromString(current.LimitPrice)
-	if err != nil || !price.IsPositive() {
-		return ledger.OrderEvidence{}, fmt.Errorf(
-			"download Order evidence: invalid price",
+	if current.CLOID != "" && current.CLOID != owned.CLOID {
+		return ledger.OrderUpdate{}, fmt.Errorf(
+			"download Order evidence: changed CLOID",
 		)
 	}
-	var size decimal.Decimal
-	size, err = decimal.NewFromString(current.Size)
-	if err != nil || !size.IsPositive() {
-		return ledger.OrderEvidence{}, fmt.Errorf(
-			"download Order evidence: invalid size %q",
-			current.Size,
+	if owned.VenueOrderID != 0 && current.VenueOrderID != 0 &&
+		current.VenueOrderID != owned.VenueOrderID {
+		return ledger.OrderUpdate{}, fmt.Errorf(
+			"download Order evidence: changed Venue OID",
 		)
 	}
 	if raw == "" {
-		var payload []byte
-		payload, err = hyperliquid.Encode(current)
+		var payload, err = hyperliquid.Encode(current)
 		if err != nil {
-			return ledger.OrderEvidence{}, err
+			return ledger.OrderUpdate{}, err
 		}
 		raw = string(payload)
 	}
-	return ledger.OrderEvidence{
-		CLOID:        current.CLOID,
-		VenueOrderID: current.VenueOrderID,
-		Status:       status,
-		TimestampMS:  timestampMS,
-		Raw:          raw,
+	return ledger.OrderUpdate{
+		OrderID: owned.OrderID,
+		Update: order.Update{
+			VenueOrderID: current.VenueOrderID,
+			VenueStatus:  venueStatus,
+			Status:       status,
+			UpdatedMS:    timestampMS,
+			RawJSON:      raw,
+		},
 	}, nil
 }
 
-func (a *Account) fillEvidence(
-	execution hyperliquid.Fill,
-) (ledger.FillEvidence, error) {
+func (a *Account) venueFill(execution hyperliquid.Fill) (fill.Fill, error) {
 	if execution.Coin != a.config.Symbol ||
 		(execution.Side != order.Buy && execution.Side != order.Sell) ||
 		execution.Direction == "" {
-		return ledger.FillEvidence{}, fmt.Errorf(
+		return fill.Fill{}, fmt.Errorf(
 			"download Fill evidence: invalid official identity",
 		)
 	}
 	var price, err = decimal.NewFromString(execution.Price)
 	if err != nil || !price.IsPositive() {
-		return ledger.FillEvidence{}, fmt.Errorf(
-			"download Fill evidence: invalid price",
-		)
+		return fill.Fill{}, fmt.Errorf("download Fill evidence: invalid price")
 	}
 	var quantity decimal.Decimal
 	quantity, err = decimal.NewFromString(execution.Size)
 	if err != nil || !quantity.IsPositive() {
-		return ledger.FillEvidence{}, fmt.Errorf(
-			"download Fill evidence: invalid size",
-		)
+		return fill.Fill{}, fmt.Errorf("download Fill evidence: invalid size")
 	}
 	if _, err = decimal.NewFromString(execution.StartPosition); err != nil {
-		return ledger.FillEvidence{}, fmt.Errorf(
+		return fill.Fill{}, fmt.Errorf(
 			"download Fill evidence: invalid start position",
 		)
 	}
 	if _, err = decimal.NewFromString(execution.ClosedPnL); err != nil {
-		return ledger.FillEvidence{}, fmt.Errorf(
+		return fill.Fill{}, fmt.Errorf(
 			"download Fill evidence: invalid closed PnL",
 		)
 	}
 	var fee *decimal.Decimal
 	if execution.Fee != nil {
 		if execution.FeeToken == "" {
-			return ledger.FillEvidence{}, fmt.Errorf(
+			return fill.Fill{}, fmt.Errorf(
 				"download Fill evidence: missing fee token",
 			)
 		}
 		var value decimal.Decimal
 		value, err = decimal.NewFromString(*execution.Fee)
 		if err != nil {
-			return ledger.FillEvidence{}, fmt.Errorf(
-				"download Fill evidence: invalid fee",
-			)
+			return fill.Fill{}, fmt.Errorf("download Fill evidence: invalid fee")
 		}
 		fee = &value
 	}
 	var raw []byte
 	raw, err = hyperliquid.Encode(execution)
 	if err != nil {
-		return ledger.FillEvidence{}, err
+		return fill.Fill{}, err
 	}
 	var liquidity = "maker"
 	if execution.Crossed {
 		liquidity = "taker"
 	}
-	return ledger.FillEvidence{
+	return fill.Fill{
 		CLOID:        execution.CLOID,
 		VenueOrderID: execution.VenueOrderID,
 		VenueTID:     execution.VenueTID,
+		Symbol:       execution.Coin,
 		Side:         execution.Side,
 		Quantity:     quantity,
 		Price:        price,
 		TimestampMS:  execution.TimestampMS,
 		Fee:          fee,
 		Liquidity:    liquidity,
-		Raw:          string(raw),
+		RawJSON:      string(raw),
 	}, nil
 }
 
@@ -824,7 +898,7 @@ func accountPosition(
 ) (decimal.Decimal, decimal.Decimal, error) {
 	var size = decimal.Zero
 	var entry = decimal.Zero
-	var found = false
+	var found bool
 	for _, current := range state.Positions {
 		if current.Symbol != symbol {
 			continue
@@ -869,61 +943,25 @@ func venueOrderStatus(value string) (order.Status, error) {
 	}
 }
 
-func enrichFillCLOIDs(
-	orders []ledger.OrderEvidence,
-	fills []ledger.FillEvidence,
-) error {
-	var cloids = make(map[uint64]string, len(orders))
-	for _, current := range orders {
-		if current.VenueOrderID == 0 || current.CLOID == "" {
-			continue
-		}
-		var _, exists = cloids[current.VenueOrderID]
-		if exists {
-			return fmt.Errorf(
-				"enrich Fill evidence: duplicate Venue OID %d",
-				current.VenueOrderID,
-			)
-		}
-		cloids[current.VenueOrderID] = current.CLOID
-	}
-	for index := range fills {
-		var current = &fills[index]
-		var value, exists = cloids[current.VenueOrderID]
-		if !exists {
-			continue
-		}
-		if current.CLOID == "" {
-			current.CLOID = value
-			continue
-		}
-		if current.CLOID != value {
-			return fmt.Errorf(
-				"enrich Fill evidence: Venue OID %d changed CLOID",
-				current.VenueOrderID,
-			)
-		}
-	}
-	return nil
-}
-
 // Section 3 - Generic Helpers
 
-func mergeFillEvidence(
-	previous ledger.FillEvidence,
-	current ledger.FillEvidence,
-) (ledger.FillEvidence, error) {
-	if previous.CLOID != current.CLOID || previous.VenueOrderID != current.VenueOrderID ||
-		previous.VenueTID != current.VenueTID || previous.Side != current.Side ||
-		!previous.Quantity.Equal(current.Quantity) || !previous.Price.Equal(current.Price) ||
+func mergeFill(previous fill.Fill, current fill.Fill) (fill.Fill, error) {
+	if previous.CLOID != current.CLOID ||
+		previous.VenueOrderID != current.VenueOrderID ||
+		previous.VenueTID != current.VenueTID ||
+		previous.Symbol != current.Symbol ||
+		previous.Side != current.Side ||
+		!previous.Quantity.Equal(current.Quantity) ||
+		!previous.Price.Equal(current.Price) ||
 		previous.TimestampMS != current.TimestampMS {
-		return ledger.FillEvidence{}, fmt.Errorf(
+		return fill.Fill{}, fmt.Errorf(
 			"merge Fill evidence: changed execution for Venue TID %d",
 			current.VenueTID,
 		)
 	}
-	if previous.Fee != nil && current.Fee != nil && !previous.Fee.Equal(*current.Fee) {
-		return ledger.FillEvidence{}, fmt.Errorf(
+	if previous.Fee != nil && current.Fee != nil &&
+		!previous.Fee.Equal(*current.Fee) {
+		return fill.Fill{}, fmt.Errorf(
 			"merge Fill evidence: changed fee for Venue TID %d",
 			current.VenueTID,
 		)
@@ -935,32 +973,28 @@ func mergeFillEvidence(
 	}
 	if merged.Liquidity == "" {
 		merged.Liquidity = current.Liquidity
-	} else if current.Liquidity != "" && merged.Liquidity != current.Liquidity {
-		return ledger.FillEvidence{}, fmt.Errorf(
+	} else if current.Liquidity != "" &&
+		merged.Liquidity != current.Liquidity {
+		return fill.Fill{}, fmt.Errorf(
 			"merge Fill evidence: changed liquidity for Venue TID %d",
 			current.VenueTID,
 		)
 	}
-	if merged.Raw == "" {
-		merged.Raw = current.Raw
-	} else if current.Raw != "" && merged.Raw != current.Raw {
-		return ledger.FillEvidence{}, fmt.Errorf(
-			"merge Fill evidence: changed raw evidence for Venue TID %d",
-			current.VenueTID,
-		)
+	if current.RawJSON != "" {
+		merged.RawJSON = current.RawJSON
 	}
 	return merged, nil
 }
 
-func sortedFillEvidence(values map[uint64]ledger.FillEvidence) []ledger.FillEvidence {
+func sortedFills(values map[uint64]fill.Fill) []fill.Fill {
 	var ids = make([]uint64, 0, len(values))
 	for id := range values {
 		ids = append(ids, id)
 	}
-	slices.Sort(ids)
-	var evidence = make([]ledger.FillEvidence, 0, len(ids))
+	sort.Slice(ids, func(left int, right int) bool { return ids[left] < ids[right] })
+	var rows = make([]fill.Fill, 0, len(ids))
 	for _, id := range ids {
-		evidence = append(evidence, values[id])
+		rows = append(rows, values[id])
 	}
-	return evidence
+	return rows
 }

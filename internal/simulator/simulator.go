@@ -27,7 +27,6 @@ const (
 type Config struct {
 	MarketData  *market.MarketData
 	MarketKey   market.Key
-	OnChange    func()
 	Account     string
 	Asset       int
 	Symbol      string
@@ -100,6 +99,8 @@ type Simulator struct {
 	ordersByCLOID    map[string]*simOrder
 	activeOrders     map[uint64]*simOrder
 	fills            []simFill
+	dirtyOrders      map[uint64]*simOrder
+	dirtyFills       map[uint64]simFill
 	currentPosition  position
 	store            *simulatorStore
 	subscription     *market.Subscription
@@ -250,7 +251,7 @@ func (s *Simulator) Init(cfg Config) error {
 	if s.started || s.stopped {
 		return fmt.Errorf("initialize simulator: invalid lifecycle state")
 	}
-	if cfg.MarketData == nil || cfg.OnChange == nil ||
+	if cfg.MarketData == nil ||
 		cfg.MarketKey != (market.Key{Venue: "simulator", Network: "simnet", Symbol: cfg.Symbol}) ||
 		cfg.Account == "" || cfg.Asset < 0 || cfg.Symbol == "" {
 		return fmt.Errorf("initialize simulator: complete official identity is required")
@@ -272,6 +273,8 @@ func (s *Simulator) Init(cfg Config) error {
 	s.nextBatchID = 1
 	s.ordersByCLOID = make(map[string]*simOrder)
 	s.activeOrders = make(map[uint64]*simOrder)
+	s.dirtyOrders = make(map[uint64]*simOrder)
+	s.dirtyFills = make(map[uint64]simFill)
 
 	// Step 3: restore durable Simulator state when configured
 	if cfg.PersistMode == "max" {
@@ -290,7 +293,7 @@ func (s *Simulator) Init(cfg Config) error {
 		if found {
 			err = s.restore(stored)
 		} else {
-			err = s.store.save(cfg, s.storedState())
+			err = s.store.save(cfg, s.storedState(true))
 		}
 		if err != nil {
 			s.store.close()
@@ -381,6 +384,7 @@ func (s *Simulator) PlaceOrders(
 		staged.orders = append(staged.orders, row)
 		staged.ordersByCLOID[row.cloid] = row
 		staged.activeOrders[row.venueOrderID] = row
+		staged.dirtyOrders[row.venueOrderID] = row
 		added = append(added, row)
 	}
 
@@ -494,6 +498,16 @@ func (s *Simulator) Stop() error {
 	s.subscription = nil
 
 	// Step 3: persist Simulator state
+	if s.config.PersistMode == "none" && s.config.Path != "" {
+		var err error
+		s.store, err = openSimulatorStore(s.config.Path)
+		if err != nil {
+			return err
+		}
+		if err = s.store.save(s.config, s.storedState(true)); err != nil {
+			return err
+		}
+	}
 	if err := s.persist(); err != nil {
 		return err
 	}
@@ -560,9 +574,6 @@ func (s *Simulator) onBBO() error {
 
 	// Step 5: publish BBO outcome
 	s.commit(staged)
-	if changed || !s.currentPosition.size.IsZero() {
-		s.config.OnChange()
-	}
 	return nil
 }
 
@@ -866,7 +877,7 @@ func (s *Simulator) fill(row *simOrder, quantity decimal.Decimal, timestampMS ui
 	var before = s.currentPosition
 	var fee = quantity.Mul(price).Mul(s.config.FeePct).Div(decimal.NewFromInt(100))
 	var closedPnL = closePnL(before, row.isBuy, quantity, price)
-	s.fills = append(s.fills, simFill{
+	var execution = simFill{
 		venueOrderID:  row.venueOrderID,
 		venueTID:      s.nextVenueTID,
 		symbol:        row.symbol,
@@ -880,7 +891,9 @@ func (s *Simulator) fill(row *simOrder, quantity decimal.Decimal, timestampMS ui
 		fee:           fee,
 		hasFee:        true,
 		liquidity:     "taker",
-	})
+	}
+	s.fills = append(s.fills, execution)
+	s.dirtyFills[execution.venueTID] = execution
 	s.nextVenueTID++
 
 	var delta = quantity
@@ -913,6 +926,7 @@ func (s *Simulator) fill(row *simOrder, quantity decimal.Decimal, timestampMS ui
 	row.averageFillPrice = price
 	row.fees = fee
 	row.timestampMS = timestampMS
+	s.dirtyOrders[row.venueOrderID] = row
 	if row.kind == kindLimit {
 		s.armChildren(row.batchID, timestampMS)
 	} else {
@@ -925,6 +939,7 @@ func (s *Simulator) cancel(row *simOrder, timestampMS uint64) {
 	row.status = orderCanceled
 	row.armed = false
 	row.timestampMS = timestampMS
+	s.dirtyOrders[row.venueOrderID] = row
 }
 
 func (s *Simulator) armChildren(batchID uint64, timestampMS uint64) {
@@ -932,6 +947,7 @@ func (s *Simulator) armChildren(batchID uint64, timestampMS uint64) {
 		if child.batchID == batchID && child.kind != kindLimit {
 			child.armed = true
 			child.timestampMS = timestampMS
+			s.dirtyOrders[child.venueOrderID] = child
 		}
 	}
 }
@@ -1022,10 +1038,15 @@ func (s *Simulator) persist() error {
 	if s.config.PersistMode == "none" {
 		return nil
 	}
-	return s.store.save(s.config, s.storedState())
+	var err = s.store.save(s.config, s.storedState(false))
+	if err == nil {
+		clear(s.dirtyOrders)
+		clear(s.dirtyFills)
+	}
+	return err
 }
 
-func (s *Simulator) storedState() storedState {
+func (s *Simulator) storedState(all bool) storedState {
 	var state = storedState{
 		SchemaVersion:    simulatorSchemaVersion,
 		Account:          s.config.Account,
@@ -1039,7 +1060,14 @@ func (s *Simulator) storedState() storedState {
 		NextBatchID:      s.nextBatchID,
 		ObservedMS:       s.observedMS,
 	}
-	for _, row := range s.orders {
+	var orders = s.dirtyOrders
+	if all {
+		orders = make(map[uint64]*simOrder, len(s.orders))
+		for _, row := range s.orders {
+			orders[row.venueOrderID] = row
+		}
+	}
+	for _, row := range orders {
 		state.Orders = append(state.Orders, storedOrder{
 			VenueOrderID:      row.venueOrderID,
 			CLOID:             row.cloid,
@@ -1063,7 +1091,14 @@ func (s *Simulator) storedState() storedState {
 			TimestampMS:       row.timestampMS,
 		})
 	}
-	for _, execution := range s.fills {
+	var fills = s.dirtyFills
+	if all {
+		fills = make(map[uint64]simFill, len(s.fills))
+		for _, execution := range s.fills {
+			fills[execution.venueTID] = execution
+		}
+	}
+	for _, execution := range fills {
 		state.Fills = append(state.Fills, storedFill{
 			VenueOrderID:  execution.venueOrderID,
 			VenueTID:      execution.venueTID,
@@ -1091,6 +1126,8 @@ func (s *Simulator) stage() *Simulator {
 	staged.orders = make([]*simOrder, 0, len(s.orders))
 	staged.ordersByCLOID = make(map[string]*simOrder, len(s.ordersByCLOID))
 	staged.activeOrders = make(map[uint64]*simOrder, len(s.activeOrders))
+	staged.dirtyOrders = make(map[uint64]*simOrder)
+	staged.dirtyFills = make(map[uint64]simFill)
 	for _, row := range s.orders {
 		var copied = *row
 		staged.orders = append(staged.orders, &copied)
@@ -1161,6 +1198,8 @@ func (s *Simulator) restore(state storedState) error {
 	s.ordersByCLOID = byCLOID
 	s.activeOrders = active
 	s.fills = fills
+	clear(s.dirtyOrders)
+	clear(s.dirtyFills)
 	var err error
 	s.currentPosition, err = s.position()
 	return err

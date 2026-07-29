@@ -36,7 +36,7 @@ Live Run creates and attaches Clock, MarketData, Info, and WebSocket to the shar
 
 See [MarketData](marketdata.md) for permanent BBO ingestion, buffering, and subscription ownership.
 
-The future credentialed Exchange endpoint belongs to Account, not Live Run.
+The future credentialed Exchange endpoint belongs to Venue, not Live Run.
 
 ## Shared Endpoint Model
 

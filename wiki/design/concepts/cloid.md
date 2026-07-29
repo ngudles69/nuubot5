@@ -1,97 +1,55 @@
 # CLOID
 
-Status: Implemented and used by Account.
+Status: Canonical application Order identity.
 Covers: `internal/cloid/*.go`
-Purpose: Encode and decode one fixed 128-bit Hyperliquid client Order identity.
+Purpose: Encode one canonical Order key for Venue use.
 
 ## Scope
 
-CLOID is a stateless utility.
+CLOID is the Venue-facing identity of one Order.
 
-Account owns CLOID creation for domain Orders.
+Account creates each CLOID after Ledger allocates the Order.
 
-Account creates every submitted Simulator CLOID.
+Strategy code and Venue implementations never invent CLOIDs.
 
 ## Layout
 
-| Field | Bits | Allowed values |
-|---|---:|---:|
-| `botcycle_id` | 24 | 0 to 16,777,215 |
-| `symbol_id` | 16 | 0 to 65,535 |
-| `exchange` | 4 | 0 to 15 |
-| `network` | 2 | 0 to 3 |
-| `side` | 1 | 0 to 1 |
-| `reduce_only` | 1 | false or true |
-| `purpose` | 8 | 0 to 255 |
-| `trade_no` | 21 | 1 to 2,097,151 |
-| `batch_no` | 10 | 1 to 1,000 |
-| `order_level` | 10 | 0 to 1,023 |
-| `timestamp_s` | 31 | 0 to 2,147,483,647 |
+```text
+0x + 16 lowercase hexadecimal LedgerID digits
+   + 16 lowercase hexadecimal OrderID digits
+```
 
-Fields pack from highest to lowest bit in table order.
+The result is exactly one 128-bit Hyperliquid CLOID.
 
 ## Identity
 
-`trade_no` is the BotCycle-local Trade number.
+The canonical Order key is `(LedgerID, OrderID)`.
 
-`trade_no` MUST NOT equal or replace datastore `trade_id`.
+CLOID encodes that key directly.
 
-`batch_no` increments per Trade submission.
+It contains no Trade, Order-set, role, side, level, timestamp, or strategy
+metadata.
 
-`order_level` identifies the Executor-owned level.
-
-TradeExecutor and future HedgeExecutor use Level zero.
-
-GridExecutor uses its bottom-up Grid Level.
-
-Persisted Order `order_pos` separately identifies request position inside its batch.
-
-Timestamp is real Unix seconds. It MUST NOT be altered to force uniqueness.
+An Order set has no identity.
 
 ## Responsibilities
 
-- Validate every field before encoding.
-- Produce `0x` followed by exactly 32 lowercase hexadecimal characters.
-- Decode only the current fixed layout.
-- Reject malformed shape and invalid decoded ranges.
-- Round-trip every accepted field exactly.
+- Reject zero Ledger or Order identities.
+- Produce exactly 32 lowercase hexadecimal digits after `0x`.
+- Preserve both canonical key values without truncation.
 
 ## Does Not
 
-- Own lifecycle or mutable state.
-- Allocate `trade_id`.
-- Reserve `trade_no`.
-- Submit Orders.
-- Read configuration or credentials.
-- Provide legacy compatibility decoding.
+- Allocate identities.
+- Decode unused metadata.
+- Group Orders.
+- Identify Trades or Fills.
+- Submit or cancel Orders.
+- Provide compatibility layouts.
 
 ## Invariants
 
-- Encoding MUST never truncate or wrap.
-- Decoding MUST reject invalid field ranges.
-- There is one current layout.
-- Strategy code MUST NOT create or supply CLOIDs.
-- Account MUST generate CLOID only after Trade and batch identity exist.
-
-## Reference Evidence
-
-Canonical:
-
-```text
-D:\rust\nuubot4\wiki\cloid.md
-D:\rust\nuubot4\src\cloid.rs
-D:\rust\nuubot4\src\lib.rs
-```
-
-Supplemental:
-
-```text
-D:\rust\nuubot3\wiki\cloid.md
-D:\rust\nuubot3\wiki\account\account.md
-```
-
-## Conflict
-
-The approved Nuubot5 hardcut renamed the 10-bit field without changing its position.
-
-No old field alias or compatibility decoder exists.
+- One CLOID identifies one Order.
+- One Order keeps one CLOID.
+- CLOID identity never depends on Order role or lifecycle state.
+- Account creates CLOID only after Ledger allocates `OrderID`.

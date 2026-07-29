@@ -38,7 +38,6 @@ Replay: Sweep 10, Bot 14, BTC, 2026-03-01 through 2026-06-01.
 | Cancellations | 2,063 |
 | Closure Orders | 733 |
 | Submission retries | 0 |
-| Completed round trips | 554 |
 | Net PnL | -70.864647459999999999278 USDC |
 | Ending equity | 929.135352540000000000722 USDC |
 | Maximum drawdown | 88.027421204999999999563 USDC |
@@ -91,7 +90,6 @@ Replay: Sweep 10, Bot 14, BTC, 2026-03-01 through 2026-06-01.
 | Cancellations | 2,063 |
 | Closure Orders | 733 |
 | Submission retries | 0 |
-| Completed round trips | 554 |
 | Net PnL | -69.766463889999999999562 USDC |
 | Ending equity | 930.233536110000000000438 USDC |
 | Maximum drawdown | 86.609100424999999999246 USDC |
@@ -146,7 +144,6 @@ Replay: Sweep 10, Bot 14, BTC, 2026-03-01 through 2026-06-01.
 | Cancellations | 2,063 |
 | Closure Orders | 733 |
 | Submission retries | 0 |
-| Completed round trips | 556 |
 | Net PnL | -69.766463889999999999562 USDC |
 | Ending equity | 930.233536110000000000438 USDC |
 | Maximum drawdown | 86.609100424999999999246 USDC |
@@ -171,7 +168,7 @@ All stability runs produced identical domain and financial results.
 
 ## 2026-07-25 Telemetry And Stop-Role Baseline
 
-Status: CURRENT
+Status: SUPERSEDED
 
 This baseline includes corrected marketable Grid matching, current Account
 equity, telemetry, RunReport, and canonical shutdown `stop` Orders.
@@ -199,7 +196,6 @@ Replay: Sweep 10, Bot 14, BTC, 2026-03-01 through 2026-06-01.
 | Canonical `stop` Orders | 733 |
 | Legacy `close` Orders | 0 |
 | Submission retries | 0 |
-| Completed round trips | 585 |
 | Gross PnL | -15.13202 USDC |
 | Fees | 42.28805409 USDC |
 | Net PnL | -57.420074089999999993851 USDC |
@@ -247,6 +243,89 @@ All stability runs produced identical execution and financial results.
 10x report: `workspace/logs/nuubot5-grtest-s10-b14-10-20260725T093515Z.json`
 
 10x log: `workspace/logs/nuubot5-grtest-s10-b14-10-20260725T093515Z.log`
+
+## Baseline 1
+
+Status: BASELINE
+
+Config hash: `b22af3910b57625c47faca4d5b77142a6d64fd96ae9c3ea285dc7fc3dc6f0cf4`
+
+| Metric | Result |
+|---|---:|
+| Suite elapsed time | 73,784 ms |
+| BtBot elapsed time | 68,756 ms |
+| Historical-data loop elapsed time | 64,846 ms |
+| Tick rows | 7,948,800 |
+| BotCycles | 50 |
+| Trades | 1,982 |
+| Orders | 4,697 |
+| Fills | 2,636 |
+| Cancellations | 2,061 |
+| Stop Orders | 733 |
+| Gross PnL | -14.98775 USDC |
+| Fees | 42.290182025 USDC |
+| Net PnL | -57.277932024999999997236 USDC |
+| Ending equity | 942.722067975000000002764 USDC |
+| Maximum drawdown | 75.655127584999999996194 USDC |
+
+Report: `workspace/logs/nuubot5-stest-s11-b15-1-20260728T162532Z.json`
+
+## Baseline 2 - Post ALTOFRVS Change
+
+Status: CURRENT
+
+ALTOFRVS means Account, Ledger, Trade, Order, Fill, Recon, Venue, and Simulator.
+
+Config hash: `b22af3910b57625c47faca4d5b77142a6d64fd96ae9c3ea285dc7fc3dc6f0cf4`
+
+| Metric | Result |
+|---|---:|
+| Suite elapsed time | 38,828 ms |
+| BtBot elapsed time | 36,028 ms |
+| Historical-data loop elapsed time | 32,089 ms |
+| Tick rows | 7,948,800 |
+| BotCycles | 50 |
+| Trades | 1,980 |
+| Orders | 4,693 |
+| Fills | 2,632 |
+| Cancellations | 2,061 |
+| Stop Orders | 733 |
+| Gross PnL | -15.217 USDC |
+| Fees | 42.2232135 USDC |
+| Net PnL | -57.440213499999999998272 USDC |
+| Ending equity | 942.559786500000000001728 USDC |
+| Maximum drawdown | 75.537686959999999996921 USDC |
+
+Report: `workspace/logs/nuubot5-stest-s11-b15-1-20260729T042021Z.json`
+
+Canonical comparison:
+
+```text
+Grid                   Baseline 1      Baseline 2       Change
+                                       Post ALTOFRVS
+
+Suite                    73.784s         38.828s        -47.4%
+BtBot                    68.756s         36.028s        -47.6%
+Replay loop              64.846s         32.089s        -50.5%
+
+Ticks                  7,948,800       7,948,800        same
+Cycles                        50              50        same
+Trades                     1,982           1,980        -2
+Orders                     4,697           4,693        -4
+Fills                      2,636           2,632        -4
+Cancellations              2,061           2,061        same
+Stop orders                  733             733        same
+
+Gross PnL              -14.987750      -15.217000       -0.229250
+Fees                    42.290182       42.223214       -0.066969
+Net PnL                -57.277932      -57.440213       -0.162281
+Ending equity          942.722068      942.559787       -0.162281
+Maximum drawdown        75.655128       75.537687       -0.117441
+
+Heap                       708.1MB         440.9MB       -37.7%
+Allocations             55,255.7MB      24,832.1MB      -55.1%
+GC runs                      384             166        -56.8%
+```
 
 ## Invalidation Rule
 

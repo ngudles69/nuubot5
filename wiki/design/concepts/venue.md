@@ -1,32 +1,27 @@
 # Venue
 
-Status: Implemented for Simulator-backed Accounts.
-Covers: `internal/account`, `internal/hyperliquid`, and `internal/simulator`
+Status: Implemented for simnet Accounts.
+Covers: `internal/account`, `internal/venue`, `internal/hyperliquid`, and `internal/simulator`
 Purpose: Separate Account domain state from official exchange operations.
 
 ## Ownership
 
-Account owns one Venue lifecycle.
-
-Account and Venue remain separate entities.
-
-Account owns the smallest interface it consumes:
-
-```go
-type venue interface {
-    PlaceOrders(hyperliquid.PlaceOrderAction, uint64) ([]byte, error)
-    CancelOrders(hyperliquid.CancelByCLOIDAction, uint64) ([]byte, error)
-    OpenOrders(string) ([]byte, error)
-    Fills(string, uint64, uint64) ([]byte, error)
-    OrderStatus(string, string) ([]byte, error)
-    AccountState(string) ([]byte, error)
-    Stop() error
-}
+```text
+Account
+└── Venue(config)
+    ├── mainnet/testnet
+    │   └── Exchange
+    └── simnet/backtest
+        └── simulated Venue/Exchange
 ```
 
-Simulator is the implemented Venue.
+Account owns one concrete Venue lifecycle.
 
-Live Hyperliquid remains pending.
+Venue owns network selection and network-specific resources.
+
+Venue owns Simulator for simnet.
+
+Live Hyperliquid Venue behavior remains pending.
 
 ## Boundary
 
@@ -102,15 +97,20 @@ Venue exposes no BBO ingestion operation.
 
 Simulator subscribes directly to shared MarketData and records private execution truth.
 
-Account receives only a narrow dirty-state notification and learns Venue details through official responses.
+Simulator sends no callback or state to Account.
 
-Live Venue implementations require no empty market-data method.
+Account learns Simulator details only through Venue responses.
+
+Clean reconciliation sweeps discover MarketData-driven Simulator changes every
+60 seconds.
 
 
 ## Invariants
 
 - Account owns Venue lifetime, not Venue truth.
 - Venue owns accepted exchange state.
+- Account never imports or calls Simulator.
+- Simulator never receives Account or Ledger references.
 - CLOID is mandatory and opaque.
 - OID is Venue-assigned.
 - Official JSON remains untrusted until Account validates it.
