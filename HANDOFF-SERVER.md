@@ -53,6 +53,9 @@ Verify main's stale-test cleanup and complete local and remote synchronization.
 - Full synchronized `go test -tags noasm ./...` passes.
 - Full synchronized `go vet -tags noasm ./...` passes.
 - Canonical `build.sh` succeeds after synchronization.
+- Synchronization proof was committed as `634d45a`.
+- Local main fast-forwarded to `634d45a`.
+- `origin/main` advanced through `634d45a`.
 
 ## TODO
 
@@ -64,4 +67,4 @@ Verify main's stale-test cleanup and complete local and remote synchronization.
 
 ## Next Action
 
-Commit synchronization proof, align main, and push.
+Wait for the next Server task.
