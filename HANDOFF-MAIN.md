@@ -32,8 +32,9 @@ Main and Server worktrees are synchronized at `cdb4301`.
 - No production code changed during the redesign discussion.
 - Redesign v1 and v2 preserve intermediate exploration.
 - Redesign v3 contains the current implementation target.
-- The clean `nuubot5-server` worktree will be removed after this handoff and
-  redesign commit reaches `origin/main`.
+- Redesign and handoff commit `0aaca04` is on `origin/main`.
+- The clean `nuubot5-server` worktree is removed.
+- The `nuubot5-server` branch remains available.
 
 ## Redesign Decisions
 
@@ -49,10 +50,8 @@ Main and Server worktrees are synchronized at `cdb4301`.
 
 ## Next Action
 
-1. Commit and push this handoff with redesign v1 through v3.
-2. Remove the clean `nuubot5-server` worktree without deleting its branch.
-3. Clone the pushed Nuubot5 baseline into Nuubot6.
-4. Implement and prove the redesign in Nuubot6.
+1. Clone the pushed Nuubot5 baseline into Nuubot6.
+2. Implement and prove the redesign in Nuubot6.
 
 ## DONE
 
