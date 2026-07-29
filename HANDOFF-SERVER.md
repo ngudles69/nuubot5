@@ -4,7 +4,7 @@ Last updated: 2026-07-29
 
 ## Focus
 
-Synchronize the complete main and Server worktrees without mixing owned state.
+Verify main's stale-test cleanup and complete local and remote synchronization.
 
 ## DONE
 
@@ -47,6 +47,12 @@ Synchronize the complete main and Server worktrees without mixing owned state.
 - Main was merged into Server as `5b256e9`.
 - Local main fast-forwarded to the resolved merge.
 - Both local worktrees contain main domain changes and Server WebServer changes.
+- Main cleanup `d0ef071` refreshed CLOID proof and removed stale Simulator and
+  ResultPublisher suites.
+- Server fast-forwarded to `d0ef071`.
+- Full synchronized `go test -tags noasm ./...` passes.
+- Full synchronized `go vet -tags noasm ./...` passes.
+- Canonical `build.sh` succeeds after synchronization.
 
 ## TODO
 
@@ -54,9 +60,8 @@ Synchronize the complete main and Server worktrees without mixing owned state.
 
 ## PENDING USER APPROVAL
 
-- Repair or remove main's remaining stale Cloid, Simulator, and
-  ResultPublisher tests before remote push.
+- None.
 
 ## Next Action
 
-Repair or remove main's remaining stale tests before remote push.
+Commit synchronization proof, align main, and push.
