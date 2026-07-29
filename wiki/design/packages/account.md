@@ -73,7 +73,7 @@ Init
   bind Account inputs
   validate Account identity
   initialize Ledger
-  initialize Venue
+  connect Venue
   initialize Account
 
 PlaceOrders
@@ -116,7 +116,7 @@ Result
   return immutable Account result
 
 Stop
-  stop Venue
+  disconnect Venue
   stop Ledger
   stop Account
 ```
@@ -172,9 +172,10 @@ HTTP mutation responses are acknowledgement evidence, not final lifecycle truth.
 Account queries Venue in this order:
 
 1. Open Orders.
-2. Exact status for selected active local Orders missing from the bulk response.
-3. Fills from the inclusive Ledger cursor.
-4. Transient account state.
+2. Order History.
+3. Exact status for selected active local Orders missing from both bulk responses.
+4. Fills from the inclusive Ledger cursor.
+5. Transient account state.
 
 Every query returns fresh detached official JSON.
 
@@ -186,7 +187,10 @@ Fill evidence normally resolves OID because official Fill rows may omit CLOID.
 
 If both CLOID and OID exist, they must identify the same local Order.
 
-Exact status lookup is exception handling. Recon telemetry counts every attempted lookup.
+Order History supplies recent terminal evidence.
+
+Exact status lookup remains exception handling. Recon telemetry counts every
+attempted lookup.
 
 Ledger receives normalized concrete values.
 
@@ -206,8 +210,9 @@ Failed reconciliation restores dirty state. It advances no cursor or successful 
 
 ### Approved Live Target
 
-Normal live reconciliation queries `openOrders`, paginated `userFillsByTime`, exact
-`orderStatus` for missing active Orders, then Account state.
+Normal live reconciliation queries `openOrders`, `historicalOrders`, paginated
+`userFillsByTime`, exact `orderStatus` for still-missing active Orders, then
+Account state.
 
 Exact `orderStatus` is not the normal Order download. Telemetry proves its observed frequency.
 
@@ -216,7 +221,7 @@ Hyperliquid Fill history has no symbol filter. Responses cap at 2,000 rows, and
 
 Account continues capped responses and deduplicates inclusive cursor boundaries by Venue TID.
 
-Routine reconciliation does not query `historicalOrders`. `openOrders` has no documented 2,000-row cap.
+`historicalOrders` returns the latest 2,000 Orders.
 
 Account and Ledger compare through stable identity indexes.
 

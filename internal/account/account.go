@@ -534,8 +534,8 @@ func (a *Account) Stop() error {
 		return nil
 	}
 
-	// Step 1: stop Venue
-	var venueErr = a.venue.Stop()
+	// Step 1: disconnect Venue
+	var venueErr = a.venue.Disconnect()
 
 	// Step 2: persist final Account evidence
 	var storeErr = a.persist(a.config.PersistMode == "none")

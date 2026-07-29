@@ -19,7 +19,7 @@ Simulator owns:
 - matching policy;
 - one MarketData subscription;
 - transient BBO state; and
-- schema version 3 persistence.
+- schema version 2 persistence.
 
 Simulator owns no Ledger, Trade, domain Order, domain Fill, role, or purpose.
 
@@ -42,7 +42,7 @@ Place receives `hyperliquid.PlaceOrderAction`.
 
 Cancel receives `hyperliquid.CancelByCLOIDAction`.
 
-Simulator subscribes directly to MarketData during Init and reads the latest buffered BBO inside its callback.
+Simulator subscribes directly to MarketData during Connect and reads the latest buffered BBO inside its callback.
 
 Simulator receives no Account or Ledger reference.
 
@@ -85,7 +85,7 @@ Simulator never creates detached private Order history copies.
 ## Program Flow
 
 ```text
-Init
+Connect
   validate Simulator config
   initialize Simulator state
   restore durable Simulator state when configured
@@ -106,6 +106,17 @@ CancelOrders
   persist and publish cancel mutation
   return official cancel response
 
+SetLeverage
+  validate official leverage action
+  save leverage and margin mode
+  return official default response
+
+GetOpenOrders
+GetOrderHistory
+GetFillHistory
+GetOrderStatus
+GetAccountState
+
 onBBO
   normalize BBO
   warm initial BBO state
@@ -113,7 +124,7 @@ onBBO
   persist changed Venue truth
   publish BBO outcome
 
-Stop
+Disconnect
   ignore repeated stop
   stop MarketData subscription
   persist Simulator state
@@ -143,10 +154,11 @@ Private waiting and arming never become custom public statuses.
 - Marketable GTC and IOC Orders may fill during submission.
 - Resting Orders match later crossing BBOs.
 - Limit, TP, and SL crossings preserve existing exact-decimal behavior.
-- Adverse slippage applies to the Fill basis.
-- Reduce-only execution cannot open or reverse exposure.
-- Unsupported reduce-only execution cancels without a Fill.
-- One submitted private batch fills at most one leg per BBO.
+- Every open armed Order is evaluated independently on each BBO.
+- One BBO may fill several Orders after crossing several prices.
+- Batch membership never limits Fill count.
+- Two reduce-only exits may both fill when exposure remains after the first.
+- Earlier Fill mutations may cancel or disable later Orders before evaluation.
 
 Each canonical Order owns one transient exact comparison key.
 
@@ -188,6 +200,7 @@ Simulator returns fresh detached JSON for:
 - submit acknowledgement;
 - cancel acknowledgement;
 - bulk open Orders;
+- bulk Order history;
 - exact Order status;
 - bounded Fill history; and
 - clearinghouse state.
@@ -196,7 +209,7 @@ Submit returns each Venue-assigned OID in request order.
 
 Open rows use remaining positive size.
 
-Terminal exact status retains submitted size and terminal status.
+Exact status returns remaining size, submitted size, and current Venue status.
 
 Fill rows use OID and TID. They need not expose CLOID.
 
@@ -214,19 +227,37 @@ Clearinghouse output uses the latest admitted BBO for marked values.
 
 A recovered open position requires one fresh BBO.
 
-## Persistence
+## Domain Functionality
 
-Simulator owns `simulator_venue_state`.
+### Matching Engine
+
+`matching(BBO)` is the matching-engine entry.
+
+Matching helpers use the `matching` prefix.
+
+### Persistence
+
+Persistence uses standard `save` and `load` operations.
+
+Persistence helpers use `save` or `load` prefixes.
+
+Simulator owns `simulator`, `simulator_order`, and `simulator_fill`.
 
 Its primary key is official simulated account plus symbol.
 
-Schema version 3 stores:
+Schema version 2 stores:
 
 - official identity and policy;
+- immutable `submit*` Order evidence;
+- mutable Venue Order status evidence;
+- leverage and margin mode;
 - Venue counters;
 - latest canonical Venue timestamp;
 - each canonical Order once; and
 - each canonical Fill once.
+
+Submission evidence preserves grouping, side, price, quantity, reduce-only,
+time-in-force, trigger, and submission timestamp separately from Venue outcome.
 
 No Ledger foreign key or local domain identity enters this payload.
 
@@ -261,7 +292,7 @@ Simulator private counters, records, and persistence never cross that boundary.
 - Terminal no-rematch.
 - Reduce-only protection.
 - Position replay equality.
-- Version 3 round-trip.
+- Version 2 round-trip.
 - Durable failure atomicity.
 - Frozen official response fixtures.
 - Controlled testnet parity.

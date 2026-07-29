@@ -551,7 +551,7 @@ Executor
   stop Account
 
 Account
-  stop Venue
+  disconnect Venue
   stop Ledger
 
 Runner

@@ -15,6 +15,7 @@ Nuubot5 source proves implementation. Reservation files prove names only.
 - [`design/startup.md`](design/startup.md) owns Runner startup and crash recovery across all live networks.
 - [`design/marketdata.md`](design/marketdata.md) owns permanent BBO ingestion, buffering, and subscription decisions.
 - [`design/account.md`](design/account.md) owns Executor, Account, Venue, and Exchange-fact authority.
+- [`design/nautilus.md`](design/nautilus.md) compares reusable Venue intent.
 - [`design/entities.md`](design/entities.md) shows backtest and live runtime ownership cardinality.
 - [`design/fprof.md`](design/fprof.md) owns deterministic function profiling and A/B/C overhead semantics.
 - [`design/hyperliquid`](design/hyperliquid/) contains the internal Hyperliquid boundary details.
@@ -93,7 +94,9 @@ Python `async_hyperliquid` is the third known-working reference.
 
 Nuubot targets official Hyperliquid semantics.
 
-Nuutrader6 supplies proven matching behavior.
+Nuubot3, Nuutrader6, and NautilusTrader supply reusable intent only.
+
+Nuubot5 source owns implemented matching behavior.
 
 Selected client-visible responses target `async_hyperliquid` 0.4.8 output parity.
 

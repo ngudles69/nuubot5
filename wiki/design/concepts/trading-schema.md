@@ -119,27 +119,28 @@ CREATE TABLE IF NOT EXISTS account_fill (
         REFERENCES account_order (ledger_id, trade_id, order_id, cloid)
 );
 
-CREATE TABLE IF NOT EXISTS simulator_venue_state (
-    account_name   TEXT NOT NULL,
-    symbol         TEXT NOT NULL,
-    schema_version INTEGER NOT NULL,
-    payload_json   TEXT NOT NULL,
-    updated_ms     INTEGER NOT NULL,
-    PRIMARY KEY (account_name, symbol)
-);
+simulator
+simulator_order
+simulator_fill
 ```
 
 Every SQLite connection enables foreign keys and a 30-second busy timeout.
 
-`simulator_venue_state` is Simulator-owned schema version 3.
+The three Simulator tables use schema version 2.
 
-Its payload stores official identity, policy, Venue counters, canonical Orders, and canonical Fills.
+`simulator` stores identity, policy, leverage, margin mode, counters, and
+observation time.
+
+`simulator_order` stores immutable `submit*` facts separately from mutable
+Venue status facts.
+
+`simulator_fill` stores canonical Fill evidence.
 
 Each Simulator Order and Fill appears once.
 
 It stores no Ledger ID, Trade ID, local Order ID, role, or purpose.
 
-Legacy `simulator_state` payloads are not read or adapted.
+Legacy Simulator schemas are not read or adapted.
 
 ## Grid Result Evidence
 

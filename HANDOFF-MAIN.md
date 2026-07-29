@@ -6,6 +6,8 @@ Last updated: 2026-07-29
 
 Finish the flat Account Store integration.
 
+The Venue and Simulator protocol expansion is complete.
+
 The Account, Ledger, Trade, Order, Fill, Recon, Venue, and Simulator production
 stack is connected well enough for Observer, Trade, and Grid backtests.
 
@@ -45,6 +47,20 @@ sync.
 - Split shared routers from main-worktree instructions and handoff state.
 - Commit the complete Account-stack hardcut and flat Store work as `3e98a69`.
 - Push `3e98a69` to `origin/main`.
+- Rename Simulator sections to Venue Interface and Lifecycle, Matching Engine,
+  and Helpers without changing behavior.
+- Rename Simulator lifecycle to Connect and Disconnect.
+- Rename Venue lifecycle to Connect and Disconnect.
+- Hardcut Venue reads to Get Open Orders, Get Order History, Get Fill History,
+  Get Order Status, and Get Account State.
+- Add Hyperliquid-shaped Order History reconciliation.
+- Add persisted Simulator leverage and margin mode through Set Leverage.
+- Split Simulator submission facts from mutable Venue outcome facts.
+- Organize Simulator domain functionality into Matching Engine and Persistence.
+- Remove the incorrect one-Fill-per-batch-per-BBO restriction.
+- Save the Nuubot3 and NautilusTrader intent comparison.
+- Pass Observer, Trade, and Grid after the Venue lifecycle hardcut.
+- Ignore local `workspace/backups/**` artifacts.
 
 ## Domain Model
 
@@ -141,7 +157,7 @@ Canonical owners:
 
 Account calls only the Venue interface.
 
-Venue owns Simulator initialization, calls, and shutdown.
+Venue owns Simulator connection, calls, and disconnection.
 
 Account never imports, constructs, or calls Simulator.
 
@@ -158,6 +174,16 @@ Future Venue WebSocket support may carry protocol-shaped `userEvent` updates.
 
 Mainnet, testnet, signing, authentication, and live WebSocket work remain
 future scope.
+
+Nuubot5 source owns current Venue behavior.
+
+Nuubot3, Nuutrader6, and NautilusTrader supply reusable intent only.
+
+Venue routes calls and contains no Account or trading business logic.
+
+Active Asset Data intent belongs to Meta.
+
+Future Cancel All Orders belongs in Account as convenience orchestration.
 
 ## Store
 
@@ -199,6 +225,26 @@ Backtests recreate the partial result database every run.
 ResultPublisher appends report tables, then atomically publishes the database.
 
 ## Store Proof
+
+Current Venue expansion proof:
+
+```text
+go build -tags noasm ./internal/account ./internal/venue ./internal/simulator ./internal/executor
+stale Venue lifecycle name scan
+git diff --check
+```
+
+All passed. Latest behavioral proof follows.
+
+Latest backtest proof:
+
+```text
+Observer  PASS  workspace/logs/nuubot5-stest-s6-b9-1-20260729T054523Z.json
+Trade     PASS  workspace/logs/nuubot5-stest-s9-b13-1-20260729T054539Z.json
+Grid      PASS  workspace/logs/nuubot5-stest-s11-b15-1-20260729T054607Z.json
+```
+
+Trade and Grid execution counts and financial results exactly match Baseline 2.
 
 Grid Baseline 2 database integrity: `ok`.
 

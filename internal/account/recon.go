@@ -64,8 +64,8 @@ func (a *Account) Init(cfg Config) error {
 		}
 	}
 
-	// Step 5: initialize Venue
-	err = a.initializeVenue()
+	// Step 5: connect Venue
+	err = a.connectVenue()
 	if err != nil {
 		if a.store != nil {
 			a.store.close()
@@ -77,7 +77,7 @@ func (a *Account) Init(cfg Config) error {
 	// Step 6: initialize Account
 	a.initializeAccount()
 	if err = a.persist(false); err != nil {
-		a.venue.Stop()
+		a.venue.Disconnect()
 		a.store.close()
 		a.ledger.Stop()
 		return err
@@ -241,9 +241,9 @@ func (a *Account) initializeLedger() error {
 	return nil
 }
 
-func (a *Account) initializeVenue() error {
+func (a *Account) connectVenue() error {
 	var cfg = a.config
-	var err = a.venue.Init(venue.Config{
+	var err = a.venue.Connect(venue.Config{
 		MarketData: cfg.Nuubot.MarketData,
 		MarketKey: market.Key{
 			Venue:   cfg.Venue,
@@ -253,6 +253,7 @@ func (a *Account) initializeVenue() error {
 		Account:     cfg.Name,
 		Asset:       int(cfg.Nuubot.Meta.AssetID),
 		Symbol:      cfg.Symbol,
+		MaxLeverage: cfg.Nuubot.Meta.MaxLeverage,
 		Equity:      cfg.EquityUSDC,
 		FeePct:      cfg.FeePct,
 		SlippagePct: cfg.SlippagePct,
@@ -306,7 +307,7 @@ func (a *Account) prepareRecon(nowMS uint64, forced bool) (*reconAttempt, bool, 
 
 func (a *Account) downloadOrderEvidence(attempt *reconAttempt) error {
 	attempt.stage = "download_orders"
-	var payload, err = a.venue.OpenOrders(a.config.Name)
+	var payload, err = a.venue.GetOpenOrders(a.config.Name)
 	if err != nil {
 		return err
 	}
@@ -348,12 +349,58 @@ func (a *Account) downloadOrderEvidence(attempt *reconAttempt) error {
 		observed[owned.OrderID] = struct{}{}
 	}
 
+	payload, err = a.venue.GetOrderHistory(a.config.Name)
+	if err != nil {
+		return err
+	}
+	var history []hyperliquid.HistoricalOrder
+	history, err = hyperliquid.DecodeOrderHistory(payload)
+	if err != nil {
+		return err
+	}
+	for _, current := range history {
+		var owned, found, resolveErr = resolveActiveOrder(current.Order, byCLOID, byOID)
+		if resolveErr != nil {
+			return resolveErr
+		}
+		if !found {
+			continue
+		}
+		if _, found = observed[owned.OrderID]; found {
+			continue
+		}
+		var status order.Status
+		status, err = venueOrderStatus(current.Status)
+		if err != nil {
+			return err
+		}
+		var raw []byte
+		raw, err = hyperliquid.Encode(current)
+		if err != nil {
+			return err
+		}
+		var update ledger.OrderUpdate
+		update, err = a.orderUpdate(
+			owned,
+			current.Order,
+			current.Status,
+			status,
+			current.StatusTimestamp,
+			string(raw),
+		)
+		if err != nil {
+			return err
+		}
+		attempt.orders = append(attempt.orders, update)
+		observed[owned.OrderID] = struct{}{}
+	}
+
 	for _, owned := range active {
 		if _, found := observed[owned.OrderID]; found {
 			continue
 		}
 		attempt.orderStatusQueries++
-		payload, err = a.venue.OrderStatus(a.config.Name, owned.CLOID)
+		payload, err = a.venue.GetOrderStatus(a.config.Name, owned.CLOID)
 		if err != nil {
 			return err
 		}
@@ -452,7 +499,7 @@ func (a *Account) pullFillEvidence(
 	observed map[uint64]fill.Fill,
 ) error {
 	var started = time.Now()
-	var payload, err = a.venue.Fills(a.config.Name, startMS, endMS)
+	var payload, err = a.venue.GetFillHistory(a.config.Name, startMS, endMS)
 	if err != nil {
 		return err
 	}
@@ -516,7 +563,7 @@ func (a *Account) pullFillEvidence(
 
 func (a *Account) downloadAccountState(attempt *reconAttempt) error {
 	attempt.stage = "download_account"
-	var payload, err = a.venue.AccountState(a.config.Name)
+	var payload, err = a.venue.GetAccountState(a.config.Name)
 	if err != nil {
 		return err
 	}

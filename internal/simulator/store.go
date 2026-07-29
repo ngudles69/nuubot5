@@ -9,7 +9,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const simulatorSchemaVersion = 1
+const simulatorSchemaVersion = 2
 
 type simulatorStore struct{ db *sql.DB }
 
@@ -20,20 +20,23 @@ type storedOrder struct {
 	Symbol            string
 	BatchID           uint64
 	Kind              string
-	IsBuy             bool
-	Price             string
-	Quantity          string
-	ReduceOnly        bool
-	TimeInForce       string
-	TriggerPrice      string
-	HasTriggerPrice   bool
+	SubmitGrouping    string
+	SubmitIsBuy       bool
+	SubmitPrice       string
+	SubmitQuantity    string
+	SubmitReduceOnly  bool
+	SubmitTimeInForce string
+	SubmitTriggerPx   string
+	HasSubmitTrigger  bool
+	SubmitTriggerMkt  bool
+	SubmitMS          uint64
+	StatusMS          uint64
 	Status            string
 	Armed             bool
 	RemainingQuantity string
 	FilledQuantity    string
 	AverageFillPrice  string
 	Fees              string
-	TimestampMS       uint64
 }
 
 type storedFill struct {
@@ -60,6 +63,9 @@ type storedState struct {
 	Equity           string
 	FeePct           string
 	SlippagePct      string
+	MaxLeverage      uint32
+	Leverage         uint32
+	IsCross          bool
 	NextVenueOrderID uint64
 	NextVenueTID     uint64
 	NextBatchID      uint64
@@ -98,8 +104,10 @@ func (s *simulatorStore) save(cfg Config, state storedState) error {
 	defer tx.Rollback()
 	var nowMS = time.Now().UnixMilli()
 	_, err = tx.Exec(`
-		INSERT INTO simulator VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+		INSERT INTO simulator VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT (account, symbol) DO UPDATE SET
+			leverage=excluded.leverage,
+			is_cross=excluded.is_cross,
 			next_venue_order_id=excluded.next_venue_order_id,
 			next_venue_tid=excluded.next_venue_tid,
 			next_batch_id=excluded.next_batch_id,
@@ -107,6 +115,7 @@ func (s *simulatorStore) save(cfg Config, state storedState) error {
 			updated_ms=excluded.updated_ms`,
 		simulatorSchemaVersion, cfg.Account, cfg.Asset, cfg.Symbol,
 		cfg.Equity.String(), cfg.FeePct.String(), cfg.SlippagePct.String(),
+		cfg.MaxLeverage, state.Leverage, state.IsCross,
 		state.NextVenueOrderID, state.NextVenueTID, state.NextBatchID,
 		state.ObservedMS, nowMS, nowMS,
 	)
@@ -116,19 +125,22 @@ func (s *simulatorStore) save(cfg Config, state storedState) error {
 		}
 		_, err = tx.Exec(`
 			INSERT INTO simulator_order VALUES (
-				?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+				?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
 			)
 			ON CONFLICT (account, symbol, venue_order_id) DO UPDATE SET
 				status=excluded.status, armed=excluded.armed,
 				remaining_quantity=excluded.remaining_quantity,
 				filled_quantity=excluded.filled_quantity,
 				average_fill_price=excluded.average_fill_price,
-				fees=excluded.fees, updated_ms=excluded.updated_ms`,
+				fees=excluded.fees, status_ms=excluded.status_ms,
+				updated_ms=excluded.updated_ms`,
 			cfg.Account, cfg.Symbol, o.VenueOrderID, o.CLOID, o.Asset,
-			o.BatchID, o.Kind, o.IsBuy, o.Price, o.Quantity, o.ReduceOnly,
-			o.TimeInForce, o.TriggerPrice, o.HasTriggerPrice, o.Status, o.Armed,
+			o.BatchID, o.Kind, o.SubmitGrouping, o.SubmitIsBuy,
+			o.SubmitPrice, o.SubmitQuantity,
+			o.SubmitReduceOnly, o.SubmitTimeInForce, o.SubmitTriggerPx,
+			o.HasSubmitTrigger, o.SubmitTriggerMkt, o.SubmitMS, o.Status, o.Armed,
 			o.RemainingQuantity, o.FilledQuantity, o.AverageFillPrice, o.Fees,
-			o.TimestampMS, nowMS, nowMS, simulatorSchemaVersion,
+			o.StatusMS, nowMS, nowMS, simulatorSchemaVersion,
 		)
 	}
 	for _, f := range state.Fills {
@@ -162,12 +174,13 @@ func (s *simulatorStore) load(cfg Config) (storedState, bool, error) {
 	var version int
 	var err = s.db.QueryRow(`
 		SELECT schema_version, account, asset, symbol, equity, fee_pct,
-			slippage_pct, next_venue_order_id, next_venue_tid, next_batch_id,
-			observed_ms
+			slippage_pct, max_leverage, leverage, is_cross,
+			next_venue_order_id, next_venue_tid, next_batch_id, observed_ms
 		FROM simulator WHERE account=? AND symbol=?`,
 		cfg.Account, cfg.Symbol,
 	).Scan(&version, &state.Account, &state.Asset, &state.Symbol,
 		&state.Equity, &state.FeePct, &state.SlippagePct,
+		&state.MaxLeverage, &state.Leverage, &state.IsCross,
 		&state.NextVenueOrderID, &state.NextVenueTID, &state.NextBatchID,
 		&state.ObservedMS)
 	if err == sql.ErrNoRows {
@@ -178,15 +191,18 @@ func (s *simulatorStore) load(cfg Config) (storedState, bool, error) {
 	}
 	if version != simulatorSchemaVersion || state.Asset != cfg.Asset ||
 		state.Equity != cfg.Equity.String() || state.FeePct != cfg.FeePct.String() ||
-		state.SlippagePct != cfg.SlippagePct.String() {
+		state.SlippagePct != cfg.SlippagePct.String() ||
+		state.MaxLeverage != cfg.MaxLeverage {
 		return storedState{}, false, fmt.Errorf("load Simulator: identity mismatch")
 	}
 	var rows *sql.Rows
 	rows, err = s.db.Query(`
-		SELECT venue_order_id,cloid,asset,symbol,batch_id,kind,is_buy,price,
-			quantity,reduce_only,time_in_force,trigger_price,has_trigger_price,
+		SELECT venue_order_id,cloid,asset,symbol,batch_id,kind,submit_grouping,
+			submit_is_buy,
+			submit_price,submit_quantity,submit_reduce_only,submit_time_in_force,
+			submit_trigger_px,has_submit_trigger,submit_trigger_is_market,submit_ms,
 			status,armed,remaining_quantity,filled_quantity,average_fill_price,
-			fees,timestamp_ms
+			fees,status_ms
 		FROM simulator_order WHERE account=? AND symbol=?`, cfg.Account, cfg.Symbol)
 	if err != nil {
 		return storedState{}, false, err
@@ -194,10 +210,13 @@ func (s *simulatorStore) load(cfg Config) (storedState, bool, error) {
 	for rows.Next() {
 		var o storedOrder
 		if err = rows.Scan(&o.VenueOrderID, &o.CLOID, &o.Asset, &o.Symbol, &o.BatchID,
-			&o.Kind, &o.IsBuy, &o.Price, &o.Quantity, &o.ReduceOnly, &o.TimeInForce,
-			&o.TriggerPrice, &o.HasTriggerPrice, &o.Status, &o.Armed,
+			&o.Kind, &o.SubmitGrouping, &o.SubmitIsBuy,
+			&o.SubmitPrice, &o.SubmitQuantity,
+			&o.SubmitReduceOnly, &o.SubmitTimeInForce, &o.SubmitTriggerPx,
+			&o.HasSubmitTrigger, &o.SubmitTriggerMkt, &o.SubmitMS,
+			&o.Status, &o.Armed,
 			&o.RemainingQuantity, &o.FilledQuantity, &o.AverageFillPrice, &o.Fees,
-			&o.TimestampMS); err != nil {
+			&o.StatusMS); err != nil {
 			rows.Close()
 			return storedState{}, false, err
 		}
@@ -233,7 +252,9 @@ const simulatorStoreDDL = `
 CREATE TABLE IF NOT EXISTS simulator (
 	schema_version INTEGER NOT NULL, account TEXT NOT NULL, asset INTEGER NOT NULL,
 	symbol TEXT NOT NULL, equity TEXT NOT NULL, fee_pct TEXT NOT NULL,
-	slippage_pct TEXT NOT NULL, next_venue_order_id INTEGER NOT NULL,
+	slippage_pct TEXT NOT NULL, max_leverage INTEGER NOT NULL,
+	leverage INTEGER NOT NULL, is_cross INTEGER NOT NULL,
+	next_venue_order_id INTEGER NOT NULL,
 	next_venue_tid INTEGER NOT NULL, next_batch_id INTEGER NOT NULL,
 	observed_ms INTEGER NOT NULL, created_ms INTEGER NOT NULL,
 	updated_ms INTEGER NOT NULL, PRIMARY KEY (account, symbol)
@@ -241,12 +262,15 @@ CREATE TABLE IF NOT EXISTS simulator (
 CREATE TABLE IF NOT EXISTS simulator_order (
 	account TEXT NOT NULL, symbol TEXT NOT NULL, venue_order_id INTEGER NOT NULL,
 	cloid TEXT NOT NULL, asset INTEGER NOT NULL, batch_id INTEGER NOT NULL,
-	kind TEXT NOT NULL, is_buy INTEGER NOT NULL, price TEXT NOT NULL,
-	quantity TEXT NOT NULL, reduce_only INTEGER NOT NULL, time_in_force TEXT NOT NULL,
-	trigger_price TEXT NOT NULL, has_trigger_price INTEGER NOT NULL,
+	kind TEXT NOT NULL, submit_grouping TEXT NOT NULL,
+	submit_is_buy INTEGER NOT NULL, submit_price TEXT NOT NULL,
+	submit_quantity TEXT NOT NULL, submit_reduce_only INTEGER NOT NULL,
+	submit_time_in_force TEXT NOT NULL, submit_trigger_px TEXT NOT NULL,
+	has_submit_trigger INTEGER NOT NULL, submit_trigger_is_market INTEGER NOT NULL,
+	submit_ms INTEGER NOT NULL,
 	status TEXT NOT NULL, armed INTEGER NOT NULL, remaining_quantity TEXT NOT NULL,
 	filled_quantity TEXT NOT NULL, average_fill_price TEXT NOT NULL, fees TEXT NOT NULL,
-	timestamp_ms INTEGER NOT NULL, created_ms INTEGER NOT NULL, updated_ms INTEGER NOT NULL,
+	status_ms INTEGER NOT NULL, created_ms INTEGER NOT NULL, updated_ms INTEGER NOT NULL,
 	schema_version INTEGER NOT NULL,
 	PRIMARY KEY (account, symbol, venue_order_id), UNIQUE (account, symbol, cloid),
 	FOREIGN KEY (account, symbol) REFERENCES simulator(account, symbol)

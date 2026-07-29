@@ -32,6 +32,8 @@ endpoint-exchange.go
 - Public perpetual Meta retrieval and translation.
 - Public clearinghouse-state retrieval by address.
 - Exact decimal translation into `AccountState`.
+- Official Place, Cancel, and Update Leverage action values.
+- Official Open Orders, Order History, exact Order Status, and Fill decoders.
 
 Runner owns one shared Info object using the configured network.
 

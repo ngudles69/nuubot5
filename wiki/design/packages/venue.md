@@ -24,19 +24,27 @@ Simulator never receives Account or Ledger references.
 Venue exposes:
 
 ```text
-Init
+Connect
 PlaceOrders
 CancelOrders
-OpenOrders
-Fills
-OrderStatus
-AccountState
-Stop
+SetLeverage
+GetOpenOrders
+GetOrderHistory
+GetFillHistory
+GetOrderStatus
+GetAccountState
+Disconnect
 ```
 
 Venue returns detached Hyperliquid protocol JSON.
 
 Account validates and reconciles those responses identically across networks.
+
+Nuubot5 source owns current behavior.
+
+Nuubot3 and NautilusTrader provide reusable intent only.
+
+Venue routes calls. It contains no Account or trading business logic.
 
 ## Simnet
 

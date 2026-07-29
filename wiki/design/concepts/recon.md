@@ -125,14 +125,16 @@ A prior failure or missing trusted Snapshot cannot produce a skip.
 
 ## Step 2 Download Current Order Evidence
 **What**
-Call Venue once for fresh detached bulk Open Orders JSON.
-Decode and validate it through `internal/hyperliquid`.
-For each selected active local Order absent from that response, download its exact current status.
+Call Venue for fresh detached Open Orders and Order History JSON.
+Decode and validate both through `internal/hyperliquid`.
+Use Order History for selected active local Orders absent from Open Orders.
+For each selected active local Order absent from both responses, download its exact current status.
 Treat each exact status download as exception handling and count every attempted request in Recon telemetry.
 Validate all returned identities before record mutation.
 **Why**
 Open Orders cover current working evidence.
-Exact selected status checks resolve local active Orders no longer returned as open.
+Order History covers recent terminal evidence.
+Exact selected status checks resolve active local Orders absent from both bulk responses.
 **Things to watch**
 Absence invents nothing.
 It does not prove cancellation, rejection, fill, completion, or deletion.

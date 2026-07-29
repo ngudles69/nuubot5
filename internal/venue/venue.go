@@ -18,6 +18,7 @@ type Config struct {
 	Account     string
 	Asset       int
 	Symbol      string
+	MaxLeverage uint32
 	Equity      decimal.Decimal
 	FeePct      decimal.Decimal
 	SlippagePct decimal.Decimal
@@ -34,26 +35,27 @@ type Venue struct {
 
 // Section 1 - Program Flow
 
-// Init initializes Venue for its configured network.
-func (v *Venue) Init(cfg Config) error {
+// Connect connects Venue to its configured network.
+func (v *Venue) Connect(cfg Config) error {
 	// Step 1: validate Venue lifecycle and network
 	if v.initialized || v.stopped {
-		return fmt.Errorf("initialize Venue: invalid lifecycle state")
+		return fmt.Errorf("connect Venue: invalid lifecycle state")
 	}
 	if cfg.MarketKey.Network != "simnet" {
 		return fmt.Errorf(
-			"initialize Venue: network %q is not implemented",
+			"connect Venue: network %q is not implemented",
 			cfg.MarketKey.Network,
 		)
 	}
 
-	// Step 2: initialize simulated Venue and Exchange
-	var err = v.simulator.Init(simulator.Config{
+	// Step 2: connect simulated Venue and Exchange
+	var err = v.simulator.Connect(simulator.Config{
 		MarketData:  cfg.MarketData,
 		MarketKey:   cfg.MarketKey,
 		Account:     cfg.Account,
 		Asset:       cfg.Asset,
 		Symbol:      cfg.Symbol,
+		MaxLeverage: cfg.MaxLeverage,
 		Equity:      cfg.Equity,
 		FeePct:      cfg.FeePct,
 		SlippagePct: cfg.SlippagePct,
@@ -61,10 +63,10 @@ func (v *Venue) Init(cfg Config) error {
 		Path:        cfg.Path,
 	})
 	if err != nil {
-		return fmt.Errorf("initialize Venue: %w", err)
+		return fmt.Errorf("connect Venue: %w", err)
 	}
 
-	// Step 3: mark Venue initialized
+	// Step 3: mark Venue connected
 	v.initialized = true
 	return nil
 }
@@ -85,43 +87,60 @@ func (v *Venue) CancelOrders(
 	return v.simulator.CancelOrders(action, timestampMS)
 }
 
-// OpenOrders returns current open Orders from the configured network.
-func (v *Venue) OpenOrders(account string) ([]byte, error) {
-	return v.simulator.OpenOrders(account)
+// SetLeverage submits one leverage action to the configured network.
+func (v *Venue) SetLeverage(
+	action hyperliquid.UpdateLeverageAction,
+	timestampMS uint64,
+) ([]byte, error) {
+	return v.simulator.SetLeverage(action, timestampMS)
 }
 
-// Fills returns current Fill history from the configured network.
-func (v *Venue) Fills(account string, startMS uint64, endMS uint64) ([]byte, error) {
-	return v.simulator.Fills(account, startMS, endMS)
+// GetOpenOrders returns current open Orders from the configured network.
+func (v *Venue) GetOpenOrders(account string) ([]byte, error) {
+	return v.simulator.GetOpenOrders(account)
 }
 
-// OrderStatus returns one current Order status from the configured network.
-func (v *Venue) OrderStatus(account string, value string) ([]byte, error) {
-	return v.simulator.OrderStatus(account, value)
+// GetOrderHistory returns recent Order history from the configured network.
+func (v *Venue) GetOrderHistory(account string) ([]byte, error) {
+	return v.simulator.GetOrderHistory(account)
 }
 
-// AccountState returns current Account state from the configured network.
-func (v *Venue) AccountState(account string) ([]byte, error) {
-	return v.simulator.AccountState(account)
+// GetFillHistory returns current Fill history from the configured network.
+func (v *Venue) GetFillHistory(
+	account string,
+	startMS uint64,
+	endMS uint64,
+) ([]byte, error) {
+	return v.simulator.GetFillHistory(account, startMS, endMS)
 }
 
-// Stop releases Venue-owned resources.
-func (v *Venue) Stop() error {
-	// Step 1: ignore repeated stop
+// GetOrderStatus returns one current Order status from the configured network.
+func (v *Venue) GetOrderStatus(account string, value string) ([]byte, error) {
+	return v.simulator.GetOrderStatus(account, value)
+}
+
+// GetAccountState returns current Account state from the configured network.
+func (v *Venue) GetAccountState(account string) ([]byte, error) {
+	return v.simulator.GetAccountState(account)
+}
+
+// Disconnect releases Venue-owned resources.
+func (v *Venue) Disconnect() error {
+	// Step 1: ignore repeated disconnect
 	if v.stopped {
 		return nil
 	}
 	if !v.initialized {
-		return fmt.Errorf("stop Venue: invalid lifecycle state")
+		return fmt.Errorf("disconnect Venue: invalid lifecycle state")
 	}
 
-	// Step 2: stop simulated Venue and Exchange
-	var err = v.simulator.Stop()
+	// Step 2: disconnect simulated Venue and Exchange
+	var err = v.simulator.Disconnect()
 	if err != nil {
-		return fmt.Errorf("stop Venue: %w", err)
+		return fmt.Errorf("disconnect Venue: %w", err)
 	}
 
-	// Step 3: mark Venue stopped
+	// Step 3: mark Venue disconnected
 	v.initialized = false
 	v.stopped = true
 	return nil

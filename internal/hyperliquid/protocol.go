@@ -54,6 +54,14 @@ type CancelByCLOIDAction struct {
 	Cancels []CancelByCLOIDRequest `json:"cancels"`
 }
 
+// UpdateLeverageAction contains one official leverage update.
+type UpdateLeverageAction struct {
+	Type     string `json:"type"`
+	Asset    int    `json:"asset"`
+	IsCross  bool   `json:"isCross"`
+	Leverage uint32 `json:"leverage"`
+}
+
 // SubmitResponse contains one validated official order response.
 type SubmitResponse struct {
 	Status   string
@@ -105,6 +113,13 @@ type OrderStatus struct {
 	OrderStatus     string
 	StatusTimestamp uint64
 	Raw             string
+}
+
+// HistoricalOrder contains one official historical Order row.
+type HistoricalOrder struct {
+	Order           OpenOrder `json:"order"`
+	Status          string    `json:"status"`
+	StatusTimestamp uint64    `json:"statusTimestamp"`
 }
 
 // Fill contains one official user-Fill row.
@@ -246,6 +261,24 @@ func DecodeOpenOrders(payload []byte) ([]OpenOrder, error) {
 		if row.Coin == "" || (row.CLOID == "" && row.VenueOrderID == 0) || row.Side == "" ||
 			row.Size == "" || row.TimestampMS == 0 {
 			return nil, fmt.Errorf("decode Hyperliquid open Orders: incomplete row")
+		}
+	}
+	return rows, nil
+}
+
+// DecodeOrderHistory validates one official historical-Orders response.
+func DecodeOrderHistory(payload []byte) ([]HistoricalOrder, error) {
+	var rows []HistoricalOrder
+	var err = decodeOne(payload, &rows)
+	if err != nil {
+		return nil, fmt.Errorf("decode Hyperliquid Order history: %w", err)
+	}
+	for _, row := range rows {
+		if row.Order.Coin == "" ||
+			(row.Order.CLOID == "" && row.Order.VenueOrderID == 0) ||
+			row.Order.Side == "" || row.Order.TimestampMS == 0 ||
+			row.Status == "" || row.StatusTimestamp == 0 {
+			return nil, fmt.Errorf("decode Hyperliquid Order history: incomplete row")
 		}
 	}
 	return rows, nil
