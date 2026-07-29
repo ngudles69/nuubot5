@@ -127,10 +127,10 @@ Do not copy `Any` Venue typing, direct feed-policy calls, aggressive cancellatio
 
 ## Confirmed Facts
 
-- `cmd/nuubot-runner/main.go` is only an `Under Construction.` reservation.
+- `cmd/nuubot-live/main.go` is only an `Under Construction.` reservation.
 - `internal/runner` does not exist.
 - Both Runner locations require genuinely new implementation.
-- `cmd/nuubot-bt-bot/main.go` is the current command clarity and lifecycle example.
+- `cmd/nuubot-backtest/main.go` is the current command clarity and lifecycle example.
 - BtBot owns current Parquet replay, TickClock, Controller, proof, reporting, and publication.
 - `setup.Setup` is replay-specific.
 - `datastore.Bot` always carries `ReplayInput`.
@@ -252,7 +252,7 @@ Stop and reassess if any assumption conflicts with current code or accepted desi
 
 ```text
 bt process
-  cmd/nuubot-bt-bot
+  cmd/nuubot-backtest
     internal/btbot
       setup bt admission
       Parquet OHLCV and ReplayReader
@@ -260,7 +260,7 @@ bt process
       shared Controller
 
 live process
-  cmd/nuubot-runner
+  cmd/nuubot-live
     internal/runner
       live admission and claims
       mainnet or testnet public market boundary
@@ -358,7 +358,7 @@ No target may start before every dependency passes.
 - Target Change #8: Add standalone claims, crash fence, and live persistence.
 - Target Change #9: Add process-local public live market transport.
 - Target Change #10: Implement simnet `internal/runner`.
-- Target Change #11: Implement `cmd/nuubot-runner`.
+- Target Change #11: Implement `cmd/nuubot-live`.
 - Target Change #12: Prove the simnet release.
 - Target Change #13: Implement the Hyperliquid testnet Venue.
 - Target Change #14: Complete testnet reconciliation and safety.
@@ -859,11 +859,11 @@ Automated:
 Artifacts:
 
 ```text
-workspace/proof/nuubot-runner/tc01/before/manifest.txt
-workspace/proof/nuubot-runner/tc01/before/observer-run.json
-workspace/proof/nuubot-runner/tc01/before/trading-run.json
-workspace/proof/nuubot-runner/tc01/recorded-events/result.json
-workspace/proof/nuubot-runner/tc01/recorded-events/domain.json
+workspace/proof/nuubot-live/tc01/before/manifest.txt
+workspace/proof/nuubot-live/tc01/before/observer-run.json
+workspace/proof/nuubot-live/tc01/before/trading-run.json
+workspace/proof/nuubot-live/tc01/recorded-events/result.json
+workspace/proof/nuubot-live/tc01/recorded-events/domain.json
 ```
 
 Manual: none.
@@ -980,9 +980,9 @@ Automated:
 Artifacts:
 
 ```text
-workspace/proof/nuubot-runner/tc02/before/manifest.txt
-workspace/proof/nuubot-runner/tc02/after/manifest.txt
-workspace/proof/nuubot-runner/tc02/signaler-parity.json
+workspace/proof/nuubot-live/tc02/before/manifest.txt
+workspace/proof/nuubot-live/tc02/after/manifest.txt
+workspace/proof/nuubot-live/tc02/signaler-parity.json
 ```
 
 Manual: none.
@@ -1105,9 +1105,9 @@ Automated:
 Artifacts:
 
 ```text
-workspace/proof/nuubot-runner/tc03/before/manifest.txt
-workspace/proof/nuubot-runner/tc03/after/manifest.txt
-workspace/proof/nuubot-runner/tc03/admission-cases.json
+workspace/proof/nuubot-live/tc03/before/manifest.txt
+workspace/proof/nuubot-live/tc03/after/manifest.txt
+workspace/proof/nuubot-live/tc03/admission-cases.json
 ```
 
 Manual: none.
@@ -1226,9 +1226,9 @@ Automated:
 Artifacts:
 
 ```text
-workspace/proof/nuubot-runner/tc04/before/manifest.txt
-workspace/proof/nuubot-runner/tc04/after/manifest.txt
-workspace/proof/nuubot-runner/tc04/bbo-cases.json
+workspace/proof/nuubot-live/tc04/before/manifest.txt
+workspace/proof/nuubot-live/tc04/after/manifest.txt
+workspace/proof/nuubot-live/tc04/bbo-cases.json
 ```
 
 Manual: none.
@@ -1343,9 +1343,9 @@ Automated:
 Artifacts:
 
 ```text
-workspace/proof/nuubot-runner/tc05/before/manifest.txt
-workspace/proof/nuubot-runner/tc05/after/manifest.txt
-workspace/proof/nuubot-runner/tc05/controller-ingress.json
+workspace/proof/nuubot-live/tc05/before/manifest.txt
+workspace/proof/nuubot-live/tc05/after/manifest.txt
+workspace/proof/nuubot-live/tc05/controller-ingress.json
 ```
 
 Manual: none.
@@ -1471,9 +1471,9 @@ Automated:
 Artifacts:
 
 ```text
-workspace/proof/nuubot-runner/tc06/before/manifest.txt
-workspace/proof/nuubot-runner/tc06/after/manifest.txt
-workspace/proof/nuubot-runner/tc06/venue-contract.json
+workspace/proof/nuubot-live/tc06/before/manifest.txt
+workspace/proof/nuubot-live/tc06/after/manifest.txt
+workspace/proof/nuubot-live/tc06/venue-contract.json
 ```
 
 Manual: none.
@@ -1588,9 +1588,9 @@ Automated:
 Artifacts:
 
 ```text
-workspace/proof/nuubot-runner/tc07/before/manifest.txt
-workspace/proof/nuubot-runner/tc07/after/manifest.txt
-workspace/proof/nuubot-runner/tc07/gate-inventory.txt
+workspace/proof/nuubot-live/tc07/before/manifest.txt
+workspace/proof/nuubot-live/tc07/after/manifest.txt
+workspace/proof/nuubot-live/tc07/gate-inventory.txt
 ```
 
 Manual: none.
@@ -1713,10 +1713,10 @@ Automated:
 Artifacts:
 
 ```text
-workspace/proof/nuubot-runner/tc08/claim-race.json
-workspace/proof/nuubot-runner/tc08/crash-fence.json
-workspace/proof/nuubot-runner/tc08/runner-db-integrity.txt
-workspace/proof/nuubot-runner/tc08/secret-scan.txt
+workspace/proof/nuubot-live/tc08/claim-race.json
+workspace/proof/nuubot-live/tc08/crash-fence.json
+workspace/proof/nuubot-live/tc08/runner-db-integrity.txt
+workspace/proof/nuubot-live/tc08/secret-scan.txt
 ```
 
 Manual:
@@ -1846,10 +1846,10 @@ Automated:
 Artifacts:
 
 ```text
-workspace/proof/nuubot-runner/tc09/candle-bootstrap.json
-workspace/proof/nuubot-runner/tc09/websocket-reconnect.json
-workspace/proof/nuubot-runner/tc09/goroutine-leak.txt
-workspace/proof/nuubot-runner/tc09/race.txt
+workspace/proof/nuubot-live/tc09/candle-bootstrap.json
+workspace/proof/nuubot-live/tc09/websocket-reconnect.json
+workspace/proof/nuubot-live/tc09/goroutine-leak.txt
+workspace/proof/nuubot-live/tc09/race.txt
 ```
 
 Opt-in network:
@@ -1991,11 +1991,11 @@ Automated:
 Artifacts:
 
 ```text
-workspace/proof/nuubot-runner/tc10/recorded-driver-parity.json
-workspace/proof/nuubot-runner/tc10/startup-order.json
-workspace/proof/nuubot-runner/tc10/event-order.json
-workspace/proof/nuubot-runner/tc10/race.txt
-workspace/proof/nuubot-runner/tc10/goroutine-leak.txt
+workspace/proof/nuubot-live/tc10/recorded-driver-parity.json
+workspace/proof/nuubot-live/tc10/startup-order.json
+workspace/proof/nuubot-live/tc10/event-order.json
+workspace/proof/nuubot-live/tc10/race.txt
+workspace/proof/nuubot-live/tc10/goroutine-leak.txt
 ```
 
 Manual: none.
@@ -2025,13 +2025,13 @@ Implement the new Runner command using BtBot command clarity and lifecycle shape
 
 ## Before
 
-- `cmd/nuubot-runner/main.go` prints `Under Construction.`.
+- `cmd/nuubot-live/main.go` prints `Under Construction.`.
 - It has no parse, logging, lifecycle, signal, cleanup, or Result behavior.
 - This placeholder is not old Runner behavior.
 
 ## New
 
-- Parse `nuubot-runner <bot_id> [--allow-testnet]`.
+- Parse `nuubot-live <bot_id> [--allow-testnet]`.
 - Open server log before identity.
 - Open Bot log after valid identity.
 - Create cancellation from OS signals.
@@ -2053,8 +2053,8 @@ The command needs one clear lifecycle shell, not replay behavior or hidden helpe
 
 ## Exact Affected Files
 
-- `cmd/nuubot-runner/main.go`
-- `cmd/nuubot-runner/main_test.go`
+- `cmd/nuubot-live/main.go`
+- `cmd/nuubot-live/main_test.go`
 - `internal/toolkit/logging/logging.go`
 - `internal/toolkit/logging/logging_test.go`
 - `build.sh`
@@ -2084,7 +2084,7 @@ The command needs one clear lifecycle shell, not replay behavior or hidden helpe
 
 ## Surgical Steps
 
-1. Use `cmd/nuubot-bt-bot/main.go` as the clarity example.
+1. Use `cmd/nuubot-backtest/main.go` as the clarity example.
 2. Copy program-flow ordering, parse boundary, section layout, and error joining.
 3. Copy no replay, profiling, Sweep, RunReport, or stdout behavior.
 4. Add strict positive Bot ID parsing.
@@ -2099,7 +2099,7 @@ The command needs one clear lifecycle shell, not replay behavior or hidden helpe
 
 Automated:
 
-- `go test -count=1 -tags noasm ./cmd/nuubot-runner ./internal/toolkit/logging`
+- `go test -count=1 -tags noasm ./cmd/nuubot-live ./internal/toolkit/logging`
 - Invalid input writes server log and exits nonzero.
 - Valid identity switches to Bot log.
 - Every lifecycle failure names its phase.
@@ -2113,9 +2113,9 @@ Automated:
 Artifacts:
 
 ```text
-workspace/proof/nuubot-runner/tc11/command-cases.json
-workspace/proof/nuubot-runner/tc11/sigint-stop.txt
-workspace/proof/nuubot-runner/tc11/build.txt
+workspace/proof/nuubot-live/tc11/command-cases.json
+workspace/proof/nuubot-live/tc11/sigint-stop.txt
+workspace/proof/nuubot-live/tc11/build.txt
 ```
 
 Manual:
@@ -2234,16 +2234,16 @@ Direct simnet:
 Artifacts:
 
 ```text
-workspace/proof/nuubot-runner/tc12/simnet/run.log
-workspace/proof/nuubot-runner/tc12/simnet/result.json
-workspace/proof/nuubot-runner/tc12/simnet/telemetry.json
-workspace/proof/nuubot-runner/tc12/simnet/domain.json
-workspace/proof/nuubot-runner/tc12/simnet/sqlite-integrity.txt
-workspace/proof/nuubot-runner/tc12/simnet/stop-proof.json
-workspace/proof/nuubot-runner/tc12/crash/restart-refusal.txt
-workspace/proof/nuubot-runner/tc12/security/credential-tripwire.txt
-workspace/proof/nuubot-runner/tc12/race.txt
-workspace/proof/nuubot-runner/tc12/leaks.txt
+workspace/proof/nuubot-live/tc12/simnet/run.log
+workspace/proof/nuubot-live/tc12/simnet/result.json
+workspace/proof/nuubot-live/tc12/simnet/telemetry.json
+workspace/proof/nuubot-live/tc12/simnet/domain.json
+workspace/proof/nuubot-live/tc12/simnet/sqlite-integrity.txt
+workspace/proof/nuubot-live/tc12/simnet/stop-proof.json
+workspace/proof/nuubot-live/tc12/crash/restart-refusal.txt
+workspace/proof/nuubot-live/tc12/security/credential-tripwire.txt
+workspace/proof/nuubot-live/tc12/race.txt
+workspace/proof/nuubot-live/tc12/leaks.txt
 ```
 
 Manual:
@@ -2393,11 +2393,11 @@ Opt-in testnet:
 Artifacts:
 
 ```text
-workspace/proof/nuubot-runner/tc13/signing/vectors.json
-workspace/proof/nuubot-runner/tc13/exchange/response-cases.json
-workspace/proof/nuubot-runner/tc13/testnet/read-only.json
-workspace/proof/nuubot-runner/tc13/testnet/mutation.json
-workspace/proof/nuubot-runner/tc13/security/secret-scan.txt
+workspace/proof/nuubot-live/tc13/signing/vectors.json
+workspace/proof/nuubot-live/tc13/exchange/response-cases.json
+workspace/proof/nuubot-live/tc13/testnet/read-only.json
+workspace/proof/nuubot-live/tc13/testnet/mutation.json
+workspace/proof/nuubot-live/tc13/security/secret-scan.txt
 ```
 
 Manual:
@@ -2556,12 +2556,12 @@ Opt-in testnet:
 Artifacts:
 
 ```text
-workspace/proof/nuubot-runner/tc14/recon/fill-windows.json
-workspace/proof/nuubot-runner/tc14/recon/delayed-fee.json
-workspace/proof/nuubot-runner/tc14/recon/unknown-mutation.json
-workspace/proof/nuubot-runner/tc14/feed/freshness.json
-workspace/proof/nuubot-runner/tc14/stop/fee-complete.json
-workspace/proof/nuubot-runner/tc14/race.txt
+workspace/proof/nuubot-live/tc14/recon/fill-windows.json
+workspace/proof/nuubot-live/tc14/recon/delayed-fee.json
+workspace/proof/nuubot-live/tc14/recon/unknown-mutation.json
+workspace/proof/nuubot-live/tc14/feed/freshness.json
+workspace/proof/nuubot-live/tc14/stop/fee-complete.json
+workspace/proof/nuubot-live/tc14/race.txt
 ```
 
 Manual: inspect bounded private evidence without copying payloads.
@@ -2673,19 +2673,19 @@ Opt-in testnet:
 Artifacts:
 
 ```text
-workspace/proof/nuubot-runner/tc15/testnet/run.log
-workspace/proof/nuubot-runner/tc15/testnet/result.json
-workspace/proof/nuubot-runner/tc15/testnet/telemetry.json
-workspace/proof/nuubot-runner/tc15/testnet/domain.json
-workspace/proof/nuubot-runner/tc15/testnet/mutations.json
-workspace/proof/nuubot-runner/tc15/testnet/reconciliation.json
-workspace/proof/nuubot-runner/tc15/testnet/stop-proof.json
-workspace/proof/nuubot-runner/tc15/testnet/sqlite-integrity.txt
-workspace/proof/nuubot-runner/tc15/testnet/claim-release.txt
-workspace/proof/nuubot-runner/tc15/security/secret-scan.txt
-workspace/proof/nuubot-runner/tc15/security/mainnet-private-endpoint-scan.txt
-workspace/proof/nuubot-runner/tc15/race.txt
-workspace/proof/nuubot-runner/tc15/leaks.txt
+workspace/proof/nuubot-live/tc15/testnet/run.log
+workspace/proof/nuubot-live/tc15/testnet/result.json
+workspace/proof/nuubot-live/tc15/testnet/telemetry.json
+workspace/proof/nuubot-live/tc15/testnet/domain.json
+workspace/proof/nuubot-live/tc15/testnet/mutations.json
+workspace/proof/nuubot-live/tc15/testnet/reconciliation.json
+workspace/proof/nuubot-live/tc15/testnet/stop-proof.json
+workspace/proof/nuubot-live/tc15/testnet/sqlite-integrity.txt
+workspace/proof/nuubot-live/tc15/testnet/claim-release.txt
+workspace/proof/nuubot-live/tc15/security/secret-scan.txt
+workspace/proof/nuubot-live/tc15/security/mainnet-private-endpoint-scan.txt
+workspace/proof/nuubot-live/tc15/race.txt
+workspace/proof/nuubot-live/tc15/leaks.txt
 ```
 
 Manual:
@@ -2810,7 +2810,7 @@ Deferred until the separate recovery plan:
 Reserved artifact root:
 
 ```text
-workspace/proof/nuubot-runner/tc16/
+workspace/proof/nuubot-live/tc16/
 ```
 
 Manual: explicit operator recovery authority.
@@ -2972,13 +2972,13 @@ Also run:
 All implementation proof belongs below:
 
 ```text
-workspace/proof/nuubot-runner/
+workspace/proof/nuubot-live/
 ```
 
 Each target owns:
 
 ```text
-workspace/proof/nuubot-runner/tcNN/
+workspace/proof/nuubot-live/tcNN/
 ```
 
 Every target writes `manifest.txt` containing:

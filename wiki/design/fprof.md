@@ -163,7 +163,7 @@ Runtime internals and goroutine-ID extraction are prohibited.
 
 ## Existing pprof
 
-Existing `nuubot-bt-bot -pp` support remains unchanged.
+Existing `nuubot-backtest -pp` support remains unchanged.
 
 A, B, and C never enable `-pp`.
 

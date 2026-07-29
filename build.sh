@@ -22,11 +22,11 @@ esac
 
 mkdir -p "$repo_root/bin"
 "$go_bin" build -buildvcs=false -tags noasm \
-    -o "$repo_root/bin/nuubot-bt-bot${suffix}" \
-    "$repo_root/cmd/nuubot-bt-bot"
+    -o "$repo_root/bin/nuubot-backtest${suffix}" \
+    "$repo_root/cmd/nuubot-backtest"
 "$go_bin" build -buildvcs=false -tags noasm \
-    -o "$repo_root/bin/nuubot-report${suffix}" \
-    "$repo_root/cmd/nuubot-report"
+    -o "$repo_root/bin/nuubot-stest-report${suffix}" \
+    "$repo_root/cmd/nuubot-stest-report"
 "$go_bin" build -buildvcs=false -tags noasm \
     -o "$repo_root/bin/nuubot-server${suffix}" \
     "$repo_root/cmd/nuubot-server"

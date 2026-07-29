@@ -139,9 +139,9 @@ func Run(cfg Config) (SessionReport, error) {
 
 	// Step 4: build A, B, and C binaries
 	var binaries = map[string]string{
-		"A": filepath.Join(session, "binaries", executableName("nuubot-bt-bot-a")),
-		"B": filepath.Join(session, "binaries", executableName("nuubot-bt-bot-b")),
-		"C": filepath.Join(session, "binaries", executableName("nuubot-bt-bot-c")),
+		"A": filepath.Join(session, "binaries", executableName("nuubot-backtest-a")),
+		"B": filepath.Join(session, "binaries", executableName("nuubot-backtest-b")),
+		"C": filepath.Join(session, "binaries", executableName("nuubot-backtest-c")),
 	}
 	if err = buildBinary(root, binaries["A"], ""); err != nil {
 		return SessionReport{}, fmt.Errorf("run function profile: build A: %w", err)
@@ -223,7 +223,7 @@ func buildBinary(root, output, overlay string) error {
 	if overlay != "" {
 		arguments = append(arguments, "-overlay", overlay)
 	}
-	arguments = append(arguments, "-o", output, "./cmd/nuubot-bt-bot")
+	arguments = append(arguments, "-o", output, "./cmd/nuubot-backtest")
 	var command = exec.Command(goExecutable(), arguments...)
 	command.Dir = root
 	command.Env = cleanEnvironment("CGO_ENABLED=0")

@@ -3,7 +3,7 @@
 ## Backtest
 
 ```text
-1 nuubot-bt-bot binary
+1 nuubot-backtest binary
 └── 1:1 BtBot
     └── 1:1 Controller
         ├── 1:1 Signaler
@@ -22,7 +22,7 @@
 ## Live
 
 ```text
-1 nuubot-runner binary
+1 nuubot-live binary
 └── 1:1 Runner
     └── 1:1 Controller
         ├── 1:1 Signaler

@@ -9,7 +9,7 @@ import (
 	"nuubot/internal/live"
 )
 
-const program = "nuubot-runner"
+const program = "nuubot-live"
 
 // Section 1 - Program Flow
 

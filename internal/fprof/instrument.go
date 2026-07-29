@@ -42,7 +42,7 @@ func GenerateOverlay(root, output string) (InstrumentResult, error) {
 	// Step 2: instrument selected Go source files
 	var overlay = Overlay{Replace: make(map[string]string)}
 	var result InstrumentResult
-	for _, subtree := range []string{"cmd/nuubot-bt-bot", "internal"} {
+	for _, subtree := range []string{"cmd/nuubot-backtest", "internal"} {
 		var start = filepath.Join(root, filepath.FromSlash(subtree))
 		err = filepath.WalkDir(start, func(path string, entry fs.DirEntry, walkErr error) error {
 			if walkErr != nil {
@@ -141,7 +141,7 @@ func instrumentFile(root, source, destination string) (int, error) {
 			},
 		}}
 		var prefix = []ast.Stmt{enter}
-		if packagePath == "nuubot/cmd/nuubot-bt-bot" && function.Name.Name == "main" {
+		if packagePath == "nuubot/cmd/nuubot-backtest" && function.Name.Name == "main" {
 			var write = &ast.DeferStmt{Call: &ast.CallExpr{Fun: &ast.SelectorExpr{
 				X:   ast.NewIdent(importAlias),
 				Sel: ast.NewIdent("Write"),

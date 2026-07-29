@@ -418,9 +418,9 @@ suffix=""
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*) suffix=".exe" ;;
 esac
-btbot="$repo_root/bin/nuubot-bt-bot${suffix}"
-reporter="$repo_root/bin/nuubot-report${suffix}"
-[[ -x "$btbot" && -x "$reporter" ]] || {
+backtest="$repo_root/bin/nuubot-backtest${suffix}"
+stest_report="$repo_root/bin/nuubot-stest-report${suffix}"
+[[ -x "$backtest" && -x "$stest_report" ]] || {
     echo "required binary is missing" >&2
     exit 2
 }
@@ -483,7 +483,7 @@ while IFS='|' read -r sweep_id bot_id order_value stored_spec; do
         started_ms="$(date +%s%3N)"
         run_json="$(
             cd "$repo_root" &&
-                timeout "${timeout_seconds}s" "$btbot" "${runner_args[@]}"
+                timeout "${timeout_seconds}s" "$backtest" "${runner_args[@]}"
         )"
         status=$?
         elapsed_ms=$(( $(date +%s%3N) - started_ms ))
@@ -584,7 +584,7 @@ while IFS='|' read -r sweep_id bot_id order_value stored_spec; do
 
     suite_elapsed_ms=$(( $(date +%s%3N) - suite_started_ms ))
     printf '%s' "$attempt_records" |
-        "$reporter" "$runs" "$sweep_id" "$bot_id" \
+        "$stest_report" "$runs" "$sweep_id" "$bot_id" \
             "$suite_elapsed_ms" "$suite_json" |
         write_result_log "$result_log"
     report_statuses=("${PIPESTATUS[@]}")

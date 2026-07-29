@@ -10,10 +10,10 @@ Development currently uses separate executables:
 ```text
 nuubot-server
 nuubot-cli
-nuubot-runner
-nuubot-bt-sweep
-nuubot-bt-bot
-nuubot-report
+nuubot-live
+nuubot-sweep
+nuubot-backtest
+nuubot-stest-report
 ```
 
 These keep current development, testing, profiling, and manual review boundaries simple.

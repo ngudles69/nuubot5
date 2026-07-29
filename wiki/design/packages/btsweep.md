@@ -19,7 +19,7 @@ It returns:
 
 It writes no database, creates no record ID, and launches no process.
 
-`cmd/nuubot-bt-sweep` remains the approved `Under Construction.` placeholder.
+`cmd/nuubot-sweep` remains the approved `Under Construction.` placeholder.
 
 ## Program Flow
 
@@ -120,5 +120,5 @@ bytes.
 - Global Bot ID allocation and optional Sweep grouping IDs.
 - Database writes and idempotent unchanged-template reuse.
 - Bounded BtBot workers, execution, cancellation, and aggregation.
-- `nuubot-bt-sweep` command behavior.
+- `nuubot-sweep` command behavior.
 - `nuubot-cli create sweep -f <abc.toml>` implementation.

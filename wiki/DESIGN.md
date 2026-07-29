@@ -27,7 +27,7 @@ Last updated: 2026-07-24 13:33:22 +08:00
 
 ```text
 Component                          Review         Last reviewed
-nuubot-bt-bot                    DONE           2026-07-24 12:55:22 +08:00
+nuubot-backtest                    DONE           2026-07-24 12:55:22 +08:00
 `-- BtBot                       DONE           2026-07-24 12:55:22 +08:00
     |-- Setup                      PARTIAL        2026-07-24 13:33:22 +08:00
     |-- ReplayReader               PARTIAL        2026-07-24 12:55:22 +08:00
@@ -190,7 +190,7 @@ hardcut is implemented and proven.
 | [MarketData](design/marketdata.md) | Shared BBO ingestion, latest buffers, and optional subscriptions. |
 | [Live events](design/concepts/live-events.md) | Live event routing. |
 | [Macross signaler](design/concepts/macross-signaler.md) | EMA crossover implementation. |
-| [nuubot-bt-bot](design/concepts/nuubot-bt-bot.md) | Standalone historical replay command. |
+| [nuubot-backtest](design/concepts/nuubot-backtest.md) | Standalone historical replay command. |
 | [Observer executor](design/concepts/observer-executor.md) | Observer execution implementation. |
 | [PocketBase](design/concepts/pocketbase.md) | Server-owned web, API, authentication, realtime, and SQLite framework. |
 | [Process store](design/concepts/process-store.md) | Process persistence boundary. |

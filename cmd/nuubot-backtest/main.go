@@ -9,7 +9,7 @@ import (
 	"nuubot/internal/backtest"
 )
 
-const program = "nuubot-bt-bot"
+const program = "nuubot-backtest"
 
 // Section 1 - Program Flow
 

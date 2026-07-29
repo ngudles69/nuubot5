@@ -8,7 +8,7 @@ import (
 	"nuubot/internal/btsweep"
 )
 
-const program = "nuubot-bt-sweep"
+const program = "nuubot-sweep"
 
 // Section 1 - Program Flow
 

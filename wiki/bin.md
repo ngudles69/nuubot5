@@ -10,12 +10,12 @@ Command packages remain thin wrappers. Internal packages own application behavio
 
 ```text
 Executable          Scope       Internal owner      Status
-nuubot-bt-sweep     Backtest    internal/btsweep    Command placeholder; template admission implemented
-nuubot-bt-bot       Backtest    internal/backtest   Implemented
-nuubot-runner       Live        internal/live       Non-runnable scaffold
+nuubot-sweep         Backtest    internal/btsweep    Command placeholder; template admission implemented
+nuubot-backtest      Backtest    internal/backtest   Implemented
+nuubot-live          Live        internal/live       Non-runnable scaffold
 ```
 
-### `nuubot-bt-sweep`
+### `nuubot-sweep`
 
 The target command creates and later runs one immutable backtest Sweep.
 
@@ -29,7 +29,7 @@ create immutable Sweep and Bot records
 return generated IDs
 ```
 
-Future execution launches one `nuubot-bt-bot` process per generated Bot.
+Future execution launches one `nuubot-backtest` process per generated Bot.
 
 The current command prints `Under Construction.`.
 
@@ -39,12 +39,12 @@ deterministic expansion. It writes no database and launches no process.
 Immutable Sweep and Bot creation, ID reuse, execution, cancellation, and
 aggregation remain unimplemented.
 
-### `nuubot-bt-bot`
+### `nuubot-backtest`
 
 Runs one stored Bot through one bounded historical replay.
 
 ```text
-cmd/nuubot-bt-bot
+cmd/nuubot-backtest
 `-- internal/backtest.Execute
     |-- internal/runharness.Profile
     |-- Replay Reader
@@ -58,7 +58,7 @@ The command only parses arguments, calls `backtest.Execute`, and reports one ter
 
 Performance profiling is enabled only through `-pp <prefix>`. Shared whole-Run profiling mechanics live in `internal/runharness`.
 
-### `nuubot-runner`
+### `nuubot-live`
 
 Runs one standalone live, testnet, paper, or Simulator Bot.
 
@@ -78,7 +78,7 @@ Future live admission reads the immutable Bot network. An operator network argum
 Executable          Purpose                                      Status
 nuubot-server       Optional application server and supervision  Placeholder
 nuubot-cli          Operator commands                             Placeholder
-nuubot-report       Render and aggregate backtest reports         Implemented
+nuubot-stest-report  Render and aggregate system-test reports     Implemented
 nuubot-fprof        Exact A/B/C function profiling                Implemented
 parity-probe        Compare selected Venue responses              Implemented
 ```
@@ -108,7 +108,7 @@ That CLI behavior is unimplemented.
 ./stest.sh -bot <bot_id> -pp
 ```
 
-`-bot` runs one globally unique Bot. The current datastore resolves its Sweep ID for `nuubot-bt-bot` compatibility.
+`-bot` runs one globally unique Bot. The current datastore resolves its Sweep ID for `nuubot-backtest` compatibility.
 
 `-sweep` runs every Bot grouped under one Sweep in deterministic order.
 
@@ -116,9 +116,10 @@ That CLI behavior is unimplemented.
 
 ## Naming Contract
 
-- `bt` means backtest.
+- `backtest` means one bounded historical Bot replay.
 - `sweep` means one immutable grouping and generation definition.
 - `bot` means one exact immutable Bot configuration.
-- `runner` without `bt` means live execution.
+- `live` means standalone live-network execution.
+- `stest-report` means system-test suite aggregation and rendering.
 - Executable names use visible hyphens between concepts.
-- Old `nuubot-btrunner` and `BtRunner` compatibility names are prohibited.
+- Old command aliases are prohibited.

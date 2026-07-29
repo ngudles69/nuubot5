@@ -63,6 +63,8 @@ sync.
 - Ignore local `workspace/backups/**` artifacts.
 - Rewrite CLOID tests around canonical Ledger and Order identity.
 - Delete stale Simulator and ResultPublisher tests for later replacement.
+- Hardcut runtime commands to `nuubot-backtest`, `nuubot-live`,
+  `nuubot-sweep`, and `nuubot-stest-report`.
 
 ## Domain Model
 
@@ -247,6 +249,16 @@ Grid      PASS  workspace/logs/nuubot5-stest-s11-b15-1-20260729T054607Z.json
 ```
 
 Trade and Grid execution counts and financial results exactly match Baseline 2.
+
+Renamed-command proof:
+
+```text
+go test -tags noasm ./cmd/nuubot-backtest ./cmd/nuubot-live \
+  ./cmd/nuubot-sweep ./cmd/nuubot-stest-report ./internal/fprof
+PASS
+./stest.sh -bot 9 -runs 1
+PASS  workspace/logs/nuubot5-stest-s6-b9-1-20260729T061422Z.json
+```
 
 CLOID test proof:
 

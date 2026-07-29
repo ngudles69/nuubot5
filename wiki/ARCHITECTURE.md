@@ -220,7 +220,7 @@ TOML, and hashes the exact emitted bytes.
 
 It creates no Sweep or Bot record, writes no database, and launches no process.
 
-`cmd/nuubot-bt-sweep` remains an `Under Construction.` placeholder.
+`cmd/nuubot-sweep` remains an `Under Construction.` placeholder.
 
 ## Approved Process Boundaries
 

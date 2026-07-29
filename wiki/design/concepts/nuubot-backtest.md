@@ -1,7 +1,7 @@
-# nuubot-bt-bot
+# nuubot-backtest
 
 Status: Implemented.
-Covers: `cmd/nuubot-bt-bot/main.go`, `internal/backtest/execute.go`, `internal/runharness/profile.go`
+Covers: `cmd/nuubot-backtest/main.go`, `internal/backtest/execute.go`, `internal/runharness/profile.go`
 Purpose: Parse one Backtest request and call one complete Backtest execution boundary.
 
 ## Responsibilities

@@ -844,7 +844,7 @@ import (
 	"nuubot/internal/toolkit/logging"
 )
 
-const program = "nuubot-bt-bot"
+const program = "nuubot-backtest"
 
 func main() {
 	var started = time.Now()

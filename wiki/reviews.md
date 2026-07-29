@@ -8,12 +8,12 @@ Never infer review completion.
 ```text
 Path                                                   User Review  Review Date  Reviewed SHA-256
 -----------------------------------------------------  -----------  -----------  ----------------
-cmd/nuubot-bt-bot/main.go                              NO
-cmd/nuubot-bt-bot/main_test.go                         NO
-cmd/nuubot-bt-sweep/main.go                            NO
+cmd/nuubot-backtest/main.go                              NO
+cmd/nuubot-backtest/main_test.go                         NO
+cmd/nuubot-sweep/main.go                            NO
 cmd/nuubot-cli/main.go                                 NO
-cmd/nuubot-report/main.go                              NO
-cmd/nuubot-runner/main.go                              NO
+cmd/nuubot-stest-report/main.go                              NO
+cmd/nuubot-live/main.go                              NO
 cmd/nuubot-server/main.go                              NO
 cmd/parity-probe/main.go                               NO
 internal/account/account.go                            NO

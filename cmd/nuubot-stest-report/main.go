@@ -8,7 +8,7 @@ import (
 	"nuubot/internal/report"
 )
 
-const program = "nuubot-report"
+const program = "nuubot-stest-report"
 
 // Section 1 - Program Flow
 

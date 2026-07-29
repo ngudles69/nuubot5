@@ -1,7 +1,7 @@
 # Live Run
 
 Status: Live lifecycle scaffold and telemetry persistence implemented; live execution remains unavailable.
-Covers: `cmd/nuubot-runner/main.go`, `internal/live/execute.go`, `internal/live/live.go`
+Covers: `cmd/nuubot-live/main.go`, `internal/live/execute.go`, `internal/live/live.go`
 Purpose: Own one standalone live Bot process.
 
 ## Current Boundary
