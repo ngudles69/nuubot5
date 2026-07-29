@@ -56,11 +56,6 @@ Verify main's stale-test cleanup and complete local and remote synchronization.
 - Synchronization proof was committed as `634d45a`.
 - Local main fast-forwarded to `634d45a`.
 - `origin/main` advanced through `634d45a`.
-- Main command-name hardcut `07bdcc4` fast-forwarded into Server.
-- Full synchronized `go test -tags noasm ./...` passes.
-- Full synchronized `go vet -tags noasm ./...` passes.
-- Canonical `build.sh` passes after the command-name hardcut.
-- Stale command-name scan and `git diff --check` pass.
 
 ## TODO
 
