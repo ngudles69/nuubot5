@@ -43,12 +43,14 @@ Synchronize the complete main and Server worktrees without mixing owned state.
 - Combined Server packages pass focused tests and the canonical build succeeds.
 - Combined full tests remain red in Cloid, Simulator, and ResultPublisher.
 - The same three failures reproduce on unmerged main and predate this merge.
+- Server work was committed as `41fb0af`.
+- Main was merged into Server as `5b256e9`.
+- Local main fast-forwarded to the resolved merge.
+- Both local worktrees contain main domain changes and Server WebServer changes.
 
 ## TODO
 
-- Commit the resolved local merge.
-- Fast-forward local main to the merge.
-- Verify both local branches and worktrees.
+- None.
 
 ## PENDING USER APPROVAL
 
@@ -57,4 +59,4 @@ Synchronize the complete main and Server worktrees without mixing owned state.
 
 ## Next Action
 
-Commit the resolved merge, then fast-forward local main.
+Repair or remove main's remaining stale tests before remote push.
