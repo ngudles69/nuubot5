@@ -61,6 +61,8 @@ sync.
 - Save the Nuubot3 and NautilusTrader intent comparison.
 - Pass Observer, Trade, and Grid after the Venue lifecycle hardcut.
 - Ignore local `workspace/backups/**` artifacts.
+- Rewrite CLOID tests around canonical Ledger and Order identity.
+- Delete stale Simulator and ResultPublisher tests for later replacement.
 
 ## Domain Model
 
@@ -245,6 +247,13 @@ Grid      PASS  workspace/logs/nuubot5-stest-s11-b15-1-20260729T054607Z.json
 ```
 
 Trade and Grid execution counts and financial results exactly match Baseline 2.
+
+CLOID test proof:
+
+```text
+go test -tags noasm ./internal/cloid
+PASS
+```
 
 Grid Baseline 2 database integrity: `ok`.
 
