@@ -43,6 +43,8 @@ sync.
 - Save Grid Baseline 1 and Baseline 2.
 - Define the canonical result comparison format.
 - Split shared routers from main-worktree instructions and handoff state.
+- Commit the complete Account-stack hardcut and flat Store work as `3e98a69`.
+- Push `3e98a69` to `origin/main`.
 
 ## Domain Model
 
