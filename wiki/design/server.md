@@ -1,6 +1,6 @@
 # Server
 
-Status: Target design approved; implementation pending.
+Status: Initial embedded WebServer implemented; managers and control surface pending.
 Purpose: Provide one Nuubot binary, one Server process, and isolated Bot execution processes.
 
 ## Current Development Commands
@@ -51,6 +51,72 @@ nuubot serve
 ```
 
 WebServer, API, BotManager, and SweepManager live inside the Server process.
+
+## Implemented Initial WebServer
+
+`nuubot-server` now runs one standard-library HTTP service on
+`127.0.0.1:9898`.
+
+Implemented routes:
+
+```text
+GET /          embedded Nuubot Server page
+GET /health    JSON health response
+GET /assets/   embedded static assets
+```
+
+The initial Server contains no BotManager, SweepManager, datastore, HTMX,
+ECharts, or control API.
+
+The command opens the Server log, creates one signal context, executes Server,
+and reports one terminal error.
+
+`server.Execute`:
+
+```text
+validate Server options
+create WebServer
+run WebServer
+log execute completed
+```
+
+`webserver.Create`:
+
+```text
+validate WebServer inputs
+parse home template
+create WebServer
+```
+
+`WebServer.Run`:
+
+```text
+open HTTP listener
+start HTTP server
+wait for WebServer stop
+stop HTTP server
+log run completed
+```
+
+Cancellation performs bounded graceful HTTP shutdown.
+
+Templates and assets compile into the executable through Go `embed`.
+
+After successful listener binding, WebServer prints and logs:
+
+```text
+WebServer started on http://127.0.0.1:9898
+```
+
+After graceful shutdown, WebServer prints and logs:
+
+```text
+WebServer stopped
+```
+
+These are the only approved Server lifecycle lines written directly to stdout.
+
+A console write failure produces a Server-log warning and does not stop HTTP.
 
 ## Child Processes
 

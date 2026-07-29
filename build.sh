@@ -27,3 +27,6 @@ mkdir -p "$repo_root/bin"
 "$go_bin" build -buildvcs=false -tags noasm \
     -o "$repo_root/bin/nuubot-report${suffix}" \
     "$repo_root/cmd/nuubot-report"
+"$go_bin" build -buildvcs=false -tags noasm \
+    -o "$repo_root/bin/nuubot-server${suffix}" \
+    "$repo_root/cmd/nuubot-server"

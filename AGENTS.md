@@ -148,6 +148,9 @@ These decisions apply project-wide. Local convenience MUST NOT override them.
   implementation is authorized.
 - Keep explicitly approved package reservation files limited to one package
   comment and declaration until implementation is authorized.
+- The WebServer may print exactly one successful-start line and one
+  graceful-stop line to stdout. Both lines MUST also be written to the Server
+  log. No other Server logger bypass is approved.
 
 ### DO NOT USE
 
