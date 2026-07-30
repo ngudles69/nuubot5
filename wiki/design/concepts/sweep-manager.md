@@ -75,7 +75,7 @@ One Sweep template references one complete scalar Bot template.
 
 `[sweep]` owns replay identity and the Bot template reference.
 
-Ordered `[[sweep.date_ranges]]` rows own exact named replay windows.
+Ordered `sweep.periods` entries own labelled or explicit replay windows.
 
 `[sweep.parameters]` may contain zero dimensions. Nested parameter tables own explicit nonempty value lists.
 
@@ -86,16 +86,16 @@ Ignored extra Config fields cannot become Sweep dimensions.
 Executor arrays-of-tables use stable Config `id` selectors. For example,
 `executors.grid.levels` selects the `grid` Executor.
 
-`internal/btsweep` sorts parameter paths, preserves value and date-range order,
+`internal/btsweep` sorts parameter paths, preserves value and period order,
 and generates one deterministic Cartesian product. Zero dimensions generate one
-unchanged Bot Config per date range.
+unchanged Bot Config per period.
 
 Every combination starts from a fresh Bot map. Complete generated TOML passes
 exact `botspec.Validate` and Executor replay-symbol validation before its SHA-256
 is returned.
 
-Unknown paths, wrong types, empty lists, missing templates, bad dates, duplicate
-date names, Bot field arrays, and generated record IDs fail.
+Unknown paths, wrong types, empty lists, missing templates, bad periods,
+duplicate periods, Bot field arrays, and generated record IDs fail.
 
 Range syntax and scalar parameter shorthand are unsupported.
 
@@ -136,9 +136,9 @@ Other submitted children continue.
 
 The latest Sweep execution is error when any selected child fails.
 
-## Deferred Period Analysis
+## Calendar Periods
 
-A future reusable period catalog may define labels such as:
+The reusable Calendar toolkit resolves labels such as:
 
 ```text
 2021
@@ -147,15 +147,14 @@ A future reusable period catalog may define labels such as:
 2021-M01
 ```
 
-Each period keeps exact start and end timestamps, description, and searchable
-tags such as `event:black_swan`, `regime:bearish`, or `volatility:high`.
+Sweep templates may mix labelled periods and explicit start/end ranges.
 
-SweepManager may select periods but will not own that catalog.
+Calendar resolution does not inspect market data.
 
-Backtest results will preserve the selected period snapshot.
+## Deferred Period Analysis
 
-Future analytics may group Calmar, CAGR, return, drawdown, Executor activation,
-and Executor contribution across tagged periods.
+Future analytics may attach searchable regime tags and group results across
+tagged periods.
 
 Analytics must show distributions and exact durations, not one misleading
 average.

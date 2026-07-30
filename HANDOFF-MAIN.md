@@ -459,3 +459,44 @@ No further hypothetical-error audit is requested.
 Continue Account Store reload and dirty-row correctness.
 
 Do not fix Simulator cross-cycle identity until its architectural change.
+
+## Separate Session - Calendar and Sweep Periods
+
+Date: 2026-07-30
+
+This isolated session did not alter the main Codex session's notes, TODOs, or
+next action.
+
+### DONE
+
+- Add `internal/toolkit/calendar`.
+- Resolve year, half, quarter, month, ISO week, and exact-day labels.
+- Hardcut Sweep input from `date_ranges` to atomic `periods` entries.
+- Support either `{ label = "..." }` or `{ start = "...", end = "..." }`.
+- Keep period resolution independent from market-data availability.
+- Preserve period order as the outer Sweep permutation dimension.
+- Add `wiki/design/calendar.md`.
+- Update canonical test Sweep templates.
+- Run focused tests and vet with `-tags noasm`.
+- Confirm no Sweep process executed.
+
+### TODO
+
+- None for this separate session.
+
+### PENDING USER APPROVAL
+
+- None.
+
+### Proof
+
+```text
+go test -tags noasm ./internal/toolkit/calendar ./internal/btsweep ./internal/datastore ./cmd/nuubot-sweep
+PASS
+
+go vet -tags noasm ./internal/toolkit/calendar ./internal/btsweep ./internal/datastore ./cmd/nuubot-sweep
+PASS
+
+git diff --check
+PASS
+```

@@ -14,6 +14,7 @@ Nuubot5 source proves implementation. Reservation files prove names only.
 - [`design/server.md`](design/server.md) owns the Server, unified binary, and child-process design.
 - [`design/startup.md`](design/startup.md) owns Runner startup and crash recovery across all live networks.
 - [`design/marketdata.md`](design/marketdata.md) owns permanent BBO ingestion, buffering, and subscription decisions.
+- [`design/calendar.md`](design/calendar.md) owns reusable calendar period resolution and future named sessions.
 - [`design/account.md`](design/account.md) owns Executor, Account, Venue, and Exchange-fact authority.
 - [`design/nautilus.md`](design/nautilus.md) compares reusable Venue intent.
 - [`design/entities.md`](design/entities.md) shows backtest and live runtime ownership cardinality.
@@ -109,6 +110,7 @@ Nuubot admits only required, audited code. It does not import or preserve either
 | Package | Status | Purpose |
 |---|---|---|
 | [account](design/packages/account.md) | Implemented | Coordinate venue requests and ledger evidence. |
+| [calendar](design/calendar.md) | Implemented | Resolve canonical UTC calendar periods. |
 | [bot](design/packages/bot.md) | Implemented | Define immutable Bot identity. |
 | [botcycle](design/packages/botcycle.md) | Implemented | Coordinate Executors for one configured entry Signal. |
 | [botspec](design/packages/botspec.md) | Implemented | Validate and shape exact BotConfig into typed BotSpec. |

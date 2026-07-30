@@ -14,6 +14,7 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"nuubot/internal/botspec"
+	"nuubot/internal/toolkit/calendar"
 )
 
 // DateRange identifies one ordered historical replay window.
@@ -51,12 +52,12 @@ type sweepSection struct {
 	Template   string         `toml:"template"`
 	Symbol     string         `toml:"symbol"`
 	Ticks      string         `toml:"ticks"`
-	DateRanges []dateRangeRow `toml:"date_ranges"`
+	Periods    []periodRow    `toml:"periods"`
 	Parameters map[string]any `toml:"parameters"`
 }
 
-type dateRangeRow struct {
-	Name  string `toml:"name"`
+type periodRow struct {
+	Label string `toml:"label"`
 	Start string `toml:"start"`
 	End   string `toml:"end"`
 }
@@ -212,40 +213,66 @@ func validateSweep(raw sweepSection) ([]DateRange, error) {
 	if strings.TrimSpace(raw.Ticks) == "" {
 		return nil, fmt.Errorf("sweep.ticks must not be empty")
 	}
-	if len(raw.DateRanges) == 0 {
-		return nil, fmt.Errorf("sweep.date_ranges must not be empty")
+	if len(raw.Periods) == 0 {
+		return nil, fmt.Errorf("sweep.periods must not be empty")
 	}
 	if raw.Parameters == nil {
 		return nil, fmt.Errorf("sweep.parameters must be a table")
 	}
 
-	var names = make(map[string]bool, len(raw.DateRanges))
-	var ranges = make([]DateRange, 0, len(raw.DateRanges))
-	for _, row := range raw.DateRanges {
-		var name = strings.TrimSpace(row.Name)
-		if name == "" {
-			return nil, fmt.Errorf("date range name must not be empty")
-		}
-		if names[name] {
-			return nil, fmt.Errorf("duplicate date range name: %s", name)
-		}
-		names[name] = true
-
-		var start, err = time.Parse(time.DateOnly, row.Start)
+	var seen = make(map[string]bool, len(raw.Periods))
+	var ranges = make([]DateRange, 0, len(raw.Periods))
+	for _, row := range raw.Periods {
+		var dateRange, err = resolvePeriod(row)
 		if err != nil {
-			return nil, fmt.Errorf("invalid date range %s start: %v", name, err)
+			return nil, err
 		}
-		var end time.Time
-		end, err = time.Parse(time.DateOnly, row.End)
-		if err != nil {
-			return nil, fmt.Errorf("invalid date range %s end: %v", name, err)
+		var key = dateRange.Start + "\x00" + dateRange.End
+		if seen[key] {
+			return nil, fmt.Errorf("duplicate period: %s", dateRange.Name)
 		}
-		if !start.Before(end) {
-			return nil, fmt.Errorf("date range %s start must precede end", name)
-		}
-		ranges = append(ranges, DateRange{Name: name, Start: row.Start, End: row.End})
+		seen[key] = true
+		ranges = append(ranges, dateRange)
 	}
 	return ranges, nil
+}
+
+func resolvePeriod(row periodRow) (DateRange, error) {
+	var label = strings.TrimSpace(row.Label)
+	var startText = strings.TrimSpace(row.Start)
+	var endText = strings.TrimSpace(row.End)
+
+	if label != "" && startText == "" && endText == "" {
+		var start, end, err = calendar.ResolvePeriod(label)
+		if err != nil {
+			return DateRange{}, err
+		}
+		return DateRange{
+			Name:  label,
+			Start: start.Format(time.DateOnly),
+			End:   end.Format(time.DateOnly),
+		}, nil
+	}
+	if label == "" && startText != "" && endText != "" {
+		var start, err = time.Parse(time.DateOnly, startText)
+		if err != nil {
+			return DateRange{}, fmt.Errorf("invalid period start %q", startText)
+		}
+		var end time.Time
+		end, err = time.Parse(time.DateOnly, endText)
+		if err != nil {
+			return DateRange{}, fmt.Errorf("invalid period end %q", endText)
+		}
+		if !start.Before(end) {
+			return DateRange{}, fmt.Errorf("period start must precede end")
+		}
+		return DateRange{
+			Name:  startText + ".." + endText,
+			Start: startText,
+			End:   endText,
+		}, nil
+	}
+	return DateRange{}, fmt.Errorf("period must contain either label or start and end")
 }
 
 func decodeBot(configTOML string) (map[string]any, error) {

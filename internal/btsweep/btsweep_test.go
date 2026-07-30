@@ -46,21 +46,23 @@ func TestSystemTemplatesGenerateOneBot(t *testing.T) {
 			if len(expansion.Bots) != 1 {
 				t.Fatalf("generated Bots = %d, want 1", len(expansion.Bots))
 			}
-			assertGeneratedBot(t, expansion.Bots[0], 1, "BTCUSDT-2026-Q1")
+			assertGeneratedBot(t, expansion.Bots[0], 1, "2026-03-01..2026-06-01")
 		})
 	}
 }
 
 func TestLoadExpandsParameterFreeSweepDeterministically(t *testing.T) {
 	var botTOML = canonicalBotTemplate(t, "macross_grid_v1.toml")
-	var sweepTOML = validSweep(`
-[[sweep.date_ranges]]
-name = "second"
-start = "2026-04-01"
-end = "2026-05-01"
-
+	var sweepTOML = strings.Replace(validSweep(`
 [sweep.parameters]
-`)
+`),
+		`periods = [{ start = "2026-03-01", end = "2026-04-01" }]`,
+		`periods = [
+    { start = "2026-03-01", end = "2026-04-01" },
+    { label = "2026-M04" },
+]`,
+		1,
+	)
 	var path = writeFixture(t, botTOML, sweepTOML)
 
 	var first, err = Load(path)
@@ -78,8 +80,12 @@ end = "2026-05-01"
 	if len(first.Bots) != 2 {
 		t.Fatalf("generated Bots = %d, want 2", len(first.Bots))
 	}
-	assertGeneratedBot(t, first.Bots[0], 1, "first")
-	assertGeneratedBot(t, first.Bots[1], 2, "second")
+	assertGeneratedBot(t, first.Bots[0], 1, "2026-03-01..2026-04-01")
+	assertGeneratedBot(t, first.Bots[1], 2, "2026-M04")
+	if first.Bots[1].DateRange.Start != "2026-04-01" ||
+		first.Bots[1].DateRange.End != "2026-05-01" {
+		t.Fatalf("resolved period = %+v", first.Bots[1].DateRange)
+	}
 	if first.Bots[0].ConfigTOML != first.Bots[1].ConfigTOML {
 		t.Fatal("parameter-free date ranges changed Config TOML")
 	}
@@ -124,18 +130,20 @@ func TestLoadResolvesRelativeTicksFromSweepSource(t *testing.T) {
 
 func TestLoadExpandsSortedParametersAndOrderedDates(t *testing.T) {
 	var botTOML = canonicalBotTemplate(t, "macross_grid_v1.toml")
-	var sweepTOML = validSweep(`
-[[sweep.date_ranges]]
-name = "second"
-start = "2026-04-01"
-end = "2026-05-01"
-
+	var sweepTOML = strings.Replace(validSweep(`
 [sweep.parameters.executors.grid]
 levels = [30, 50]
 
 [sweep.parameters.controller]
 max_cycles = [1, 2]
-`)
+`),
+		`periods = [{ start = "2026-03-01", end = "2026-04-01" }]`,
+		`periods = [
+    { start = "2026-03-01", end = "2026-04-01" },
+    { label = "2026-M04" },
+]`,
+		1,
+	)
 	var path = writeFixture(t, botTOML, sweepTOML)
 
 	var first, err = Load(path)
@@ -154,7 +162,16 @@ max_cycles = [1, 2]
 		t.Fatalf("generated Bots = %d, want 8", len(first.Bots))
 	}
 
-	var wantRanges = []string{"first", "first", "first", "first", "second", "second", "second", "second"}
+	var wantRanges = []string{
+		"2026-03-01..2026-04-01",
+		"2026-03-01..2026-04-01",
+		"2026-03-01..2026-04-01",
+		"2026-03-01..2026-04-01",
+		"2026-M04",
+		"2026-M04",
+		"2026-M04",
+		"2026-M04",
+	}
 	var wantMaxCycles = []int64{1, 1, 2, 2, 1, 1, 2, 2}
 	var wantLevels = []int64{30, 50, 30, 50, 30, 50, 30, 50}
 	for index, generated := range first.Bots {
@@ -204,19 +221,39 @@ func TestLoadRejectsInvalidTemplates(t *testing.T) {
 			name:      "bad date",
 			botTOML:   validBot,
 			sweepTOML: strings.Replace(validSweep(validParameters()), `start = "2026-03-01"`, `start = "not-a-date"`, 1),
-			want:      "invalid date range",
+			want:      "invalid period start",
 		},
 		{
-			name:    "duplicate date name",
+			name:    "duplicate period",
 			botTOML: validBot,
-			sweepTOML: validSweep(`
-[[sweep.date_ranges]]
-name = "first"
-start = "2026-04-01"
-end = "2026-05-01"
-
-` + validParameters()),
-			want: "duplicate date range name",
+			sweepTOML: strings.Replace(
+				validSweep(validParameters()),
+				`periods = [{ start = "2026-03-01", end = "2026-04-01" }]`,
+				`periods = [
+    { start = "2026-03-01", end = "2026-04-01" },
+    { label = "2026-M03" },
+]`,
+				1,
+			),
+			want: "duplicate period",
+		},
+		{
+			name:      "mixed period modes",
+			botTOML:   validBot,
+			sweepTOML: strings.Replace(validSweep(validParameters()), `{ start = "2026-03-01"`, `{ label = "2026-M03", start = "2026-03-01"`, 1),
+			want:      "either label or start and end",
+		},
+		{
+			name:      "incomplete explicit period",
+			botTOML:   validBot,
+			sweepTOML: strings.Replace(validSweep(validParameters()), `, end = "2026-04-01"`, "", 1),
+			want:      "either label or start and end",
+		},
+		{
+			name:      "invalid period label",
+			botTOML:   validBot,
+			sweepTOML: strings.Replace(validSweep(validParameters()), `{ start = "2026-03-01", end = "2026-04-01" }`, `{ label = "2026-Q5" }`, 1),
+			want:      "invalid period label",
 		},
 		{
 			name:    "unknown parameter path",
@@ -364,10 +401,7 @@ template = "bot.toml"
 symbol = "BTC"
 ticks = "D:/workspace/data/binance/parquet/spot/monthly/klines/BTCUSDT/1s"
 
-[[sweep.date_ranges]]
-name = "first"
-start = "2026-03-01"
-end = "2026-04-01"
+periods = [{ start = "2026-03-01", end = "2026-04-01" }]
 ` + parameters
 }
 

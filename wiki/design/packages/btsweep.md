@@ -1,6 +1,6 @@
 # BtSweep Package
 
-Status: Template validation and expansion implemented. Persistence and execution unimplemented.
+Status: Template validation, expansion, and immutable record creation implemented. Execution unimplemented.
 Covers: `internal/btsweep/**`
 Purpose: Load one Sweep template and deterministically generate complete validated Bot Configs.
 
@@ -13,13 +13,15 @@ It returns:
 - absolute source and referenced Bot template paths;
 - exact BotSpec ID;
 - replay symbol and absolute, clean tick path;
-- ordered date ranges;
+- ordered resolved periods;
 - exact generated Config TOML and SHA-256;
 - one-based deterministic Bot numbers.
 
 It writes no database, creates no record ID, and launches no process.
 
-`cmd/nuubot-sweep` remains the approved `Under Construction.` placeholder.
+`btsweep.Create` persists one immutable Sweep and its generated Bot records.
+
+`cmd/nuubot-sweep` calls `btsweep.Create` and prints created identities.
 
 ## Program Flow
 
@@ -47,10 +49,10 @@ template = "../../bots/macross_grid_v1.toml"
 symbol = "BTC"
 ticks = "D:/workspace/data/binance/parquet/spot/monthly/klines/BTCUSDT/1s"
 
-[[sweep.date_ranges]]
-name = "BTCUSDT-2026-Q1"
-start = "2026-03-01"
-end = "2026-06-01"
+periods = [
+    { label = "2026-Q1" },
+    { start = "2026-03-01", end = "2026-06-01" },
+]
 
 [sweep.parameters.executors.grid]
 levels = [30, 50]
@@ -61,10 +63,11 @@ Rules:
 - One Sweep template references one Bot template.
 - `sweep.doc` must contain non-whitespace text.
 - Relative Bot-template and tick paths resolve from the Sweep source directory.
-- Date ranges require unique nonempty names and increasing `YYYY-MM-DD` dates.
-- Date-range order is preserved.
+- Periods require either one calendar label or increasing `YYYY-MM-DD` dates.
+- Duplicate resolved periods fail.
+- Period order is preserved.
 - The parameters table may contain zero dimensions.
-- Zero dimensions emit one unchanged Bot Config per date range.
+- Zero dimensions emit one unchanged Bot Config per period.
 - Every present parameter value is an explicit nonempty list.
 - Parameter paths are sorted before Cartesian expansion.
 - Parameter list order is preserved.
@@ -104,21 +107,18 @@ record ID.
 
 ## Determinism
 
-Date range is the outer expansion order.
+Period is the outer expansion order.
 
 Sorted parameter path is the Cartesian dimension order. Earlier paths change
 more slowly. Values retain template order.
 
-Bot numbers start at one and increase across all date ranges.
+Bot numbers start at one and increase across all periods.
 
 BurntSushi TOML encodes each complete Config. SHA-256 hashes those exact emitted
 bytes.
 
 ## Deferred
 
-- Immutable Sweep and Bot record creation.
-- Global Bot ID allocation and optional Sweep grouping IDs.
-- Database writes and idempotent unchanged-template reuse.
+- Idempotent unchanged-template reuse.
 - Bounded BtBot workers, execution, cancellation, and aggregation.
-- `nuubot-sweep` command behavior.
 - `nuubot-cli create sweep -f <abc.toml>` implementation.
